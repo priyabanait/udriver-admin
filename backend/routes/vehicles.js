@@ -1,9 +1,20 @@
 import express from 'express';
 import Vehicle from '../models/vehicle.js';
-import { authenticateToken } from './middleware.js';
+// auth middleware not applied; token used only for login
 import { uploadToCloudinary } from '../lib/cloudinary.js';
 
 const router = express.Router();
+
+// Remove any token/auth-related fields from incoming bodies
+function stripAuthFields(source) {
+  if (!source || typeof source !== 'object') return {};
+  const disallowed = new Set(['token', 'authToken', 'accessToken', 'authorization', 'Authorization', 'bearer', 'Bearer']);
+  const cleaned = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (!disallowed.has(k)) cleaned[k] = v;
+  }
+  return cleaned;
+}
 
 // Get all vehicles
 router.get('/', async (req, res) => {
@@ -32,16 +43,17 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create a new vehicle
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
     if (!req.body.registrationNumber) {
       return res.status(400).json({ message: 'Registration number is required' });
     }
 
+    const body = stripAuthFields(req.body);
     let vehicleData = {
       status: 'inactive',
       kycStatus: 'pending',
-      ...req.body
+      ...body
     };
 
     const documentFields = ['insuranceDoc', 'rcDoc', 'permitDoc', 'pollutionDoc', 'fitnessDoc'];
@@ -81,10 +93,10 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Update a vehicle
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const vehicleId = Number(req.params.id);
-    const updates = req.body;
+    const updates = stripAuthFields(req.body);
 
     const documentFields = ['insuranceDoc', 'rcDoc', 'permitDoc', 'pollutionDoc', 'fitnessDoc'];
     const uploadedDocs = {};
@@ -119,7 +131,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Delete a vehicle
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const vehicleId = Number(req.params.id);
     const result = await Vehicle.deleteOne({ vehicleId });

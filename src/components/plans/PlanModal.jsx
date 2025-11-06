@@ -39,7 +39,7 @@ export default function PlanModal({ isOpen, onClose, initial = null, onSave, api
     if (!form.name.trim()) return toast.error('Plan name is required');
     try {
       setSaving(true);
-  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-myt1.vercel.app';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-mcrx.vercel.app';
       const token = localStorage.getItem('udriver_token') || 'mock';
       const payload = {
         name: form.name,

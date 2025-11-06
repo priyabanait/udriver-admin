@@ -1,10 +1,21 @@
 
 import express from 'express';
 import Driver from '../models/driver.js';
-import { authenticateToken } from './middleware.js';
+// auth middleware not applied; token used only for login
 import { uploadToCloudinary } from '../lib/cloudinary.js';
 
 const router = express.Router();
+
+// Remove any token/auth-related fields from incoming bodies
+function stripAuthFields(source) {
+  if (!source || typeof source !== 'object') return {};
+  const disallowed = new Set(['token', 'authToken', 'accessToken', 'authorization', 'Authorization', 'bearer', 'Bearer']);
+  const cleaned = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (!disallowed.has(k)) cleaned[k] = v;
+  }
+  return cleaned;
+}
 
 router.get('/', async (req, res) => {
   const list = await Driver.find().lean();
@@ -20,9 +31,9 @@ router.get('/:id', async (req, res) => {
 
 
 // Create new driver with document uploads
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    const fields = req.body;
+    const fields = stripAuthFields(req.body);
     const max = await Driver.find().sort({ id: -1 }).limit(1).lean();
     const nextId = (max[0]?.id || 0) + 1;
 
@@ -63,10 +74,10 @@ router.post('/', authenticateToken, async (req, res) => {
   }
 });
 
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     const id = Number(req.params.id);
-    const fields = req.body;
+    const fields = stripAuthFields(req.body);
 
     // Handle document uploads to Cloudinary
     const documentFields = ['profilePhoto', 'licenseDocument', 'aadharDocument', 'panDocument', 'bankDocument'];
@@ -113,7 +124,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
   }
 });
 
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   const id = Number(req.params.id);
   await Driver.deleteOne({ id });
   res.json({ message: 'Deleted' });

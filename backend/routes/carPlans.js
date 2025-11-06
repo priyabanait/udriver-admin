@@ -1,8 +1,19 @@
 import express from 'express';
 import CarPlan from '../models/carPlan.js';
-import { authenticateToken } from './middleware.js';
+// auth middleware not applied; token used only for login
 
 const router = express.Router();
+
+// Remove any token/auth-related fields from incoming bodies
+function stripAuthFields(source) {
+  if (!source || typeof source !== 'object') return {};
+  const disallowed = new Set(['token', 'authToken', 'accessToken', 'authorization', 'Authorization', 'bearer', 'Bearer']);
+  const cleaned = {};
+  for (const [k, v] of Object.entries(source)) {
+    if (!disallowed.has(k)) cleaned[k] = v;
+  }
+  return cleaned;
+}
 
 // List all car plans
 router.get('/', async (req, res) => {
@@ -28,18 +39,19 @@ router.get('/:id', async (req, res) => {
 });
 
 // Create car plan
-router.post('/', authenticateToken, async (req, res) => {
+router.post('/', async (req, res) => {
   try {
-    console.log('car-plans POST payload:', JSON.stringify(req.body).slice(0,1000));
+    const body = stripAuthFields(req.body);
+    console.log('car-plans POST payload:', JSON.stringify(body).slice(0,1000));
     // normalize incoming payload so frontend PlanModal (which posts driver-plan shape)
     // can create a car plan without failing validation
     const payload = {
-      name: req.body.name || req.body.title || 'Car Plan',
-      vehicleType: req.body.vehicleType || req.body.category || (Array.isArray(req.body.vehicleTypes) ? req.body.vehicleTypes[0] : undefined) || 'General',
-      securityDeposit: req.body.securityDeposit || req.body.deposit || 0,
-      rows: Array.isArray(req.body.rows) ? req.body.rows : [],
-      status: req.body.status || 'active',
-      createdDate: req.body.createdDate || new Date().toISOString()
+      name: body.name || body.title || 'Car Plan',
+      vehicleType: body.vehicleType || body.category || (Array.isArray(body.vehicleTypes) ? body.vehicleTypes[0] : undefined) || 'General',
+      securityDeposit: body.securityDeposit || body.deposit || 0,
+      rows: Array.isArray(body.rows) ? body.rows : [],
+      status: body.status || 'active',
+      createdDate: body.createdDate || new Date().toISOString()
     };
 
     const p = new CarPlan(payload);
@@ -53,10 +65,10 @@ router.post('/', authenticateToken, async (req, res) => {
 });
 
 // Update car plan
-router.put('/:id', authenticateToken, async (req, res) => {
+router.put('/:id', async (req, res) => {
   try {
     // ensure some sensible defaults when updating from frontend modal
-    const body = { ...req.body };
+    const body = { ...stripAuthFields(req.body) };
     if (!body.vehicleType) body.vehicleType = body.category || (Array.isArray(body.vehicleTypes) ? body.vehicleTypes[0] : undefined) || 'General';
     if (!Array.isArray(body.rows)) body.rows = body.rows || [];
     const updated = await CarPlan.findByIdAndUpdate(req.params.id, body, { new: true }).lean();
@@ -69,7 +81,7 @@ router.put('/:id', authenticateToken, async (req, res) => {
 });
 
 // Delete car plan
-router.delete('/:id', authenticateToken, async (req, res) => {
+router.delete('/:id', async (req, res) => {
   try {
     const removed = await CarPlan.findByIdAndDelete(req.params.id).lean();
     if (!removed) return res.status(404).json({ message: 'Not found' });
