@@ -33,7 +33,7 @@ import InvestmentDetailModal from '../../components/investors/InvestmentDetailMo
 import InvestmentPlanModal from '../../components/investors/InvestmentPlanModal';
 
 // Centralized API base (falls back to local backend). Using explicit base + GET for reads for clarity.
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
 
 
 export default function InvestmentManagement() {

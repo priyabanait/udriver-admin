@@ -54,7 +54,7 @@ export default function DriverPayments() {
       setLoading(true);
       setError(null);
       try {
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         // Load drivers for selector
         const dRes = await fetch(`${API_BASE}/api/drivers`);
         if (!dRes.ok) throw new Error(`Failed to load drivers: ${dRes.status}`);
@@ -305,7 +305,7 @@ export default function DriverPayments() {
           )}
           <button className="btn btn-primary" onClick={async () => {
             try {
-              const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+              const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
               setLoading(true);
               setError(null);
               // re-fetch drivers and transactions
@@ -618,7 +618,7 @@ export default function DriverPayments() {
                           onClick={async () => {
                             if (!window.confirm('Delete this payment?')) return;
                             try {
-                              const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+                              const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
                               const token = localStorage.getItem('udriver_token') || 'mock';
                               if (payment.txId) {
                                 const res = await fetch(`${API_BASE}/api/transactions/${payment.txId}`, {
@@ -724,7 +724,7 @@ export default function DriverPayments() {
                   className="btn btn-primary"
                   onClick={async () => {
                     try {
-                      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+                      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
                       const token = localStorage.getItem('udriver_token') || 'mock';
                       const payload = {
                         driverId: newPayment.driverId,

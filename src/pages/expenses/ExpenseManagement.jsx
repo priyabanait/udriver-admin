@@ -50,7 +50,7 @@ export default function ExpenseManagement() {
     (async () => {
       setLoading(true); setError(null);
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         const res = await fetch(`${API_BASE}/api/expenses`);
         if (!res.ok) throw new Error(`Failed to load expenses: ${res.status}`);
         const data = await res.json();
@@ -78,7 +78,7 @@ export default function ExpenseManagement() {
     let mounted = true;
     (async () => {
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         const res = await fetch(`${API_BASE}/api/expenses/categories`);
         if (res.ok) {
           const cats = await res.json();
@@ -179,7 +179,7 @@ export default function ExpenseManagement() {
         default:
           return;
       }
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const token = localStorage.getItem('udriver_token');
       const res = await fetch(`${API_BASE}/api/expenses/${expenseId}`, {
         method: 'PUT',
@@ -199,7 +199,7 @@ export default function ExpenseManagement() {
     if (!hasPermission(PERMISSIONS.EXPENSES_DELETE)) return;
     if (!window.confirm('Delete this expense?')) return;
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const token = localStorage.getItem('udriver_token');
       const res = await fetch(`${API_BASE}/api/expenses/${expenseId}`, {
         method: 'DELETE',
@@ -219,7 +219,7 @@ export default function ExpenseManagement() {
   };
 
   const handleSaveExpense = async (expenseData) => {
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+    const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
     const token = localStorage.getItem('udriver_token');
     
     if (selectedExpense) {
@@ -260,7 +260,7 @@ export default function ExpenseManagement() {
 
   const handleChangeExpenseStatus = async (expenseId, newStatus) => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const token = localStorage.getItem('udriver_token');
       const update = { status: newStatus };
       if (newStatus === 'approved') {
@@ -595,7 +595,7 @@ export default function ExpenseManagement() {
                           title="View Details"
                           onClick={async () => {
                             try {
-                              const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+                              const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
                               const res = await fetch(`${API_BASE}/api/expenses/${expense.id}`);
                               if (!res.ok) throw new Error('Failed to fetch expense');
                               const full = await res.json();

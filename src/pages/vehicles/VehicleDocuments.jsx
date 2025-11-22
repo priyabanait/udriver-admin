@@ -36,7 +36,7 @@ export default function VehicleDocuments() {
 
   useEffect(() => {
     let mounted = true;
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+    const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
     (async function fetchAll() {
       try {
         const [vehicleRes, driverRes] = await Promise.all([

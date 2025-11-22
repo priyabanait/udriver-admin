@@ -45,7 +45,7 @@ export default function PaymentProcess() {
   const loadPayments = async () => {
     setLoading(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const res = await fetch(`${API_BASE}/api/investment-fds`);
       if (res.ok) {
         const data = await res.json();

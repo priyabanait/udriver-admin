@@ -50,7 +50,7 @@ router.use('/payments', paymentsRouter);
 
 No additional configuration needed. The frontend automatically uses:
 ```javascript
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
 ```
 
 ### 3. Database Setup
