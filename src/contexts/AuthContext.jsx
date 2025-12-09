@@ -149,7 +149,8 @@ export function AuthProvider({ children }) {
         return { success: true };
       }
       // If not a mock user, try backend manager login
-      const response = await fetch('/api/managers/login', {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const response = await fetch(`${API_BASE}/api/managers/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, password })
@@ -165,7 +166,7 @@ export function AuthProvider({ children }) {
 
       // Enrich with manager details when available
       try {
-        const detailRes = await fetch(`/api/managers/${data.user.id}`, {
+        const detailRes = await fetch(`${API_BASE}/api/managers/${data.user.id}`, {
           headers: {
             'Content-Type': 'application/json',
             Authorization: `Bearer ${data.token}`
