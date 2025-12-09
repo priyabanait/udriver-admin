@@ -14,9 +14,40 @@ router.post('/login', async (req, res) => {
     const manager = await Manager.findOne({ email, password }).lean();
     if (!manager) return res.status(401).json({ message: 'Invalid credentials' });
 
-    // Import permissions for fleet manager role
-    const { ROLES } = await import('../../src/utils/permissions.js');
-    const permissions = ROLES.FLEET_MANAGER.permissions;
+    // Define fleet manager permissions directly
+    const permissions = [
+      'dashboard.view',
+      'dashboard.analytics',
+      'drivers.view',
+      'reports.export',
+      'drivers.edit',
+      'drivers.kyc',
+      'drivers.performance',
+      'vehicles.view',
+      'vehicles.create',
+      'vehicles.edit',
+      'vehicles.assign',
+      'plans.view',
+      'plans.create',
+      'plans.edit',
+      'expenses:view',
+      'expenses:create',
+      'expenses:edit',
+      'reports.view',
+      'reports.performance',
+      'tickets.view',
+      'tickets.create',
+      'tickets.edit',
+      'investments:view',
+      'investments:create',
+      'investments:edit',
+      'investments:delete',
+      'investments:analytics',
+      'payments.view',
+      'payments.create',
+      'payments.edit',
+      'payments.process'
+    ];
 
     const payload = {
       id: manager._id,
@@ -28,7 +59,8 @@ router.post('/login', async (req, res) => {
     const token = jwt.sign(payload, SECRET, { expiresIn: '8h' });
     res.json({ user: payload, token });
   } catch (err) {
-    res.status(500).json({ message: 'Login failed' });
+    console.error('Manager login error:', err);
+    res.status(500).json({ message: 'Login failed', error: err.message });
   }
 });
 

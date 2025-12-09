@@ -18,7 +18,8 @@ const ManagerPage = () => {
     const fetchManagers = async () => {
       setLoading(true);
       try {
-        const res = await fetch('https://udrive-backend-1igb.vercel.app/api/managers?limit=1000');
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const res = await fetch(`${API_BASE}/api/managers?limit=1000`);
         const result = await res.json();
         const data = result.data || result;
         setManagers(Array.isArray(data) ? data : []);
@@ -35,7 +36,8 @@ const ManagerPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch('https://udrive-backend-1igb.vercel.app/api/managers', {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const res = await fetch(`${API_BASE}/api/managers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(managerData),
@@ -56,7 +58,8 @@ const ManagerPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`https://udrive-backend-1igb.vercel.app/api/managers/${id}`, {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const res = await fetch(`${API_BASE}/api/managers/${id}`, {
         method: 'DELETE',
       });
       const data = await res.json();
@@ -83,7 +86,8 @@ const ManagerPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const res = await fetch(`https://udrive-backend-1igb.vercel.app/api/managers/${selectedManager._id}`, {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const res = await fetch(`${API_BASE}/api/managers/${selectedManager._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(managerData),
