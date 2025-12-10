@@ -3,7 +3,7 @@ import { cn } from '../../utils';
 export function Table({ children, className, ...props }) {
   // wrapper allows horizontal scrolling when table is wider than its container
   return (
-    <div className="w-full overflow-x-auto overflow-y-auto max-h-[calc(100vh-400px)]"> 
+    <div className="w-full overflow-x-auto overflow-y-auto max-h-[calc(120vh-400px)]"> 
       <table className={cn('min-w-full table-auto border-collapse', className)} {...props}>
         {children}
       </table>

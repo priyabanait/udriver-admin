@@ -792,7 +792,7 @@ export default function DriverPayments() {
           <CardTitle>Driver Payment Records</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
-          <div className="w-full h-screen overflow-auto">
+      <div className="overflow-x-auto">
             <Table className="w-full">
               <TableBody>
                 {filtered.length === 0 ? (
@@ -818,7 +818,7 @@ export default function DriverPayments() {
                         </TableCell>
                         <TableCell colSpan={8}>
                           {/* Nested table for transactions */}
-                          <div className="overflow-x-auto">
+                          <div className="">
                             <Table>
                               <TableHeader>
                                 <TableRow>
@@ -1076,7 +1076,7 @@ export default function DriverPayments() {
       {/* Payment Detail Modal - All Transactions */}
       {selectedDetail && showDetailModal && Array.isArray(selectedDetail) && (
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl max-h-[90vh] flex flex-col">
+          <div className="bg-white rounded-2xl shadow-2xl w-full max-w-4xl  flex flex-col">
             <div className="p-6 border-b border-gray-200 flex-shrink-0">
               <div className="flex items-center justify-between">
                 <div>
@@ -1096,7 +1096,7 @@ export default function DriverPayments() {
             
             <div className="p-6 space-y-4 overflow-y-auto flex-1">
               {/* Summary Cards */}
-              <div className="grid grid-cols-3 gap-4 flex-shrink-0">
+              <div className="grid grid-cols-3 gap-4">
                 <div className="bg-blue-50 rounded-lg p-4">
                   <p className="text-xs text-gray-600">Total Transactions</p>
                   <p className="text-2xl font-bold text-blue-600">{selectedDetail.length}</p>
@@ -1328,7 +1328,7 @@ export default function DriverPayments() {
               </div>
             </div>
 
-            <div className="p-6 border-t border-gray-200 flex gap-3">
+            <div className="p-6 border-t border-gray-200 flex gap-3 flex-shrink-0">
               <button
                 onClick={() => setShowDetailModal(false)}
                 className="btn btn-secondary flex-1"

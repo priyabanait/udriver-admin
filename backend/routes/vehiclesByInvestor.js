@@ -1,5 +1,6 @@
 import express from 'express';
 import Vehicle from '../models/vehicle.js';
+import CarInvestmentEntry from '../models/carInvestmentEntry.js';
 import mongoose from 'mongoose';
 
 const router = express.Router();
@@ -126,6 +127,9 @@ router.get('/:investorId', async (req, res) => {
       return res.status(404).json({ error: 'No vehicles found for this investor' });
     }
 
+    // Fetch all car investment entries to match with vehicles
+    const carInvestmentEntries = await CarInvestmentEntry.find({}).lean();
+
     // Get investor data from first vehicle
     const investorData = vehicles[0].investorId;
     
@@ -134,6 +138,12 @@ router.get('/:investorId', async (req, res) => {
 
     // Calculate for each vehicle
     const vehiclesWithCalculations = vehicles.map(vehicle => {
+      // Match car investment entry by category
+      const category = (vehicle.category || vehicle.carCategory || '').toLowerCase().trim();
+      const matchedInvestment = carInvestmentEntries.find(entry => {
+        const entryCarname = (entry.carname || '').toLowerCase().trim();
+        return entryCarname === category;
+      });
       // Calculate months from rentPeriods
       let calculatedMonths = 0;
       const status = vehicle.status || 'inactive';
@@ -168,7 +178,12 @@ router.get('/:investorId', async (req, res) => {
         cumulativePayout: cumulativePayout,
         isActive: status === 'active',
         hasRentPeriods: Array.isArray(vehicle.rentPeriods) && vehicle.rentPeriods.length > 0,
-        rentPeriods: vehicle.rentPeriods || []
+        rentPeriods: vehicle.rentPeriods || [],
+        // Add car investment data
+        carValue: matchedInvestment?.carvalue || 0,
+        deductionTDS: matchedInvestment?.deductionTDS || 0,
+        finalMonthlyPayout: matchedInvestment?.finalMonthlyPayout || 0,
+        carInvestmentName: matchedInvestment?.carname || ''
       };
     });
 
