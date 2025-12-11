@@ -37,7 +37,7 @@ export default function DriverStatus() {
       setLoading(true);
       setError(null);
       try {
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         const res = await fetch(`${API_BASE}/api/drivers`);
         if (!res.ok) throw new Error(`Failed to load drivers: ${res.status}`);
         const list = await res.json();
@@ -74,7 +74,7 @@ export default function DriverStatus() {
 
     (async () => {
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         const token = localStorage.getItem('udriver_token') || 'mock';
         const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
           method: 'PUT',
@@ -97,7 +97,7 @@ export default function DriverStatus() {
 
   const handleChangeDriverStatus = async (driverId, newStatus) => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const token = localStorage.getItem('udriver_token') || 'mock';
       const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
         method: 'PUT',
@@ -124,7 +124,7 @@ export default function DriverStatus() {
   const handleBulkStatusUpdate = (newStatus) => {
     if (!hasPermission('drivers.edit') || selectedDrivers.size === 0) return;
     const ids = Array.from(selectedDrivers);
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+    const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
     const token = localStorage.getItem('udriver_token') || 'mock';
 
     (async () => {

@@ -408,7 +408,8 @@ router.post('/', async (req, res) => {
     const investorData = {
       ...req.body,
       ...uploadedDocs,
-      isManualEntry: true // Mark as manually added by admin
+      isManualEntry: true, // Mark as manually added by admin
+      registrationCompleted: true // Mark registration as completed when admin fills the form
     };
 
     // Remove base64 data to prevent large document size

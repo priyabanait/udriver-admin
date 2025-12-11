@@ -31,6 +31,7 @@ const InvestorSchema = new mongoose.Schema({
   // Admin management fields
   kycStatus: { type: String, default: 'pending', enum: ['pending', 'verified', 'rejected'] },
   isManualEntry: { type: Boolean, default: false },
+  registrationCompleted: { type: Boolean, default: false }, // Track if registration form was filled
   password: String, // For investor self-service login
   
   // Legacy fields

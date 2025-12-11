@@ -171,6 +171,7 @@ router.post('/', async (req, res) => {
       ...fields,
       ...uploadedDocs,
       isManualEntry: true,
+      registrationCompleted: true, // Mark registration as completed when admin fills the form
       emergencyRelation: fields.emergencyRelation || '',
       emergencyPhoneSecondary: fields.emergencyPhoneSecondary || ''
     };

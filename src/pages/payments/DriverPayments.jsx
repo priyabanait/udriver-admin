@@ -73,7 +73,7 @@ export default function DriverPayments() {
       }));
       
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         const token = localStorage.getItem('token');
         
         const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
@@ -125,7 +125,7 @@ export default function DriverPayments() {
       [selectionId]: { ...prev[selectionId], loading: true }
     }));
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const token = localStorage.getItem('token');
       const { amount, reason } = extraInputs[selectionId];
       const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
@@ -162,7 +162,7 @@ export default function DriverPayments() {
     const handleDelete = async (selectionId) => {
       if (!window.confirm('Are you sure you want to delete this payment record?')) return;
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
         const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
           method: 'DELETE'
         });
@@ -181,7 +181,7 @@ export default function DriverPayments() {
  
 
   useEffect(() => {
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+    const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
     // If logged-in user is a manager, use their email/ID, otherwise use selected manager filter
     const managerFilter = isManager ? (user?.email || user?.id) : (selectedManagers?.filter || '');
     
@@ -260,7 +260,7 @@ export default function DriverPayments() {
   const loadSelections = async () => {
     setLoading(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const res = await fetch(`${API_BASE}/api/driver-plan-selections?limit=1000`);
       if (!res.ok) throw new Error('Failed to load driver payments');
       const result = await res.json();
@@ -544,7 +544,7 @@ export default function DriverPayments() {
 
   const handleStatusChange = async (selectionId, newStatus) => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const token = localStorage.getItem('token');
       
       console.log('Updating status:', { selectionId, newStatus });

@@ -44,6 +44,7 @@ const DriverSchema = new mongoose.Schema({
   electricBillDocument: String,
   status: { type: String, default: 'inactive' },
   kycStatus: String,
+  registrationCompleted: { type: Boolean, default: false }, // Track if registration form was filled
   joinDate: String,
   lastActive: String,
   vehicleAssigned: String,
