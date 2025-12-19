@@ -91,7 +91,7 @@ const investmentFDSchema = new mongoose.Schema({
   },
   paymentStatus: {
     type: String,
-    enum: ['pending', 'completed', 'failed'],
+    enum: ['pending', 'partial', 'paid'],
     default: 'pending'
   },
   paymentDate: {
@@ -100,7 +100,7 @@ const investmentFDSchema = new mongoose.Schema({
   },
   paymentMode: {
     type: String,
-    enum: ['online', 'cash'],
+    enum: ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'],
     required: false
   }
 }, {

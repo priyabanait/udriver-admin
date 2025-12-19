@@ -10,6 +10,7 @@ import { formatDate } from '../../utils';
 import { PermissionGuard } from '../../components/guards/PermissionGuards';
 import { PERMISSIONS } from '../../utils/permissions';
 import toast from 'react-hot-toast';
+import ZwitchPaymentModal from '../../components/payments/ZwitchPaymentModal';
 
 export default function DriverPayments() {
   const { user } = useAuth(); // Get logged-in user
@@ -28,34 +29,59 @@ export default function DriverPayments() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [rentSummaries, setRentSummaries] = useState({});
-  function getInitialExtraState(selections) {
-  const state = {};
-  selections.flat().forEach(s => {
-    state[s._id] = {
-      amount: s.extraAmount || '',
-      reason: s.extraReason || '',
-      loading: false
-    };
-  });
-  return state;
-}
+  // State for online payment modal
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
+  const [selectedPayment, setSelectedPayment] = useState(null);
   // State for editing extra amount/reason per row
   const [extraInputs, setExtraInputs] = useState({});
   // State for adjustment amount and reason per row
   const [adjustmentInputs, setAdjustmentInputs] = useState({});
-  // Sync extraInputs state when selections change
+  // State for admin paid amount per row (for cash payments)
+  const [adminPaidInputs, setAdminPaidInputs] = useState({});
+  // Sync extraInputs state when selections change - keep inputs empty for new entries
   useEffect(() => {
-    setExtraInputs(getInitialExtraState(selections));
-    // Initialize adjustmentInputs state - keep amount empty for new input
-    const adjState = {};
-    selections.flat().forEach(s => {
-      adjState[s._id] = {
-        amount: '', // Keep empty for new adjustment input
-        reason: '', // Keep empty for new reason input
-        loading: false
-      };
+    // Initialize inputs only for new selections, preserve existing input state
+    setExtraInputs(prev => {
+      const newState = { ...prev };
+      selections.flat().forEach(s => {
+        if (!newState[s._id]) {
+          newState[s._id] = {
+            amount: '', // Keep empty for new extra amount input
+            reason: '', // Keep empty for new reason input
+            loading: false
+          };
+        }
+      });
+      return newState;
     });
-    setAdjustmentInputs(adjState);
+    
+    setAdjustmentInputs(prev => {
+      const newState = { ...prev };
+      selections.flat().forEach(s => {
+        if (!newState[s._id]) {
+          newState[s._id] = {
+            amount: '', // Keep empty for new adjustment input
+            reason: '', // Keep empty for new reason input
+            loading: false
+          };
+        }
+      });
+      return newState;
+    });
+    
+    setAdminPaidInputs(prev => {
+      const newState = { ...prev };
+      selections.flat().forEach(s => {
+        if (!newState[s._id]) {
+          newState[s._id] = {
+            amount: '', // Always start with empty amount for new payments
+            paymentType: 'rent', // Default to rent
+            loading: false
+          };
+        }
+      });
+      return newState;
+    });
   }, [selections]);
   // Save handler for extra amount/reason
     // Save handler for adjustment amount and reason
@@ -148,11 +174,126 @@ export default function DriverPayments() {
             : s
         )
       ));
+      
+      // Clear input fields after successful save
+      setExtraInputs(prev => ({
+        ...prev,
+        [selectionId]: { amount: '', reason: '', loading: false }
+      }));
+      
       toast.success('Extra amount updated');
     } catch (e) {
       toast.error(e.message || 'Failed to update extra amount');
-    } finally {
       setExtraInputs(prev => ({
+        ...prev,
+        [selectionId]: { ...prev[selectionId], loading: false }
+      }));
+    }
+  };
+  
+  // Save handler for admin paid amount (all payment methods)
+  const handleSaveAdminPaid = async (selectionId) => {
+    const { amount, paymentType } = adminPaidInputs[selectionId] || {};
+    
+    if (!amount || Number(amount) <= 0) {
+      toast.error('Please enter a valid admin paid amount');
+      return;
+    }
+    
+    if (!paymentType || !['rent', 'security', 'total'].includes(paymentType)) {
+      toast.error('Please select payment type (Deposit, Rent, or Total Payable)');
+      return;
+    }
+    
+    setAdminPaidInputs(prev => ({
+      ...prev,
+      [selectionId]: { ...prev[selectionId], loading: true }
+    }));
+    
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const token = localStorage.getItem('token');
+      
+      const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ 
+          adminPaidAmount: Number(amount) || 0,
+          adminPaymentType: paymentType // Send payment type to backend
+        })
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to update admin paid amount');
+      }
+      
+      const result = await res.json();
+      
+      // Reload selections to get updated payment details
+      const refreshRes = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`);
+      if (refreshRes.ok) {
+        const refreshed = await refreshRes.json();
+        const refreshedSelection = refreshed.data || refreshed;
+        
+        // Update local state with refreshed data including all payment details
+        setSelections(prev => prev.map(group =>
+          group.map(s =>
+            s._id === selectionId
+              ? { 
+                  ...s, 
+                  adminPaidAmount: refreshedSelection.adminPaidAmount || 0,
+                  paidAmount: refreshedSelection.paidAmount || 0,
+                  paymentType: refreshedSelection.paymentType || s.paymentType,
+                  depositPaid: refreshedSelection.depositPaid || 0,
+                  rentPaid: refreshedSelection.rentPaid || 0,
+                  // Update paymentDetails - this is critical for showing updated rent due and total payable
+                  paymentDetails: refreshedSelection.paymentDetails || refreshedSelection.paymentBreakdown ? {
+                    rentDue: refreshedSelection.paymentDetails?.rentDue ?? refreshedSelection.paymentBreakdown?.rent ?? 0,
+                    depositDue: refreshedSelection.paymentDetails?.depositDue ?? 0,
+                    totalPayable: refreshedSelection.paymentDetails?.totalPayable ?? refreshedSelection.paymentBreakdown?.totalAmount ?? 0,
+                    extraAmount: refreshedSelection.paymentDetails?.extraAmount ?? refreshedSelection.paymentBreakdown?.extraAmount ?? 0,
+                    accidentalCover: refreshedSelection.paymentDetails?.accidentalCover ?? refreshedSelection.paymentBreakdown?.accidentalCover ?? 0,
+                    paidAmount: refreshedSelection.paymentDetails?.paidAmount ?? refreshedSelection.paidAmount ?? 0
+                  } : s.paymentDetails
+                }
+              : s
+          )
+        ));
+      } else {
+        // Fallback: update with result data (includes paymentDetails from PATCH response)
+        setSelections(prev => prev.map(group =>
+          group.map(s =>
+            s._id === selectionId
+              ? { 
+                  ...s, 
+                  adminPaidAmount: result.selection.adminPaidAmount || 0,
+                  paidAmount: result.selection.paidAmount || 0,
+                  paymentType: result.selection.paymentType || s.paymentType,
+                  depositPaid: result.selection.depositPaid || 0,
+                  rentPaid: result.selection.rentPaid || 0,
+                  paymentDetails: result.selection.paymentDetails || s.paymentDetails
+                }
+              : s
+          )
+        ));
+      }
+      
+      const typeLabel = paymentType === 'security' ? 'Deposit' : paymentType === 'total' ? 'Total Payable' : 'Rent';
+      toast.success(`Admin paid ₹${Number(amount).toLocaleString('en-IN')} for ${typeLabel}`);
+      
+      // Clear the input after successful save and refresh
+      setAdminPaidInputs(prev => ({
+        ...prev,
+        [selectionId]: { amount: '', paymentType: 'rent', loading: false }
+      }));
+    } catch (e) {
+      toast.error(e.message || 'Failed to update admin paid amount');
+    } finally {
+      setAdminPaidInputs(prev => ({
         ...prev,
         [selectionId]: { ...prev[selectionId], loading: false }
       }));
@@ -336,24 +477,18 @@ export default function DriverPayments() {
       );
       let matchesStatus = false;
       if (statusFilter === 'unpaid') {
-        const rentDue = (() => {
-          if (tx.rentStartDate) {
-            const start = new Date(tx.rentStartDate);
-            let end = new Date();
-            if (tx.status === 'inactive' && tx.rentPausedDate) {
-              end = new Date(tx.rentPausedDate);
-            }
-            let days = Math.floor((end - start) / (1000 * 60 * 60 * 24));
-            days = Math.max(1, days + 1);
-            const rentPerDay = rentSummaries[tx._id]?.rentPerDay || 0;
-            return Math.max(0, (days * rentPerDay) - (tx.paidAmount || 0));
-          }
-          return 0;
-        })();
-        const depositDue = (tx.securityDeposit || 0) - (tx.paymentType === 'security' ? (tx.paidAmount || 0) : 0);
-        matchesStatus = (rentDue > 0) || (depositDue > 0);
+        // Unpaid: total payable amount > 0
+        const totalPayable = tx.paymentDetails?.totalPayable || 0;
+        matchesStatus = totalPayable > 0;
+      } else if (statusFilter === 'completed') {
+        // Completed: total payable amount = 0
+        const totalPayable = tx.paymentDetails?.totalPayable || 0;
+        matchesStatus = totalPayable === 0;
+      } else if (statusFilter === 'all') {
+        matchesStatus = true;
       } else {
-        matchesStatus = statusFilter === 'all' || tx.paymentStatus === statusFilter;
+        // Other status filters (pending, failed, etc.)
+        matchesStatus = tx.paymentStatus === statusFilter;
       }
       const matchesMode = modeFilter === 'all' || tx.paymentMode === modeFilter;
       // Date filter
@@ -449,6 +584,7 @@ export default function DriverPayments() {
       
       const extraAmount = s.extraAmount || 0;
       const totalPayable = depositDue + rentDue + accidentalCover + extraAmount;
+      const adjustedPaid = Math.max(0, paidAmount - adjustment);
       
       return [
         s.driverUsername || 'N/A',
@@ -540,6 +676,23 @@ export default function DriverPayments() {
       console.error(e);
       toast.error('Failed to load payment details');
     }
+  };
+
+  const handleCollectPayment = (selection) => {
+    // Prepare selection data for payment
+    const paymentData = {
+      ...selection,
+      totalPayable: selection.paymentDetails?.totalPayable || 0
+    };
+    setSelectedPayment(paymentData);
+    setShowPaymentModal(true);
+  };
+
+  const handlePaymentSuccess = async (response) => {
+    console.log('Payment completed, refreshing data...', response);
+    toast.success('Payment recorded successfully');
+    // Refresh the payments list
+    fetchSelections();
   };
 
   const handleStatusChange = async (selectionId, newStatus) => {
@@ -731,7 +884,7 @@ export default function DriverPayments() {
                 <option value="completed">Completed</option>
                 <option value="unpaid">Unpaid</option>
                 <option value="pending">Pending</option>
-                <option value="failed">Failed</option>
+                {/* <option value="failed">Failed</option> */}
               </select>
             </div>
             {/* Mode Filter */}
@@ -848,9 +1001,11 @@ export default function DriverPayments() {
                                       <p className='text-xs'>Deposite Amount: ₹{(s.securityDeposit||0).toLocaleString('en-IN')}</p>
                                       {/* <p className="font-semibold">₹{(s.securityDeposit||0).toLocaleString('en-IN')}</p> */}
                                       {/* Show deposit paid if available */}
-                                      {s.paymentType === 'security' && s.paidAmount !== null && s.paidAmount !== undefined && (
+                                      {((s.depositPaid !== undefined && s.depositPaid > 0) || (s.paymentType === 'security' && s.paidAmount !== null && s.paidAmount !== undefined)) && (
                                         <div className="mt-1 pt-1 border-t border-gray-200">
-                                          <p className="text-xs font-semibold text-green-600">Deposit Paid: ₹{((s.paidAmount || 0) - (s.adjustmentAmount || 0)).toLocaleString('en-IN')}</p>
+                                          <p className="text-xs font-semibold text-green-600">
+                                            Deposit Paid: ₹{(s.depositPaid !== undefined ? s.depositPaid : ((s.paidAmount || 0) - (s.adjustmentAmount || 0))).toLocaleString('en-IN')}
+                                          </p>
                                           {s.adjustmentAmount > 0 && (
                                             <p className="text-xs font-semibold text-yellow-600">Adjustment Deducted: ₹{s.adjustmentAmount.toLocaleString('en-IN')}</p>
                                           )}
@@ -862,9 +1017,9 @@ export default function DriverPayments() {
                                           <p className="font-bold text-blue-600">
                                             ₹{(s.paymentDetails?.totalPayable || 0).toLocaleString('en-IN')}
                                           </p>
-                                          <p className="text-[11px] text-gray-500">
+                                          {/* <p className="text-[11px] text-gray-500">
                                             Remaining Due = (Rent Due + Accidental Cover + Extra Amount)
-                                          </p>
+                                          </p> */}
                                           <div className="text-[10px] text-gray-500 mt-1">
                                             <div>Deposit Due: ₹{(s.paymentDetails?.depositDue || 0).toLocaleString('en-IN')}</div>
                                             <div>Rent Due: ₹{(s.paymentDetails?.rentDue || 0).toLocaleString('en-IN')}</div>
@@ -879,21 +1034,31 @@ export default function DriverPayments() {
                                             {s.extraAmount > 0 && (
                                               <p className="text-xs text-yellow-700">Extra Amount: ₹{s.extraAmount.toLocaleString('en-IN')}</p>
                                             )}
-                                            {s.extraAmount > 0 && s.extraReason && (
+                                            {/* {s.extraAmount > 0 && s.extraReason && (
                                               <p className="text-xs text-gray-700">Reason: {s.extraReason}</p>
-                                            )}
+                                            )} */}
                                             {/* Adjustment Amount and Reason */}
                                             {s.adjustmentAmount > 0 && (
                                               <p className="text-xs text-yellow-700 mt-1">Adjustment Amount: ₹{s.adjustmentAmount.toLocaleString('en-IN')}</p>
                                             )}
-                                            {s.adjustmentAmount > 0 && s.adjustmentReason && (
+                                            {/* {s.adjustmentAmount > 0 && s.adjustmentReason && (
                                               <p className="text-xs text-gray-700">Reason: {s.adjustmentReason}</p>
-                                            )}
+                                            )} */}
                                           </div>
                                           {/* Show rent paid if available */}
-                                          {s.paymentType === 'rent' && s.paidAmount !== null && s.paidAmount !== undefined && (
+                                          {((s.rentPaid !== undefined && s.rentPaid > 0) || (s.paymentType === 'rent' && s.paidAmount !== null && s.paidAmount !== undefined)) && (
                                             <div className="mt-1 pt-1 border-t border-gray-200">
-                                              <p className="text-xs font-semibold text-green-600">Rent Paid: ₹{((s.paidAmount || 0) - (s.adjustmentAmount || 0)).toLocaleString('en-IN')}</p>
+                                              <p className="text-xs font-semibold text-green-600">
+                                                Rent Paid: ₹{(s.rentPaid !== undefined ? s.rentPaid : ((s.paidAmount || 0) - (s.adjustmentAmount || 0))).toLocaleString('en-IN')}
+                                              </p>
+                                            </div>
+                                          )}
+                                          {/* Show deposit paid if available */}
+                                          {s.depositPaid !== undefined && s.depositPaid > 0 && (
+                                            <div className="mt-1 pt-1 border-t border-gray-200">
+                                              <p className="text-xs font-semibold text-green-600">
+                                                Deposit Paid: ₹{s.depositPaid.toLocaleString('en-IN')}
+                                              </p>
                                             </div>
                                           )}
                                           {/* Show all due amounts, extra amount, and reason */}
@@ -931,6 +1096,26 @@ export default function DriverPayments() {
                                           <p className="text-xs text-gray-600">
                                             <span className="font-semibold">Rent/Day:</span> ₹{(s.paymentDetails?.rentPerDay || 0).toLocaleString('en-IN')}
                                           </p>
+                                          {/* Vehicle Status Badge */}
+                                          {s.vehicleStatus && (
+                                            <div className="mt-1">
+                                              {s.vehicleStatus === 'active' ? (
+                                                <Badge variant="success" className="text-xs">Car: Active</Badge>
+                                              ) : (
+                                                <Badge variant="danger" className="text-xs">Car: Inactive</Badge>
+                                              )}
+                                            </div>
+                                          )}
+                                          {/* Plan Status Badge */}
+                                          {s.status && (
+                                            <div className="mt-1">
+                                              {s.status === 'active' ? (
+                                                <Badge variant="success" className="text-xs">Rent: Counting</Badge>
+                                              ) : (
+                                                <Badge variant="danger" className="text-xs">Rent: Stopped</Badge>
+                                              )}
+                                            </div>
+                                          )}
                                           {/* Deposit paid/due status */}
                                           {((s.securityDeposit || 0) > 0) && (
                                             <p className="text-xs">
@@ -1012,9 +1197,77 @@ export default function DriverPayments() {
                                       ) : (
                                         <div className="text-xs text-gray-500">Not started</div>
                                       )}
+                                       {/* Admin Paid Amount Input - Always show for all payment methods */}
+                                       <div className="mt-2 pt-2 border-t border-gray-200">
+                                            <div className="flex flex-col gap-2">
+                                              <div className="flex items-center gap-2">
+                                                <label className="text-xs font-semibold text-blue-700 whitespace-nowrap">Admin Paid:</label>
+                                                <input
+                                                  type="number"
+                                                  className="border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 w-24"
+                                                  placeholder="Amount"
+                                                  value={adminPaidInputs[s._id]?.amount ?? ''}
+                                                  onChange={e => setAdminPaidInputs(prev => ({
+                                                    ...prev,
+                                                    [s._id]: { ...prev[s._id], amount: e.target.value }
+                                                  }))}
+                                                  disabled={adminPaidInputs[s._id]?.loading}
+                                                />
+                                              <select
+  className="w-36 border border-gray-300 rounded-md px-2 py-1 text-xs focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+  value={adminPaidInputs[s._id]?.paymentType || 'rent'}
+  onChange={e => {
+    const newType = e.target.value;
+
+    setAdminPaidInputs(prev => {
+      const current = prev[s._id] || {};
+
+      // Auto-fill amount when "Total Payable" is selected
+      if (newType === 'total' && s.paymentDetails?.totalPayable) {
+        return {
+          ...prev,
+          [s._id]: {
+            ...current,
+            paymentType: newType,
+            amount: s.paymentDetails.totalPayable.toString(),
+          },
+        };
+      }
+
+      return {
+        ...prev,
+        [s._id]: {
+          ...current,
+          paymentType: newType,
+        },
+      };
+    });
+  }}
+  disabled={adminPaidInputs[s._id]?.loading}
+>
+  <option value="rent">Rent</option>
+  <option value="security">Deposit</option>
+  <option value="total">Total Payable</option>
+</select>
+
+                                                <button
+                                                  className="bg-blue-600 text-white text-xs px-3 py-1 rounded-md hover:bg-blue-700 transition disabled:opacity-60"
+                                                  onClick={() => handleSaveAdminPaid(s._id)}
+                                                  disabled={adminPaidInputs[s._id]?.loading}
+                                                >
+                                                  {adminPaidInputs[s._id]?.loading ? 'Saving...' : 'Save'}
+                                                </button>
+                                              </div>
+                                              {s.adminPaidAmount > 0 && (
+                                                <p className="text-xs text-green-600 font-semibold">
+                                                  Total Admin Paid: ₹{s.adminPaidAmount.toLocaleString('en-IN')}
+                                                </p>
+                                              )}
+                                            </div>
+                                          </div>
                                     </TableCell>
                                       <TableCell>
-                                      <div className="flex gap-2">
+                                      <div className="flex flex-col gap-2">
                                         <button
                                           onClick={() => handleViewDetails(group)}
                                           className="text-primary-600 hover:text-primary-700 flex items-center gap-1 text-sm font-medium border border-primary-200 rounded px-2 py-1"
@@ -1023,7 +1276,16 @@ export default function DriverPayments() {
                                           <Eye className="h-4 w-4" />
                                           See Transaction
                                         </button>
-                                       
+                                        {s.paymentDetails?.totalPayable > 0 && (
+                                          <button
+                                            onClick={() => handleCollectPayment(s)}
+                                            className="text-blue-600 hover:text-blue-700 flex items-center gap-1 text-sm font-medium border border-blue-200 rounded px-2 py-1 bg-blue-50"
+                                            title="Collect payment online via ZWITCH"
+                                          >
+                                            <CreditCard className="h-4 w-4" />
+                                            Collect Online
+                                          </button>
+                                        )}
                                       </div>
                                     </TableCell>
                                     <TableCell>
@@ -1031,7 +1293,6 @@ export default function DriverPayments() {
                                         <div>{getModeBadge(s.paymentMode)}</div>
                                         <p className="text-xs text-gray-500">Method: {s.paymentMethod || 'N/A'}</p>
                                         <p className="text-xs text-gray-500">Date: {s.paymentDate ? formatDate(s.paymentDate) : 'Not paid yet'}</p>
-                                       
                                        
                                       </div>
                                     </TableCell>
@@ -1299,12 +1560,101 @@ export default function DriverPayments() {
                         </div>
                       )}
 
+                      {/* Payment Records Section */}
+                      <div className="mt-3 pt-3 border-t border-gray-300">
+                        <p className="text-sm font-semibold text-gray-800 mb-2">Payment Records:</p>
+                        <div className="space-y-2">
+                          {/* Driver Payment Record */}
+                          {transaction.paidAmount > 0 && transaction.paymentDate && (
+                            <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <span className="text-xs font-semibold text-blue-800">Driver Payment</span>
+                                  <div className="text-[10px] text-blue-600 mt-0.5">
+                                    {transaction.paymentDate ? new Date(transaction.paymentDate).toLocaleString('en-IN', {
+                                      dateStyle: 'medium',
+                                      timeStyle: 'short'
+                                    }) : 'N/A'}
+                                  </div>
+                                </div>
+                                <span className="text-lg font-bold text-blue-700">₹{(transaction.paidAmount || 0).toLocaleString('en-IN')}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div>
+                                  <span className="text-blue-600">Type:</span>
+                                  <span className="ml-1 font-medium capitalize">{transaction.paymentType || 'N/A'}</span>
+                                </div>
+                                <div>
+                                  <span className="text-blue-600">Mode:</span>
+                                  <span className="ml-1">{getModeBadge(transaction.paymentMode)}</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-blue-600">Method:</span>
+                                  <span className="ml-1 font-medium">{transaction.paymentMethod || 'N/A'}</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-blue-600">Paid By:</span>
+                                  <span className="ml-1 font-semibold">Driver</span>
+                                </div>
+                              </div>
+                            </div>
+                          )}
+
+                          {/* Admin Payment Record */}
+                          {transaction.adminPaidAmount > 0 && (
+                            <div className="p-3 bg-purple-50 border border-purple-200 rounded-md">
+                              <div className="flex justify-between items-start mb-2">
+                                <div>
+                                  <span className="text-xs font-semibold text-purple-800">Admin Payment</span>
+                                  <div className="text-[10px] text-purple-600 mt-0.5">
+                                    {transaction.updatedAt ? new Date(transaction.updatedAt).toLocaleString('en-IN', {
+                                      dateStyle: 'medium',
+                                      timeStyle: 'short'
+                                    }) : 'N/A'}
+                                  </div>
+                                </div>
+                                <span className="text-lg font-bold text-purple-700">₹{(transaction.adminPaidAmount || 0).toLocaleString('en-IN')}</span>
+                              </div>
+                              <div className="grid grid-cols-2 gap-2 text-xs">
+                                <div className="col-span-2">
+                                  <span className="text-purple-600">Mode:</span>
+                                  <span className="ml-1 font-medium">Cash/Manual Entry</span>
+                                </div>
+                                <div className="col-span-2">
+                                  <span className="text-purple-600">Paid By:</span>
+                                  <span className="ml-1 font-semibold">Admin</span>
+                                </div>
+                              </div>
+                              {transaction.depositPaid > 0 && (
+                                <div className="mt-2 pt-2 border-t border-purple-200 text-xs">
+                                  <div className="text-purple-700">
+                                    Deposit Paid: ₹{transaction.depositPaid.toLocaleString('en-IN')}
+                                  </div>
+                                </div>
+                              )}
+                              {transaction.rentPaid > 0 && (
+                                <div className="mt-1 text-xs text-purple-700">
+                                  Rent Paid: ₹{transaction.rentPaid.toLocaleString('en-IN')}
+                                </div>
+                              )}
+                            </div>
+                          )}
+
+                          {/* No Payments Made */}
+                          {!transaction.paidAmount && !transaction.adminPaidAmount && (
+                            <div className="p-3 bg-gray-50 border border-gray-200 rounded-md text-center">
+                              <span className="text-xs text-gray-500">No payments recorded yet</span>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+
                       {/* Totals */}
                       <div className="mt-3 pt-2 border-t border-gray-300 flex justify-between items-center">
                         <div>
-                          <span className="text-gray-600 font-medium">Paid Amount:</span>
+                          <span className="text-gray-600 font-medium">Total Paid:</span>
                           <span className="ml-2 text-lg font-bold text-green-600">
-                            ₹{(transaction.paidAmount || 0).toLocaleString('en-IN')}
+                            ₹{((transaction.paidAmount || 0) + (transaction.adminPaidAmount || 0)).toLocaleString('en-IN')}
                           </span>
                         </div>
                         <div>
@@ -1339,6 +1689,17 @@ export default function DriverPayments() {
           </div>
         </div>
       )}
+
+      {/* Online Payment Modal */}
+      <ZwitchPaymentModal
+        isOpen={showPaymentModal}
+        onClose={() => {
+          setShowPaymentModal(false);
+          setSelectedPayment(null);
+        }}
+        selection={selectedPayment}
+        onSuccess={handlePaymentSuccess}
+      />
     </div>
   );
 }

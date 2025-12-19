@@ -196,7 +196,10 @@ router.put('/:id', async (req, res) => {
       termYears,
       status,
       maturityDate,
-      notes
+      notes,
+      paymentStatus,
+      paymentDate,
+      paymentMode
     } = req.body;
 
     // Find investment
@@ -236,6 +239,22 @@ router.put('/:id', async (req, res) => {
       const validPaymentMethods = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
       if (!validPaymentMethods.includes(paymentMethod)) {
         return res.status(400).json({ error: 'Invalid payment method' });
+      }
+    }
+
+    // Validate payment mode if provided
+    if (paymentMode) {
+      const validPaymentModes = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
+      if (!validPaymentModes.includes(paymentMode)) {
+        return res.status(400).json({ error: 'Invalid payment mode' });
+      }
+    }
+
+    // Validate payment status if provided
+    if (paymentStatus) {
+      const validPaymentStatuses = ['pending', 'partial', 'paid'];
+      if (!validPaymentStatuses.includes(paymentStatus)) {
+        return res.status(400).json({ error: 'Invalid payment status' });
       }
     }
 
@@ -290,6 +309,9 @@ router.put('/:id', async (req, res) => {
       }
     }
     if (status !== undefined) investment.status = status;
+    if (paymentStatus !== undefined) investment.paymentStatus = paymentStatus;
+    if (paymentDate !== undefined) investment.paymentDate = paymentDate ? new Date(paymentDate) : null;
+    if (paymentMode !== undefined) investment.paymentMode = paymentMode;
     
     // Recalculate maturity date if investment date or term changed
     if ((investmentDate !== undefined || fdType !== undefined || termMonths !== undefined || termYears !== undefined) && maturityDate === undefined) {

@@ -59,6 +59,10 @@ export default function VehicleModal({ isOpen, onClose, vehicle = null, onSave }
   const [drivers, setDrivers] = useState([]);
   const [managers, setManagers] = useState([]);
   const [previews, setPreviews] = useState({});
+  const [driverSearch, setDriverSearch] = useState('');
+  const [managerSearch, setManagerSearch] = useState('');
+  const [showDriverDropdown, setShowDriverDropdown] = useState(false);
+  const [showManagerDropdown, setShowManagerDropdown] = useState(false);
 
   const loadOptions = async (type, setter) => {
     try {
@@ -616,35 +620,142 @@ export default function VehicleModal({ isOpen, onClose, vehicle = null, onSave }
 
              
 
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium">Assign to Driver</label>
-                <select
-                  className="input"
-                  value={form.assignedDriver}
-                  onChange={e => handleChange('assignedDriver', e.target.value)}
-                >
-                  <option value="">Select Driver</option>
-                  {drivers.map(driver => (
-                    <option key={driver._id} value={driver._id}>
-                      {driver.name || driver.username || driver.phone}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="input pr-8"
+                    placeholder="Search driver..."
+                    value={driverSearch || (form.assignedDriver ? drivers.find(d => d._id === form.assignedDriver)?.name || drivers.find(d => d._id === form.assignedDriver)?.username || drivers.find(d => d._id === form.assignedDriver)?.phone || '' : '')}
+                    onChange={(e) => {
+                      setDriverSearch(e.target.value);
+                      setShowDriverDropdown(true);
+                    }}
+                    onFocus={() => setShowDriverDropdown(true)}
+                  />
+                  {form.assignedDriver && (
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      onClick={() => {
+                        handleChange('assignedDriver', '');
+                        setDriverSearch('');
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {showDriverDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowDriverDropdown(false)} />
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      <div
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                        onClick={() => {
+                          handleChange('assignedDriver', '');
+                          setDriverSearch('');
+                          setShowDriverDropdown(false);
+                        }}
+                      >
+                        <span className="text-gray-500">Select Driver</span>
+                      </div>
+                      {drivers
+                        .filter(driver => {
+                          const searchLower = driverSearch.toLowerCase();
+                          return (
+                            (driver.name || '').toLowerCase().includes(searchLower) ||
+                            (driver.username || '').toLowerCase().includes(searchLower) ||
+                            (driver.phone || '').toLowerCase().includes(searchLower) ||
+                            (driver.mobile || '').toLowerCase().includes(searchLower)
+                          );
+                        })
+                        .map(driver => (
+                          <div
+                            key={driver._id}
+                            className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm ${form.assignedDriver === driver._id ? 'bg-blue-100' : ''}`}
+                            onClick={() => {
+                              handleChange('assignedDriver', driver._id);
+                              setDriverSearch('');
+                              setShowDriverDropdown(false);
+                            }}
+                          >
+                            <div className="font-medium">{driver.name || driver.username || driver.phone}</div>
+                            {driver.phone && <div className="text-xs text-gray-500">{driver.phone}</div>}
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
               </div>
-              <div>
+              <div className="relative">
                 <label className="block text-sm font-medium">Assign Manager</label>
-                <select
-                  className="input"
-                  value={form.assignedManager || ''}
-                  onChange={e => handleChange('assignedManager', e.target.value)}
-                >
-                  <option value="">Select Manager</option>
-                  {managers.map(manager => (
-                    <option key={manager._id} value={manager._id}>
-                      {manager.name || manager.username || manager.email}
-                    </option>
-                  ))}
-                </select>
+                <div className="relative">
+                  <input
+                    type="text"
+                    className="input pr-8"
+                    placeholder="Search manager..."
+                    value={managerSearch || (form.assignedManager ? managers.find(m => m._id === form.assignedManager)?.name || managers.find(m => m._id === form.assignedManager)?.username || managers.find(m => m._id === form.assignedManager)?.email || '' : '')}
+                    onChange={(e) => {
+                      setManagerSearch(e.target.value);
+                      setShowManagerDropdown(true);
+                    }}
+                    onFocus={() => setShowManagerDropdown(true)}
+                  />
+                  {form.assignedManager && (
+                    <button
+                      type="button"
+                      className="absolute right-2 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600"
+                      onClick={() => {
+                        handleChange('assignedManager', '');
+                        setManagerSearch('');
+                      }}
+                    >
+                      <X className="h-4 w-4" />
+                    </button>
+                  )}
+                </div>
+                {showManagerDropdown && (
+                  <>
+                    <div className="fixed inset-0 z-10" onClick={() => setShowManagerDropdown(false)} />
+                    <div className="absolute z-20 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto">
+                      <div
+                        className="px-3 py-2 hover:bg-gray-100 cursor-pointer text-sm"
+                        onClick={() => {
+                          handleChange('assignedManager', '');
+                          setManagerSearch('');
+                          setShowManagerDropdown(false);
+                        }}
+                      >
+                        <span className="text-gray-500">Select Manager</span>
+                      </div>
+                      {managers
+                        .filter(manager => {
+                          const searchLower = managerSearch.toLowerCase();
+                          return (
+                            (manager.name || '').toLowerCase().includes(searchLower) ||
+                            (manager.username || '').toLowerCase().includes(searchLower) ||
+                            (manager.email || '').toLowerCase().includes(searchLower)
+                          );
+                        })
+                        .map(manager => (
+                          <div
+                            key={manager._id}
+                            className={`px-3 py-2 hover:bg-blue-50 cursor-pointer text-sm ${form.assignedManager === manager._id ? 'bg-blue-100' : ''}`}
+                            onClick={() => {
+                              handleChange('assignedManager', manager._id);
+                              setManagerSearch('');
+                              setShowManagerDropdown(false);
+                            }}
+                          >
+                            <div className="font-medium">{manager.name || manager.username || manager.email}</div>
+                            {manager.email && <div className="text-xs text-gray-500">{manager.email}</div>}
+                          </div>
+                        ))}
+                    </div>
+                  </>
+                )}
               </div>
               
 

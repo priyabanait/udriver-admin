@@ -49,10 +49,8 @@ export default function PaymentProcess() {
       const res = await fetch(`${API_BASE}/api/investment-fds`);
       if (res.ok) {
         const data = await res.json();
-        // Filter only payments that have been made (have paymentStatus)
-        const paymentsWithDetails = data.filter(fd => 
-          fd.paymentStatus && (fd.paymentStatus === 'completed' || fd.paymentStatus === 'pending')
-        );
+        // Show all investments with their payment status
+        const paymentsWithDetails = Array.isArray(data) ? data : (data.data || []);
         setInvestmentPayments(paymentsWithDetails);
       } else {
         toast.error('Failed to load payments');
@@ -67,25 +65,33 @@ export default function PaymentProcess() {
 
   const getStatusBadge = (status) => {
     switch (status) {
-      case 'completed':
-        return <Badge variant="success" className="flex items-center gap-1"><Check className="h-3 w-3" />Completed</Badge>;
+      case 'paid':
+        return <Badge variant="success" className="flex items-center gap-1"><Check className="h-3 w-3" />Paid</Badge>;
+      case 'partial':
+        return <Badge variant="warning" className="flex items-center gap-1"><Clock className="h-3 w-3" />Partial</Badge>;
       case 'pending':
-        return <Badge variant="warning" className="flex items-center gap-1"><Clock className="h-3 w-3" />Pending</Badge>;
-      case 'failed':
-        return <Badge variant="danger" className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Failed</Badge>;
+        return <Badge variant="danger" className="flex items-center gap-1"><AlertTriangle className="h-3 w-3" />Pending</Badge>;
       default:
-        return <Badge variant="secondary">{status}</Badge>;
+        return <Badge variant="secondary">{status || 'Unknown'}</Badge>;
     }
   };
 
   const getPaymentModeBadge = (mode) => {
-    switch (mode) {
+    if (!mode) return <Badge variant="secondary">Not Set</Badge>;
+    
+    switch (mode.toLowerCase()) {
       case 'online':
         return <Badge variant="info" className="flex items-center gap-1"><CreditCard className="h-3 w-3" />Online</Badge>;
       case 'cash':
         return <Badge variant="success" className="flex items-center gap-1"><Wallet className="h-3 w-3" />Cash</Badge>;
+      case 'bank transfer':
+        return <Badge variant="info" className="flex items-center gap-1"><Building className="h-3 w-3" />Bank Transfer</Badge>;
+      case 'upi':
+        return <Badge variant="info" className="flex items-center gap-1"><CreditCard className="h-3 w-3" />UPI</Badge>;
+      case 'cheque':
+        return <Badge variant="secondary" className="flex items-center gap-1"><CreditCard className="h-3 w-3" />Cheque</Badge>;
       default:
-        return <Badge variant="secondary">N/A</Badge>;
+        return <Badge variant="secondary">{mode}</Badge>;
     }
   };
 
@@ -97,7 +103,7 @@ export default function PaymentProcess() {
       payment.email?.toLowerCase().includes(searchTerm.toLowerCase());
     
     const matchesStatus = statusFilter === 'all' || payment.paymentStatus === statusFilter;
-    const matchesMode = paymentModeFilter === 'all' || payment.paymentMode === paymentModeFilter;
+    const matchesMode = paymentModeFilter === 'all' || payment.paymentMode?.toLowerCase() === paymentModeFilter.toLowerCase();
     
     return matchesSearch && matchesStatus && matchesMode;
   });
@@ -106,10 +112,11 @@ export default function PaymentProcess() {
   const stats = {
     totalPayments: filteredPayments.length,
     totalAmount: filteredPayments.reduce((sum, p) => sum + (p.investmentAmount || 0), 0),
-    completedPayments: filteredPayments.filter(p => p.paymentStatus === 'completed').length,
+    paidPayments: filteredPayments.filter(p => p.paymentStatus === 'paid').length,
     pendingPayments: filteredPayments.filter(p => p.paymentStatus === 'pending').length,
-    onlinePayments: filteredPayments.filter(p => p.paymentMode === 'online').length,
-    cashPayments: filteredPayments.filter(p => p.paymentMode === 'cash').length
+    partialPayments: filteredPayments.filter(p => p.paymentStatus === 'partial').length,
+    onlinePayments: filteredPayments.filter(p => p.paymentMode?.toLowerCase() === 'online').length,
+    cashPayments: filteredPayments.filter(p => p.paymentMode?.toLowerCase() === 'cash').length
   };
 
   const handleExport = () => {
@@ -199,9 +206,9 @@ export default function PaymentProcess() {
           <CardContent className="pt-6">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-sm text-gray-600">Completed</p>
-                <p className="text-2xl font-bold text-green-600">{stats.completedPayments}</p>
-                <p className="text-xs text-gray-500">Pending: {stats.pendingPayments}</p>
+                <p className="text-sm text-gray-600">Payment Status</p>
+                <p className="text-2xl font-bold text-green-600">{stats.paidPayments}</p>
+                <p className="text-xs text-gray-500">Pending: {stats.pendingPayments} | Partial: {stats.partialPayments}</p>
               </div>
               <div className="p-3 bg-green-100 rounded-lg">
                 <Check className="h-6 w-6 text-green-600" />
@@ -247,9 +254,9 @@ export default function PaymentProcess() {
               className="input w-full"
             >
               <option value="all">All Status</option>
-              <option value="completed">Completed</option>
+              <option value="paid">Paid</option>
+              <option value="partial">Partial</option>
               <option value="pending">Pending</option>
-              <option value="failed">Failed</option>
             </select>
 
             <select
@@ -258,8 +265,11 @@ export default function PaymentProcess() {
               className="input w-full"
             >
               <option value="all">All Payment Modes</option>
-              <option value="online">Online</option>
-              <option value="cash">Cash</option>
+              <option value="Cash">Cash</option>
+              <option value="Online">Online</option>
+              <option value="Bank Transfer">Bank Transfer</option>
+              <option value="UPI">UPI</option>
+              <option value="Cheque">Cheque</option>
             </select>
 
             <button

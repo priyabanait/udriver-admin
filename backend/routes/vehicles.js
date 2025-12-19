@@ -508,6 +508,10 @@ router.put('/:id', async (req, res) => {
     let existing = await Vehicle.findOne({ vehicleId });
     // Track rent periods for each status change
     if (!existing.rentPeriods) existing.rentPeriods = [];
+    
+    // Get assigned driver information for updating plan selections
+    const assignedDriver = existing.assignedDriver || updates.assignedDriver;
+    
     // If status is being set to active
     if (updates.status === 'active') {
       // Clear any previous periods and start fresh
@@ -515,12 +519,158 @@ router.put('/:id', async (req, res) => {
       updates.rentPeriods = existing.rentPeriods;
       updates.rentStartDate = new Date();
       updates.rentPausedDate = null;
+      
+      // Update associated driver plan selections to active
+      try {
+        const DriverPlanSelection = (await import('../models/driverPlanSelection.js')).default;
+        const Driver = (await import('../models/driver.js')).default;
+        const DriverSignup = (await import('../models/driverSignup.js')).default;
+        
+        // Find driver by assigned driver field (could be username, mobile, or ID)
+        let driverMobiles = [];
+        let driverUsernames = [];
+        
+        if (assignedDriver) {
+          driverUsernames.push(assignedDriver);
+          
+          // Try to find driver in Driver collection
+          const driver = await Driver.findOne({
+            $or: [
+              { username: assignedDriver },
+              { mobile: assignedDriver },
+              { phone: assignedDriver }
+            ]
+          }).lean();
+          
+          if (driver) {
+            if (driver.mobile) driverMobiles.push(driver.mobile);
+            if (driver.phone) driverMobiles.push(driver.phone);
+            if (driver.username) driverUsernames.push(driver.username);
+          }
+          
+          // Also check DriverSignup collection
+          const driverSignup = await DriverSignup.findOne({
+            $or: [
+              { username: assignedDriver },
+              { mobile: assignedDriver }
+            ]
+          }).lean();
+          
+          if (driverSignup) {
+            if (driverSignup.mobile) driverMobiles.push(driverSignup.mobile);
+            if (driverSignup.username) driverUsernames.push(driverSignup.username);
+          }
+        }
+        
+        // Update plan selections by vehicleId OR by driver mobile/username
+        const updateQuery = {
+          $or: [
+            { vehicleId: vehicleId }
+          ],
+          status: { $ne: 'completed' }
+        };
+        
+        if (driverMobiles.length > 0) {
+          updateQuery.$or.push({ driverMobile: { $in: driverMobiles } });
+        }
+        if (driverUsernames.length > 0) {
+          updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
+        }
+        
+        const result = await DriverPlanSelection.updateMany(
+          updateQuery,
+          { 
+            $set: { 
+              status: 'active',
+              rentPausedDate: null,
+              vehicleId: vehicleId // Also set vehicleId for future reference
+            } 
+          }
+        );
+        
+        console.log(`Updated ${result.modifiedCount} driver plan selections to active for vehicle ${vehicleId}`);
+      } catch (err) {
+        console.error('Error updating driver plan selections:', err);
+      }
     }
     // If status is being set to inactive, clear all rent periods
     if (updates.status === 'inactive' || updates.status === 'suspended') {
       updates.rentPeriods = [];
       updates.rentPausedDate = new Date();
       updates.rentStartDate = null;
+      
+      // Update associated driver plan selections to inactive
+      try {
+        const DriverPlanSelection = (await import('../models/driverPlanSelection.js')).default;
+        const Driver = (await import('../models/driver.js')).default;
+        const DriverSignup = (await import('../models/driverSignup.js')).default;
+        
+        // Find driver by assigned driver field (could be username, mobile, or ID)
+        let driverMobiles = [];
+        let driverUsernames = [];
+        
+        if (assignedDriver) {
+          driverUsernames.push(assignedDriver);
+          
+          // Try to find driver in Driver collection
+          const driver = await Driver.findOne({
+            $or: [
+              { username: assignedDriver },
+              { mobile: assignedDriver },
+              { phone: assignedDriver }
+            ]
+          }).lean();
+          
+          if (driver) {
+            if (driver.mobile) driverMobiles.push(driver.mobile);
+            if (driver.phone) driverMobiles.push(driver.phone);
+            if (driver.username) driverUsernames.push(driver.username);
+          }
+          
+          // Also check DriverSignup collection
+          const driverSignup = await DriverSignup.findOne({
+            $or: [
+              { username: assignedDriver },
+              { mobile: assignedDriver }
+            ]
+          }).lean();
+          
+          if (driverSignup) {
+            if (driverSignup.mobile) driverMobiles.push(driverSignup.mobile);
+            if (driverSignup.username) driverUsernames.push(driverSignup.username);
+          }
+        }
+        
+        // Update plan selections by vehicleId OR by driver mobile/username
+        const updateQuery = {
+          $or: [
+            { vehicleId: vehicleId }
+          ],
+          status: { $ne: 'completed' }
+        };
+        
+        if (driverMobiles.length > 0) {
+          updateQuery.$or.push({ driverMobile: { $in: driverMobiles } });
+        }
+        if (driverUsernames.length > 0) {
+          updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
+        }
+        
+        const result = await DriverPlanSelection.updateMany(
+          updateQuery,
+          { 
+            $set: { 
+              status: 'inactive',
+              rentPausedDate: new Date(),
+              vehicleId: vehicleId // Also set vehicleId for future reference
+            } 
+          }
+        );
+        
+        console.log(`Updated ${result.modifiedCount} driver plan selections to inactive for vehicle ${vehicleId}`);
+      } catch (err) {
+        console.error('Error updating driver plan selections:', err);
+      }
     }
 
     // KYC status activation logic

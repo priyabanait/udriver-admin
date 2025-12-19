@@ -33,7 +33,16 @@ const Investors = () => {
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
   const [showModal, setShowModal] = useState(false);
+  const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState(null);
+  const [paymentInvestment, setPaymentInvestment] = useState(null);
+  const [paymentFormData, setPaymentFormData] = useState({
+    paymentAmount: '',
+    paymentDate: new Date().toISOString().split('T')[0],
+    paymentMode: 'Cash',
+    paymentStatus: 'paid'
+  });
+  const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [formData, setFormData] = useState({
     investorName: '',
     email: '',
@@ -46,7 +55,11 @@ const Investors = () => {
     fdType: 'monthly',
     termMonths: '',
     termYears: '',
-    status: 'active'
+    status: 'active',
+    paymentStatus: 'pending',
+    paymentDate: '',
+    paymentMode: '',
+    notes: ''
   });
   const [errors, setErrors] = useState({});
 
@@ -106,11 +119,14 @@ const Investors = () => {
       investmentRate: '',
       investmentAmount: '',
       planId: '',
-      planId: '',
       fdType: 'monthly',
       termMonths: '',
       termYears: '',
-      status: 'active'
+      status: 'active',
+      paymentStatus: 'pending',
+      paymentDate: '',
+      paymentMode: '',
+      notes: ''
     });
     setErrors({});
     setEditingInvestment(null);
@@ -132,7 +148,11 @@ const Investors = () => {
         fdType: investment.fdType || 'monthly',
         termMonths: investment.termMonths || '',
         termYears: investment.termYears || '',
-        status: investment.status || 'active'
+        status: investment.status || 'active',
+        paymentStatus: investment.paymentStatus || 'pending',
+        paymentDate: investment.paymentDate || '',
+        paymentMode: investment.paymentMode || '',
+        notes: investment.notes || ''
       });
     } else {
       resetForm();
@@ -276,6 +296,77 @@ const Investors = () => {
     } catch (err) {
       console.error('Failed to delete investment:', err);
       toast.error('Failed to delete investment');
+    }
+  };
+
+  const handleOpenPaymentModal = (investment) => {
+    setPaymentInvestment(investment);
+    setPaymentFormData({
+      paymentAmount: investment.investmentAmount || '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMode: 'Cash',
+      paymentStatus: 'paid'
+    });
+    setShowPaymentModal(true);
+  };
+
+  const handleClosePaymentModal = () => {
+    setShowPaymentModal(false);
+    setPaymentInvestment(null);
+    setPaymentFormData({
+      paymentAmount: '',
+      paymentDate: new Date().toISOString().split('T')[0],
+      paymentMode: 'Cash',
+      paymentStatus: 'paid'
+    });
+  };
+
+  const handleRecordPayment = async (e) => {
+    e.preventDefault();
+
+    if (!paymentFormData.paymentMode) {
+      toast.error('Please select a payment mode');
+      return;
+    }
+
+    if (!paymentFormData.paymentAmount || parseFloat(paymentFormData.paymentAmount) <= 0) {
+      toast.error('Please enter a valid payment amount');
+      return;
+    }
+
+    setPaymentSubmitting(true);
+    try {
+      const paymentData = {
+        paymentStatus: paymentFormData.paymentStatus,
+        paymentDate: paymentFormData.paymentDate,
+        paymentMode: paymentFormData.paymentMode
+      };
+
+      console.log('Recording payment:', paymentData);
+
+      const response = await fetch(`${API_BASE}/api/investment-fds/${paymentInvestment._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(paymentData)
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        console.error('Payment error response:', errorData);
+        throw new Error(errorData.error || 'Failed to record payment');
+      }
+
+      const updatedInvestment = await response.json();
+      console.log('Payment recorded successfully:', updatedInvestment);
+
+      toast.success(`Payment of ${formatCurrency(paymentFormData.paymentAmount)} recorded successfully`);
+      handleClosePaymentModal();
+      await loadInvestments();
+    } catch (err) {
+      console.error('Failed to record payment:', err);
+      toast.error(err.message || 'Failed to record payment');
+    } finally {
+      setPaymentSubmitting(false);
     }
   };
 
@@ -484,7 +575,7 @@ const Investors = () => {
       {/* Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Investers FD Records ({filteredInvestments.length})</CardTitle>
+          <CardTitle>Investors FD Records ({filteredInvestments.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-400px)]">
@@ -499,6 +590,8 @@ const Investors = () => {
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Rate (%)</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Principal</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Maturity Amount</th>
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Payment Status</th>
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Payment Date</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Status</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-right text-xs font-medium text-gray-500 uppercase bg-gray-50">Actions</th>
                 </tr>
@@ -560,6 +653,25 @@ const Investors = () => {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
+                      <Badge variant={
+                        investment.paymentStatus === 'paid' ? 'success' :
+                        investment.paymentStatus === 'partial' ? 'warning' : 'error'
+                      }>
+                        {investment.paymentStatus === 'paid' ? 'Paid' :
+                         investment.paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                      </Badge>
+                      {investment.paymentMode && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          via {investment.paymentMode}
+                        </div>
+                      )}
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm text-gray-900">
+                        {investment.paymentDate ? formatDate(investment.paymentDate) : 'Not paid'}
+                      </div>
+                    </td>
+                    <td className="px-6 py-4 whitespace-nowrap">
                       <select
                         value={investment.status || 'active'}
                         onChange={(e) => handleStatusChange(investment._id, e.target.value)}
@@ -579,6 +691,29 @@ const Investors = () => {
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap text-right">
                       <div className="flex items-center justify-end space-x-2">
+                        {investment.paymentStatus !== 'paid' && (
+                          <PermissionGuard permission={PERMISSIONS.INVESTMENTS_EDIT}>
+                          <button
+  onClick={() => handleOpenPaymentModal(investment)}
+  className="
+    inline-flex items-center gap-1
+    px-3 py-1.5
+    text-sm font-semibold
+    text-white
+    bg-green-600
+    rounded-md
+    shadow-sm
+    hover:bg-green-700
+    focus:outline-none focus:ring-2 focus:ring-green-500
+    transition
+  "
+  title="Record Payment"
+>
+  Pay
+</button>
+
+                          </PermissionGuard>
+                        )}
                         <PermissionGuard permission={PERMISSIONS.INVESTMENTS_EDIT}>
                           <button
                             onClick={() => handleOpenModal(investment)}
@@ -823,6 +958,51 @@ const Investors = () => {
 
                   <div>
                     <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Status
+                    </label>
+                    <select
+                      value={formData.paymentStatus}
+                      onChange={(e) => handleChange('paymentStatus', e.target.value)}
+                      className="input w-full"
+                    >
+                      <option value="pending">Pending</option>
+                      <option value="partial">Partial</option>
+                      <option value="paid">Paid</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Date
+                    </label>
+                    <input
+                      type="date"
+                      value={formData.paymentDate}
+                      onChange={(e) => handleChange('paymentDate', e.target.value)}
+                      className="input w-full"
+                    />
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Mode
+                    </label>
+                    <select
+                      value={formData.paymentMode}
+                      onChange={(e) => handleChange('paymentMode', e.target.value)}
+                      className="input w-full"
+                    >
+                      <option value="">Select Payment Mode</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Online">Online</option>
+                      <option value="UPI">UPI</option>
+                    </select>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
                       Status
                     </label>
                     <select
@@ -834,6 +1014,19 @@ const Investors = () => {
                       <option value="matured">Matured</option>
                       <option value="withdrawn">Withdrawn</option>
                     </select>
+                  </div>
+
+                  <div className="md:col-span-2">
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Notes
+                    </label>
+                    <textarea
+                      value={formData.notes}
+                      onChange={(e) => handleChange('notes', e.target.value)}
+                      className="input w-full"
+                      rows="3"
+                      placeholder="Additional notes about the investment or payment"
+                    />
                   </div>
                 </div>
 
@@ -908,6 +1101,142 @@ const Investors = () => {
                     className="btn btn-primary"
                   >
                     {editingInvestment ? 'Update Investment' : 'Add Investment'}
+                  </button>
+                </div>
+              </form>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Payment Modal */}
+      {showPaymentModal && paymentInvestment && (
+        <div className="fixed inset-0 z-50 overflow-y-auto">
+          <div className="flex min-h-screen items-center justify-center p-4">
+            <div className="fixed inset-0 bg-black bg-opacity-50 transition-opacity" onClick={handleClosePaymentModal} />
+            
+            <div className="relative bg-white rounded-lg shadow-xl w-full max-w-md">
+              <div className="flex items-center justify-between p-6 border-b">
+                <div>
+                  <h2 className="text-xl font-semibold text-gray-900">Record Payment</h2>
+                  <p className="text-sm text-gray-600 mt-1">{paymentInvestment.investorName}</p>
+                </div>
+                <button onClick={handleClosePaymentModal} className="text-gray-400 hover:text-gray-600">
+                  <span className="text-2xl">&times;</span>
+                </button>
+              </div>
+
+              <form onSubmit={handleRecordPayment} className="p-6">
+                <div className="space-y-4">
+                  {/* Investment Summary */}
+                  <div className="bg-blue-50 rounded-lg p-4 border border-blue-200">
+                    <div className="flex justify-between items-center mb-2">
+                      <span className="text-sm text-gray-600">Investment Amount:</span>
+                      <span className="text-lg font-bold text-gray-900">
+                        {formatCurrency(paymentInvestment.investmentAmount)}
+                      </span>
+                    </div>
+                    <div className="flex justify-between items-center">
+                      <span className="text-sm text-gray-600">Current Status:</span>
+                      <Badge variant={
+                        paymentInvestment.paymentStatus === 'paid' ? 'success' :
+                        paymentInvestment.paymentStatus === 'partial' ? 'warning' : 'error'
+                      }>
+                        {paymentInvestment.paymentStatus === 'paid' ? 'Paid' :
+                         paymentInvestment.paymentStatus === 'partial' ? 'Partial' : 'Pending'}
+                      </Badge>
+                    </div>
+                  </div>
+
+                  {/* Payment Amount */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Amount *
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      value={paymentFormData.paymentAmount}
+                      onChange={(e) => setPaymentFormData(prev => ({ ...prev, paymentAmount: e.target.value }))}
+                      className="input w-full"
+                      placeholder="Enter payment amount"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Date */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Date *
+                    </label>
+                    <input
+                      type="date"
+                      value={paymentFormData.paymentDate}
+                      onChange={(e) => setPaymentFormData(prev => ({ ...prev, paymentDate: e.target.value }))}
+                      className="input w-full"
+                      required
+                    />
+                  </div>
+
+                  {/* Payment Mode */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Mode *
+                    </label>
+                    <select
+                      value={paymentFormData.paymentMode}
+                      onChange={(e) => setPaymentFormData(prev => ({ ...prev, paymentMode: e.target.value }))}
+                      className="input w-full"
+                      required
+                    >
+                      <option value="">Select Payment Mode</option>
+                      <option value="Cash">Cash</option>
+                      <option value="Bank Transfer">Bank Transfer</option>
+                      <option value="Cheque">Cheque</option>
+                      <option value="Online">Online</option>
+                      <option value="UPI">UPI</option>
+                    </select>
+                  </div>
+
+                  {/* Payment Status */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      Payment Status *
+                    </label>
+                    <select
+                      value={paymentFormData.paymentStatus}
+                      onChange={(e) => setPaymentFormData(prev => ({ ...prev, paymentStatus: e.target.value }))}
+                      className="input w-full"
+                    >
+                      <option value="paid">Paid (Full)</option>
+                      <option value="partial">Partial Payment</option>
+                      <option value="pending">Pending</option>
+                    </select>
+                  </div>
+                </div>
+
+                <div className="flex justify-end space-x-3 mt-6">
+                  <button
+                    type="button"
+                    onClick={handleClosePaymentModal}
+                    className="btn btn-secondary"
+                    disabled={paymentSubmitting}
+                  >
+                    Cancel
+                  </button>
+                  <button
+                    type="submit"
+                    className="btn btn-primary flex items-center"
+                    disabled={paymentSubmitting}
+                  >
+                    {paymentSubmitting ? (
+                      <>
+                        <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-white mr-2"></div>
+                        Processing...
+                      </>
+                    ) : (
+                      'Record Payment'
+                    )}
                   </button>
                 </div>
               </form>

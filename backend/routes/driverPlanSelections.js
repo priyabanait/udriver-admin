@@ -330,11 +330,24 @@ router.get('/by-manager/:manager', async (req, res) => {
 
     console.log(`Found ${payments.length} payments for manager`);
     
-    // Add calculated payment details to each payment
-    const paymentsWithDetails = payments.map(p => ({
-      ...p,
-      paymentDetails: calculatePaymentDetails(p)
-    }));
+    // Fetch vehicle data for each payment
+    const vehicleIds = [...new Set(payments.map(p => p.vehicleId).filter(Boolean))];
+    const vehiclesForPayments = await Vehicle.find({ vehicleId: { $in: vehicleIds } }).lean();
+    const vehicleMap = {};
+    vehiclesForPayments.forEach(v => {
+      vehicleMap[v.vehicleId] = v;
+    });
+    
+    // Add calculated payment details and vehicle info to each payment
+    const paymentsWithDetails = payments.map(p => {
+      const vehicle = p.vehicleId ? vehicleMap[p.vehicleId] : null;
+      return {
+        ...p,
+        paymentDetails: calculatePaymentDetails(p),
+        vehicleStatus: vehicle?.status || null,
+        vehicleRegistrationNumber: vehicle?.registrationNumber || null
+      };
+    });
     
     res.json(paymentsWithDetails);
   } catch (err) {
@@ -377,12 +390,23 @@ router.get('/', async (req, res) => {
       .limit(limit)
       .lean();
     
-    // Add calculated payment details to each selection
+    // Fetch vehicle data for each selection
+    const vehicleIds = [...new Set(selections.map(s => s.vehicleId).filter(Boolean))];
+    const vehicles = await Vehicle.find({ vehicleId: { $in: vehicleIds } }).lean();
+    const vehicleMap = {};
+    vehicles.forEach(v => {
+      vehicleMap[v.vehicleId] = v;
+    });
+    
+    // Add calculated payment details and vehicle info to each selection
     const selectionsWithBreakdown = selections.map(s => {
       const paymentDetails = calculatePaymentDetails(s);
+      const vehicle = s.vehicleId ? vehicleMap[s.vehicleId] : null;
       return {
         ...s,
-        paymentDetails
+        paymentDetails,
+        vehicleStatus: vehicle?.status || null,
+        vehicleRegistrationNumber: vehicle?.registrationNumber || null
       };
     });
     
@@ -409,7 +433,13 @@ router.get('/by-mobile/:mobile', async (req, res) => {
     const selections = await DriverPlanSelection.find({ driverMobile: mobile })
       .sort({ selectedDate: -1 })
       .lean();
-    res.json(selections);
+    // Ensure each selection includes a `paymentDetails` object (compute if missing)
+    const selectionsWithDetails = selections.map(s => ({
+      ...s,
+      paymentDetails: s.paymentDetails|| calculatePaymentDetails(s)
+    }));
+
+    res.json(selectionsWithDetails);
   } catch (err) {
     console.error('Get plans by mobile error:', err);
     res.status(500).json({ message: 'Failed to load plans for this mobile' });
@@ -631,6 +661,102 @@ router.post('/:id/confirm-payment', async (req, res) => {
   } catch (error) {
     console.error('Error confirming driver payment:', error);
     res.status(500).json({ message: 'Failed to confirm payment', error: error.message });
+  }
+});
+
+// POST - Update online payment from payment gateway callback
+router.post('/:id/online-payment', async (req, res) => {
+  try {
+    console.log('Online payment update request received:', {
+      id: req.params.id,
+      body: req.body
+    });
+
+    const { 
+      paymentId, 
+      amount, 
+      paymentType, 
+      status,
+      merchantOrderId,
+      paymentToken,
+      gateway
+    } = req.body;
+
+    if (!amount || !paymentId) {
+      return res.status(400).json({ message: 'Payment ID and amount are required' });
+    }
+
+    const id = req.params.id;
+    if (!mongoose.Types.ObjectId.isValid(id)) {
+      return res.status(400).json({ message: 'Invalid plan selection ID' });
+    }
+
+    const selection = await DriverPlanSelection.findById(id);
+    if (!selection) {
+      console.log('Plan selection not found:', id);
+      return res.status(404).json({ message: 'Plan selection not found' });
+    }
+
+    console.log('Updating plan selection with online payment:', {
+      currentStatus: selection.paymentStatus,
+      currentPaidAmount: selection.paidAmount,
+      newAmount: amount,
+      paymentType: paymentType
+    });
+
+    // Update payment details
+    selection.paymentMode = 'online';
+    selection.paymentMethod = gateway || 'ZWITCH';
+    selection.paymentStatus = status === 'captured' ? 'completed' : 'pending';
+    selection.paymentDate = new Date();
+    selection.paymentType = paymentType || 'rent';
+
+    // Add to existing paid amount (cumulative)
+    const previousAmount = selection.paidAmount || 0;
+    const newPayment = Number(amount);
+    selection.paidAmount = previousAmount + newPayment;
+
+    // Initialize driverPayments array if it doesn't exist
+    if (!selection.driverPayments) {
+      selection.driverPayments = [];
+    }
+
+    // Add payment record to array
+    selection.driverPayments.push({
+      date: new Date(),
+      amount: newPayment,
+      mode: 'online',
+      type: paymentType || 'rent',
+      transactionId: paymentId,
+      merchantOrderId: merchantOrderId,
+      paymentToken: paymentToken,
+      gateway: gateway || 'ZWITCH',
+      status: status
+    });
+
+    const updatedSelection = await selection.save();
+    
+    console.log('Online payment updated successfully:', {
+      id: updatedSelection._id,
+      paymentMode: updatedSelection.paymentMode,
+      paymentStatus: updatedSelection.paymentStatus,
+      paidAmount: updatedSelection.paidAmount,
+      paymentType: updatedSelection.paymentType,
+      totalPayments: updatedSelection.driverPayments?.length || 0
+    });
+
+    res.json({ 
+      success: true,
+      message: 'Online payment recorded successfully', 
+      selection: updatedSelection 
+    });
+  } catch (error) {
+    console.error('Error recording online payment:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Failed to record online payment', 
+      error: error.message 
+    });
   }
 });
 
