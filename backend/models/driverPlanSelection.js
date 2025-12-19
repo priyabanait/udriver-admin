@@ -103,6 +103,16 @@ const DriverPlanSelectionSchema = new mongoose.Schema({
     paymentToken: { type: String },
     gateway: { type: String, default: 'ZWITCH' },
     status: { type: String, enum: ['captured', 'failed', 'cancelled', 'pending'], default: 'captured' }
+  }],
+  // Array to store all admin payments with details
+  adminPayments: [{
+    date: { type: Date, default: Date.now },
+    amount: { type: Number, required: true },
+    type: { type: String, enum: ['rent', 'security', 'total'], default: 'rent' },
+    depositPaid: { type: Number, default: 0 },
+    rentPaid: { type: Number, default: 0 },
+    extraAmountPaid: { type: Number, default: 0 },
+    accidentalCoverPaid: { type: Number, default: 0 }
   }]
 }, { timestamps: true });
 

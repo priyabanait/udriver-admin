@@ -361,9 +361,19 @@ export default function DriverPayments() {
         const result = await res.json();
         const data = result.data || result;
         console.log('Payments data received:', Array.isArray(data) ? data.length : 0, 'records');
+        
+        // Filter to show only records where driver has been assigned to a vehicle
+        // This means the driver should have a vehicleId or the rentStartDate should be set
+        const assignedDriverRecords = (Array.isArray(data) ? data : []).filter(s => {
+          // Show only if driver is assigned (has vehicleId or rentStartDate indicating vehicle assignment)
+          return s.vehicleId || s.rentStartDate;
+        });
+        
+        console.log('Filtered to assigned drivers:', assignedDriverRecords.length, 'records');
+        
         // Group by driverMobile or driverUsername
         const grouped = {};
-        (Array.isArray(data) ? data : []).forEach(s => {
+        assignedDriverRecords.forEach(s => {
           const key = s.driverMobile || s.driverUsername || s._id;
           if (!grouped[key]) grouped[key] = [];
           grouped[key].push(s);
@@ -1068,20 +1078,32 @@ export default function DriverPayments() {
                                     <TableCell>
                                       <div className="space-y-1">
                                         {(() => {
-                                          // Calculate total paid amount for this driver across all transactions
-                                          // This shows all rent, deposit, and other payments made by the driver
+                                          // Calculate total paid amount (driver + admin) for this driver across all transactions
                                           const totalPaidByDriver = group.reduce((sum, transaction) => {
                                             return sum + (transaction.paidAmount || 0);
                                           }, 0);
                                           
+                                          const totalPaidByAdmin = group.reduce((sum, transaction) => {
+                                            return sum + (transaction.adminPaidAmount || 0);
+                                          }, 0);
+                                          
+                                          const totalPaid = totalPaidByDriver + totalPaidByAdmin;
+                                          
                                           return (
                                             <div>
                                               <p className="font-bold text-green-600 text-lg">
-                                                ₹{totalPaidByDriver.toLocaleString('en-IN')}
+                                                ₹{totalPaid.toLocaleString('en-IN')}
                                               </p>
-                                              {/* <p className="text-[10px] text-gray-500 mt-1">
-                                                Total paid across {group.length} transaction{group.length !== 1 ? 's' : ''}
-                                              </p> */}
+                                              {(totalPaidByDriver > 0 || totalPaidByAdmin > 0) && (
+                                                <div className="text-[10px] text-gray-500 mt-1 space-y-0.5">
+                                                  {totalPaidByDriver > 0 && (
+                                                    <p>Driver: ₹{totalPaidByDriver.toLocaleString('en-IN')}</p>
+                                                  )}
+                                                  {totalPaidByAdmin > 0 && (
+                                                    <p>Admin: ₹{totalPaidByAdmin.toLocaleString('en-IN')}</p>
+                                                  )}
+                                                </div>
+                                              )}
                                             </div>
                                           );
                                         })()}
@@ -1600,12 +1622,79 @@ export default function DriverPayments() {
                             </div>
                           )}
 
-                          {/* Admin Payment Record */}
-                          {transaction.adminPaidAmount > 0 && (
+                          {/* Admin Payment Record(s) - Show all admin payments dynamically */}
+                          {transaction.adminPayments && transaction.adminPayments.length > 0 ? (
+                            <div className="space-y-2">
+                              {transaction.adminPayments.map((adminPayment, idx) => (
+                                <div key={idx} className="p-3 bg-purple-50 border border-purple-200 rounded-md">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                      <span className="text-xs font-semibold text-purple-800">
+                                        Admin Payment #{idx + 1}
+                                      </span>
+                                      <div className="text-[10px] text-purple-600 mt-0.5">
+                                        {adminPayment.date ? new Date(adminPayment.date).toLocaleString('en-IN', {
+                                          dateStyle: 'medium',
+                                          timeStyle: 'short'
+                                        }) : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <span className="text-lg font-bold text-purple-700">
+                                      ₹{(adminPayment.amount || 0).toLocaleString('en-IN')}
+                                    </span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div className="col-span-2">
+                                      <span className="text-purple-600">Payment Type:</span>
+                                      <span className="ml-1 font-medium capitalize">
+                                        {adminPayment.type === 'security' ? 'Deposit' : adminPayment.type === 'total' ? 'Total Payable' : 'Rent'}
+                                      </span>
+                                    </div>
+                                    <div className="col-span-2">
+                                      <span className="text-purple-600">Mode:</span>
+                                      <span className="ml-1 font-medium">Cash/Manual Entry</span>
+                                    </div>
+                                    <div className="col-span-2">
+                                      <span className="text-purple-600">Paid By:</span>
+                                      <span className="ml-1 font-semibold">Admin</span>
+                                    </div>
+                                  </div>
+                                  {(adminPayment.depositPaid > 0 || adminPayment.rentPaid > 0 || adminPayment.extraAmountPaid > 0 || adminPayment.accidentalCoverPaid > 0) && (
+                                    <div className="mt-2 pt-2 border-t border-purple-200 text-xs space-y-1">
+                                      {adminPayment.depositPaid > 0 && (
+                                        <div className="text-purple-700">
+                                          Deposit Paid: ₹{adminPayment.depositPaid.toLocaleString('en-IN')}
+                                        </div>
+                                      )}
+                                      {adminPayment.rentPaid > 0 && (
+                                        <div className="text-purple-700">
+                                          Rent Paid: ₹{adminPayment.rentPaid.toLocaleString('en-IN')}
+                                        </div>
+                                      )}
+                                      {adminPayment.accidentalCoverPaid > 0 && (
+                                        <div className="text-purple-700">
+                                          Accidental Cover Paid: ₹{adminPayment.accidentalCoverPaid.toLocaleString('en-IN')}
+                                        </div>
+                                      )}
+                                      {adminPayment.extraAmountPaid > 0 && (
+                                        <div className="text-purple-700">
+                                          Extra Amount Paid: ₹{adminPayment.extraAmountPaid.toLocaleString('en-IN')}
+                                        </div>
+                                      )}
+                                    </div>
+                                  )}
+                                </div>
+                              ))}
+                              <div className="text-xs font-semibold text-purple-800 pt-1 border-t border-purple-300 bg-purple-100 p-2 rounded">
+                                Total Admin Paid: ₹{(transaction.adminPaidAmount || 0).toLocaleString('en-IN')}
+                              </div>
+                            </div>
+                          ) : transaction.adminPaidAmount > 0 ? (
+                            // Legacy Admin Payment - Only show if no adminPayments array but adminPaidAmount exists
                             <div className="p-3 bg-purple-50 border border-purple-200 rounded-md">
                               <div className="flex justify-between items-start mb-2">
                                 <div>
-                                  <span className="text-xs font-semibold text-purple-800">Admin Payment</span>
+                                  <span className="text-xs font-semibold text-purple-800">Admin Payment (Legacy)</span>
                                   <div className="text-[10px] text-purple-600 mt-0.5">
                                     {transaction.updatedAt ? new Date(transaction.updatedAt).toLocaleString('en-IN', {
                                       dateStyle: 'medium',
@@ -1638,7 +1727,7 @@ export default function DriverPayments() {
                                 </div>
                               )}
                             </div>
-                          )}
+                          ) : null}
 
                           {/* No Payments Made */}
                           {!transaction.paidAmount && !transaction.adminPaidAmount && (

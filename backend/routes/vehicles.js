@@ -512,6 +512,83 @@ router.put('/:id', async (req, res) => {
     // Get assigned driver information for updating plan selections
     const assignedDriver = existing.assignedDriver || updates.assignedDriver;
     
+    // Check if driver assignment is new (driver wasn't assigned before but is now)
+    const isNewDriverAssignment = !existing.assignedDriver && updates.assignedDriver;
+    
+    // If a driver is being assigned for the first time
+    if (isNewDriverAssignment) {
+      try {
+        const DriverPlanSelection = (await import('../models/driverPlanSelection.js')).default;
+        const Driver = (await import('../models/driver.js')).default;
+        const DriverSignup = (await import('../models/driverSignup.js')).default;
+        
+        // Find driver by assigned driver field (could be username, mobile, or ID)
+        let driverMobiles = [];
+        let driverUsernames = [];
+        
+        if (updates.assignedDriver) {
+          driverUsernames.push(updates.assignedDriver);
+          
+          // Try to find driver in Driver collection
+          const driver = await Driver.findOne({
+            $or: [
+              { username: updates.assignedDriver },
+              { mobile: updates.assignedDriver },
+              { phone: updates.assignedDriver }
+            ]
+          }).lean();
+          
+          if (driver) {
+            if (driver.mobile) driverMobiles.push(driver.mobile);
+            if (driver.phone) driverMobiles.push(driver.phone);
+            if (driver.username) driverUsernames.push(driver.username);
+          }
+          
+          // Also check DriverSignup collection
+          const driverSignup = await DriverSignup.findOne({
+            $or: [
+              { username: updates.assignedDriver },
+              { mobile: updates.assignedDriver }
+            ]
+          }).lean();
+          
+          if (driverSignup) {
+            if (driverSignup.mobile) driverMobiles.push(driverSignup.mobile);
+            if (driverSignup.username) driverUsernames.push(driverSignup.username);
+          }
+        }
+        
+        // Update plan selections for this driver - set vehicleId and rentStartDate
+        const updateQuery = {
+          $or: [],
+          status: { $ne: 'completed' }
+        };
+        
+        if (driverMobiles.length > 0) {
+          updateQuery.$or.push({ driverMobile: { $in: driverMobiles } });
+        }
+        if (driverUsernames.length > 0) {
+          updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
+        }
+        
+        if (updateQuery.$or.length > 0) {
+          const result = await DriverPlanSelection.updateMany(
+            updateQuery,
+            { 
+              $set: { 
+                vehicleId: vehicleId,
+                rentStartDate: new Date() // Start rent counting from driver assignment
+              } 
+            }
+          );
+          
+          console.log(`Updated ${result.modifiedCount} driver plan selections with vehicleId and rentStartDate for newly assigned driver on vehicle ${vehicleId}`);
+        }
+      } catch (err) {
+        console.error('Error updating driver plan selections for new driver assignment:', err);
+      }
+    }
+    
     // If status is being set to active
     if (updates.status === 'active') {
       // Clear any previous periods and start fresh
@@ -583,7 +660,8 @@ router.put('/:id', async (req, res) => {
             $set: { 
               status: 'active',
               rentPausedDate: null,
-              vehicleId: vehicleId // Also set vehicleId for future reference
+              vehicleId: vehicleId, // Also set vehicleId for future reference
+              rentStartDate: new Date() // Start rent counting from driver assignment
             } 
           }
         );

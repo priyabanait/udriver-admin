@@ -39,57 +39,68 @@ function calculatePaymentDetails(selection) {
     return selection.planType === 'weekly' ? (slab.weeklyRent || 0) : (slab.rentDay || 0);
   })();
 
-  // Accidental cover for weekly plans
-  const accidentalCover = selection.planType === 'weekly' 
-    ? (selection.calculatedCover || (selection.selectedRentSlab?.accidentalCover || 105)) 
-    : 0;
-
-  // Adjustment and paid amounts
+  // Adjustment amount
   const adjustment = selection.adjustmentAmount || 0;
-  const paidAmount = selection.paidAmount || 0;
   
   // Total amounts
   const totalDeposit = selection.securityDeposit || 0;
   const totalRent = days * rentPerDay;
 
-  // Calculate how much has been paid towards each
-  let depositDue = 0;
-  let rentDue = 0;
-
-  if (selection.paymentType === 'security') {
-    // Payment was for deposit
-    // Deposit Due = Total Deposit - What was paid
-    depositDue = Math.max(0, totalDeposit - paidAmount);
-    // Rent is full amount (not paid yet), minus adjustment
-    rentDue = Math.max(0, totalRent - adjustment);
-  } else if (selection.paymentType === 'rent') {
-    // Payment was for rent
-    // Rent Due = Total Rent - What was paid - Adjustment
-    rentDue = Math.max(0, totalRent - paidAmount - adjustment);
-    // Deposit is still full amount (not paid yet)
-    depositDue = totalDeposit;
-  } else {
-    // No payment type specified - both are due
-    depositDue = totalDeposit;
-    rentDue = Math.max(0, totalRent - adjustment);
+  // Get total payments made (from both driver and admin)
+  // Use tracked depositPaid and rentPaid if available, otherwise fallback to legacy logic
+  let totalDepositPaid = selection.depositPaid || 0;
+  let totalRentPaid = selection.rentPaid || 0;
+  
+  // Legacy fallback: if depositPaid/rentPaid not tracked, use old logic
+  if (totalDepositPaid === 0 && totalRentPaid === 0) {
+    const driverPaid = selection.paidAmount || 0;
+    const adminPaid = selection.adminPaidAmount || 0;
+    const totalPaid = driverPaid + adminPaid;
+    
+    if (selection.paymentType === 'security') {
+      totalDepositPaid = totalPaid;
+    } else if (selection.paymentType === 'rent') {
+      totalRentPaid = totalPaid;
+    }
   }
 
-  // Extra amount
-  const extraAmount = selection.extraAmount || 0;
+  // Calculate what's still due
+  const depositDue = Math.max(0, totalDeposit - totalDepositPaid);
+  const rentDue = Math.max(0, totalRent - totalRentPaid - adjustment);
 
-  // Total payable = deposit due + rent due (already adjusted) + accidental cover + extra
-  const totalPayable = Math.max(0, depositDue + rentDue + accidentalCover + extraAmount);
+  // Extra amount and accidental cover
+  const extraAmount = selection.extraAmount || 0;
+  const extraAmountPaid = selection.extraAmountPaid || 0;
+  const extraAmountDue = Math.max(0, extraAmount - extraAmountPaid);
+  
+  const accidentalCover = selection.planType === 'weekly' 
+    ? (selection.calculatedCover || (selection.selectedRentSlab?.accidentalCover || 105)) 
+    : 0;
+  const accidentalCoverPaid = selection.accidentalCoverPaid || 0;
+  const accidentalCoverDue = Math.max(0, accidentalCover - accidentalCoverPaid);
+
+  // Total paid amount (driver + admin)
+  const paidAmount = (selection.paidAmount || 0) + (selection.adminPaidAmount || 0);
+
+  // Total payable = deposit due + rent due (already adjusted) + accidental cover due + extra amount due
+  const totalPayable = Math.max(0, depositDue + rentDue + accidentalCoverDue + extraAmountDue);
 
   return {
     days,
     rentPerDay,
     totalRent,
     accidentalCover,
+    accidentalCoverDue,
     depositDue,
     rentDue,
     extraAmount,
+    extraAmountDue,
     adjustment,
     paidAmount,
+    totalDepositPaid,
+    totalRentPaid,
+    extraAmountPaid,
+    accidentalCoverPaid,
     totalPayable
   };
 }
@@ -100,7 +111,7 @@ router.patch('/:id', async (req, res) => {
     if (!mongoose.Types.ObjectId.isValid(id)) {
       return res.status(400).json({ message: 'Invalid plan selection ID' });
     }
-    const { extraAmount, extraReason, adjustmentAmount, adjustmentReason } = req.body;
+    const { extraAmount, extraReason, adjustmentAmount, adjustmentReason, adminPaidAmount, adminPaymentType } = req.body;
     const selection = await DriverPlanSelection.findById(id);
     if (!selection) {
       return res.status(404).json({ message: 'Plan selection not found' });
@@ -137,11 +148,112 @@ router.patch('/:id', async (req, res) => {
       }
     }
     
+    // Handle admin paid amount - track in adminPayments array
+    if (typeof adminPaidAmount !== 'undefined' && adminPaidAmount > 0) {
+      const paymentAmount = Number(adminPaidAmount);
+      const paymentType = adminPaymentType || 'rent';
+      
+      // Initialize adminPayments array if it doesn't exist
+      if (!selection.adminPayments) {
+        selection.adminPayments = [];
+      }
+      
+      // Calculate deposit, rent, extra amount, and accidental cover paid based on payment type
+      let depositPaidNow = 0;
+      let rentPaidNow = 0;
+      let extraAmountPaidNow = 0;
+      let accidentalCoverPaidNow = 0;
+      
+      if (paymentType === 'security') {
+        // Full amount goes to deposit
+        depositPaidNow = paymentAmount;
+      } else if (paymentType === 'rent') {
+        // Full amount goes to rent
+        rentPaidNow = paymentAmount;
+      } else if (paymentType === 'total') {
+        // Distribute amount based on what's due (priority: deposit > rent > accidental cover > extra amount)
+        const paymentDetails = calculatePaymentDetails(selection);
+        const depositDue = paymentDetails.depositDue || 0;
+        const rentDue = paymentDetails.rentDue || 0;
+        const accidentalCoverDue = Math.max(0, (paymentDetails.accidentalCover || 0) - (selection.accidentalCoverPaid || 0));
+        const extraAmountDue = Math.max(0, (selection.extraAmount || 0) - (selection.extraAmountPaid || 0));
+        
+        let remainingPayment = paymentAmount;
+        
+        // 1. Pay deposit first
+        if (depositDue > 0 && remainingPayment > 0) {
+          depositPaidNow = Math.min(remainingPayment, depositDue);
+          remainingPayment -= depositPaidNow;
+        }
+        
+        // 2. Then pay rent
+        if (rentDue > 0 && remainingPayment > 0) {
+          rentPaidNow = Math.min(remainingPayment, rentDue);
+          remainingPayment -= rentPaidNow;
+        }
+        
+        // 3. Then pay accidental cover
+        if (accidentalCoverDue > 0 && remainingPayment > 0) {
+          accidentalCoverPaidNow = Math.min(remainingPayment, accidentalCoverDue);
+          remainingPayment -= accidentalCoverPaidNow;
+        }
+        
+        // 4. Finally pay extra amount
+        if (extraAmountDue > 0 && remainingPayment > 0) {
+          extraAmountPaidNow = Math.min(remainingPayment, extraAmountDue);
+          remainingPayment -= extraAmountPaidNow;
+        }
+      }
+      
+      // Add to adminPayments array with details
+      selection.adminPayments.push({
+        date: new Date(),
+        amount: paymentAmount,
+        type: paymentType,
+        depositPaid: depositPaidNow,
+        rentPaid: rentPaidNow,
+        extraAmountPaid: extraAmountPaidNow,
+        accidentalCoverPaid: accidentalCoverPaidNow
+      });
+      
+      // Update cumulative totals
+      selection.adminPaidAmount = (selection.adminPaidAmount || 0) + paymentAmount;
+      selection.depositPaid = (selection.depositPaid || 0) + depositPaidNow;
+      selection.rentPaid = (selection.rentPaid || 0) + rentPaidNow;
+      selection.extraAmountPaid = (selection.extraAmountPaid || 0) + extraAmountPaidNow;
+      selection.accidentalCoverPaid = (selection.accidentalCoverPaid || 0) + accidentalCoverPaidNow;
+      
+      console.log('Admin payment recorded:', {
+        selectionId: selection._id,
+        paymentAmount,
+        paymentType,
+        depositPaidNow,
+        rentPaidNow,
+        extraAmountPaidNow,
+        accidentalCoverPaidNow,
+        totalAdminPaid: selection.adminPaidAmount,
+        totalDepositPaid: selection.depositPaid,
+        totalRentPaid: selection.rentPaid,
+        totalExtraAmountPaid: selection.extraAmountPaid,
+        totalAccidentalCoverPaid: selection.accidentalCoverPaid
+      });
+    }
+    
     await selection.save();
-    res.json({ message: 'Extra/adjustment amount updated', selection });
+    
+    // Calculate and return updated payment details
+    const updatedPaymentDetails = calculatePaymentDetails(selection);
+    
+    res.json({ 
+      message: 'Payment details updated successfully', 
+      selection: {
+        ...selection.toObject(),
+        paymentDetails: updatedPaymentDetails
+      }
+    });
   } catch (err) {
     console.error('PATCH /driver-plan-selections/:id error:', err);
-    res.status(500).json({ message: 'Failed to update extra amount/reason' });
+    res.status(500).json({ message: 'Failed to update payment details' });
   }
 });
 // Get all driver payments for drivers managed by a specific manager
