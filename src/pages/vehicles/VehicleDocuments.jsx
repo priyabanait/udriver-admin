@@ -25,7 +25,7 @@ import toast from 'react-hot-toast';
 
 export default function VehicleDocuments() {
   const { hasPermission } = useAuth();
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
   const [searchTerm, setSearchTerm] = useState('');
   const [statusFilter, setStatusFilter] = useState('all');
   const [documentTypeFilter, setDocumentTypeFilter] = useState('all');

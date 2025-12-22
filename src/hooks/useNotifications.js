@@ -3,7 +3,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
 
 export default function useNotifications() {
   const [notifications, setNotifications] = useState([]);
@@ -31,7 +31,7 @@ export default function useNotifications() {
 
     load();
 
-    const socketUrl = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+    const socketUrl = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
     socketRef.current = io(socketUrl, { transports: ['websocket'] });
 
     socketRef.current.on('connect', () => {

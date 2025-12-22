@@ -35,7 +35,7 @@ Create `.env` file in root directory (or update existing):
 
 ```env
 # API Base URL
-VITE_API_BASE=http://localhost:4000
+VITE_API_BASE=https://udrive-backend-1igb.vercel.app
 
 # ZWITCH PG Access Key (public key, safe for frontend)
 VITE_ZWITCH_ACCESS_KEY=be4f4100-db39-11f0-aaa7-9963035a2f0d

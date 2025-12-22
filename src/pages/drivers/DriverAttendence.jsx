@@ -25,7 +25,7 @@ export default function DriverAttendence() {
   const [attendance, setAttendance] = useState([]);
   const [driversFallback, setDriversFallback] = useState([]);
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
 
   useEffect(() => {
     let mounted = true;
