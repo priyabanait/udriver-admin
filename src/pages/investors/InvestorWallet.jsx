@@ -12,7 +12,7 @@ export default function AddWalletAmount() {
       setAdminMsgSuccess('');
       try {
         const investor = investors.find(inv => inv.id === selectedInvestor);
-        await axios.post('https://udrive-backend-1igb.vercel.app/api/investor-wallet-message', {
+        await axios.post('http://localhost:4000/api/investor-wallet-message', {
           phone: investor.phone,
           message: adminMessage,
         });
@@ -36,7 +36,7 @@ export default function AddWalletAmount() {
     async function fetchInvestors() {
       setLoading(true);
       try {
-        const res = await axios.get('https://udrive-backend-1igb.vercel.app/api/investors?limit=1000');
+        const res = await axios.get('http://localhost:4000/api/investors?limit=1000');
         const data = res.data.data || res.data;
         setInvestors(data);
       } catch (err) {
@@ -60,7 +60,7 @@ export default function AddWalletAmount() {
       try {
         const investor = investors.find(inv => inv.id === selectedInvestor);
         if (investor) {
-          const res = await axios.get(`https://udrive-backend-1igb.vercel.app/api/investor-wallet/${investor.phone}`);
+          const res = await axios.get(`http://localhost:4000/api/investor-wallet/${investor.phone}`);
           setWallet(res.data);
         }
       } catch (err) {
@@ -78,7 +78,7 @@ export default function AddWalletAmount() {
     setSubmitLoading(true);
     try {
       const investor = investors.find(inv => inv.id === selectedInvestor);
-      await axios.post('https://udrive-backend-1igb.vercel.app/api/investor-wallet', {
+      await axios.post('http://localhost:4000/api/investor-wallet', {
         phone: investor.phone,
         amount: Number(amount),
         description,
@@ -87,7 +87,7 @@ export default function AddWalletAmount() {
       setAmount('');
       setDescription('');
       // Refresh wallet data
-      const res = await axios.get(`https://udrive-backend-1igb.vercel.app/api/investor-wallet/${investor.phone}`);
+      const res = await axios.get(`http://localhost:4000/api/investor-wallet/${investor.phone}`);
       setWallet(res.data);
     } catch (err) {
       alert('Failed to add amount');

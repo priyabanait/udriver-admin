@@ -103,6 +103,18 @@ router.post('/', authenticateToken, async (req, res) => {
   const nextId = (max[0]?.id || 0) + 1;
   const body = req.body || {};
   const tx = await Transaction.create({ id: nextId, ...body });
+  // Notify dashboard
+  try {
+    const { createAndEmitNotification } = await import('../lib/notify.js');
+    await createAndEmitNotification({
+      type: 'transaction',
+      title: `Transaction ${tx.id} - ${tx.status || 'new'}`,
+      message: `Amount: ${tx.amount || 0}`,
+      data: { id: tx._id, txId: tx.id }
+    });
+  } catch (err) {
+    console.warn('Notify failed:', err.message);
+  }
   res.status(201).json(tx);
 });
 

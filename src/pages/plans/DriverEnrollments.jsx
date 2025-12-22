@@ -63,7 +63,7 @@ export default function DriverEnrollments() {
       setLoading(true);
       setError(null);
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         
         // Fetch enrollments
         const enrollRes = await fetch(`${API_BASE}/api/static/driver-enrollments`);
@@ -143,7 +143,7 @@ export default function DriverEnrollments() {
     try {
       setLoading(true);
       setError(null);
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       
       const [enrollRes, driversRes, plansRes] = await Promise.all([
         fetch(`${API_BASE}/api/static/driver-enrollments`),
@@ -182,7 +182,7 @@ export default function DriverEnrollments() {
     try {
       setLoading(true);
       setError(null);
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
       
       const res = await fetch(`${API_BASE}/api/static/driver-enrollments/sync`, {
@@ -213,7 +213,7 @@ export default function DriverEnrollments() {
   const handleDelete = async (enrollmentId) => {
     if (window.confirm('Are you sure you want to delete this enrollment?')) {
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const token = localStorage.getItem('udriver_token');
         
         const res = await fetch(`${API_BASE}/api/static/driver-enrollments/${enrollmentId}`, {
@@ -258,7 +258,7 @@ export default function DriverEnrollments() {
 
   const handleSaveEnrollment = async () => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
       
       if (formData.id) {

@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://udrive-backend-1igb.vercel.app',
+        target: 'http://localhost:4000',
         changeOrigin: true,
         secure: false
       }

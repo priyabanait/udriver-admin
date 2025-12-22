@@ -17,7 +17,7 @@ export default function AddWalletAmount() {
     async function fetchDrivers() {
       setLoading(true);
       try {
-        const res = await axios.get('https://udrive-backend-1igb.vercel.app/api/drivers?limit=1000');
+        const res = await axios.get('http://localhost:4000/api/drivers?limit=1000');
         const data = res.data.data || res.data;
         setDrivers(data);
       } catch (err) {
@@ -39,7 +39,7 @@ export default function AddWalletAmount() {
       try {
         const driver = drivers.find(drv => drv._id === selectedDriver);
         if (driver) {
-          const res = await axios.get(`https://udrive-backend-1igb.vercel.app/api/driver-wallet/${driver.phone}`);
+          const res = await axios.get(`http://localhost:4000/api/driver-wallet/${driver.phone}`);
           setWallet(res.data);
         }
       } catch (err) {
@@ -57,7 +57,7 @@ export default function AddWalletAmount() {
     setSubmitLoading(true);
     try {
       const driver = drivers.find(drv => drv._id === selectedDriver);
-      await axios.post('https://udrive-backend-1igb.vercel.app/api/driver-wallet', {
+      await axios.post('http://localhost:4000/api/driver-wallet', {
         phone: driver.phone,
         amount: Number(amount),
         description,
@@ -66,7 +66,7 @@ export default function AddWalletAmount() {
       setAmount('');
       setDescription('');
       // Refresh wallet data
-      const res = await axios.get(`https://udrive-backend-1igb.vercel.app/api/driver-wallet/${driver.phone}`);
+      const res = await axios.get(`http://localhost:4000/api/driver-wallet/${driver.phone}`);
       setWallet(res.data);
     } catch (err) {
       alert('Failed to add amount');
@@ -82,7 +82,7 @@ export default function AddWalletAmount() {
     setAdminMsgSuccess('');
     try {
       const driver = drivers.find(drv => drv._id === selectedDriver);
-      await axios.post('https://udrive-backend-1igb.vercel.app/api/driver-wallet-message', {
+      await axios.post('http://localhost:4000/api/driver-wallet-message', {
         phone: driver.phone,
         message: adminMessage,
       });

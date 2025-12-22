@@ -112,7 +112,7 @@ router.get('/signup/credentials', async (req, res) => {
 
     const total = await DriverSignup.countDocuments();
     const list = await DriverSignup.find()
-      .select('username mobile password status kycStatus signupDate')
+      .select('username mobile password status kycStatus signupDate registrationCompleted name profilePhoto signature licenseDocument aadharDocument aadharDocumentBack panDocument bankDocument electricBillDocument')
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(limit)
@@ -150,7 +150,7 @@ router.post('/', async (req, res) => {
     const nextId = (max[0]?.id || 0) + 1;
 
     // Handle document uploads to Cloudinary
-    const documentFields = ['profilePhoto', 'licenseDocument', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument', 'electricBillDocument'];
+    const documentFields = ['profilePhoto', 'signature', 'licenseDocument', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument', 'electricBillDocument'];
     const uploadedDocs = {};
 
     for (const field of documentFields) {
@@ -183,15 +183,37 @@ router.post('/', async (req, res) => {
       }
     });
 
-    // Set registrationCompleted=true in DriverSignup if mobile matches
+    // Set registrationCompleted=true in DriverSignup if mobile matches,
+    // and copy document fields (including signature) from signup if they exist.
     if (driverData.mobile) {
-      await DriverSignup.findOneAndUpdate(
+      const signup = await DriverSignup.findOneAndUpdate(
         { mobile: driverData.mobile },
-        { registrationCompleted: true, status: 'active' }
-      );
+        { registrationCompleted: true, status: 'active' },
+        { new: true }
+      ).lean();
+      const docFields = ['profilePhoto','signature','licenseDocument','aadharDocument','aadharDocumentBack','panDocument','bankDocument','electricBillDocument'];
+      if (signup) {
+        for (const f of docFields) {
+          if (!driverData[f] && signup[f]) {
+            driverData[f] = signup[f];
+          }
+        }
+      }
     }
 
     const newDriver = await Driver.create(driverData);
+    // Notify dashboard
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'driver',
+        title: `Driver added: ${newDriver.name || newDriver.mobile}`,
+        message: `ID: ${newDriver.id}`,
+        data: { id: newDriver._id, driverId: newDriver.id }
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
     res.status(201).json(newDriver);
   } catch (err) {
     console.error('Driver create error:', err);
@@ -204,9 +226,19 @@ router.put('/:id', async (req, res) => {
     const id = Number(req.params.id);
     const fields = stripAuthFields(req.body);
 
+    // If signature or document fields are missing, try to copy from corresponding DriverSignup
+    const documentFields = ['profilePhoto', 'signature', 'licenseDocument', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument', 'electricBillDocument'];
+    if (fields.mobile) {
+      const signup = await DriverSignup.findOne({ mobile: fields.mobile }).lean();
+      if (signup) {
+        for (const f of documentFields) {
+          if (!fields[f] && signup[f]) fields[f] = signup[f];
+        }
+      }
+    }
+
     // Handle document uploads to Cloudinary
-    const documentFields = ['profilePhoto', 'licenseDocument', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument', 'electricBillDocument'];
-    const uploadedDocs = {};
+    const uploadedDocs = {}; 
 
     for (const field of documentFields) {
       if (fields[field] && fields[field].startsWith('data:')) {
@@ -251,6 +283,7 @@ router.put('/:id', async (req, res) => {
     res.status(500).json({ message: 'Failed to update driver', error: err.message });
   }
 });
+
 
 router.delete('/:id', async (req, res) => {
   const id = Number(req.params.id);

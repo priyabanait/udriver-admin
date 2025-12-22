@@ -6,7 +6,7 @@ import PaymentConfirmationModal from '../../components/investors/PaymentConfirma
 
 export default function InvestorPlanSelection() {
   const navigate = useNavigate();
-  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);

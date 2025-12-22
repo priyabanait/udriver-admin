@@ -32,6 +32,7 @@ const DriverSignupSchema = new mongoose.Schema({
   accountHolderName: String,
   accountBranchName: String,
   profilePhoto: String,
+  signature: String, // URL or base64-encoded signature image
   licenseDocument: String,
   aadharDocument: String,
   aadharDocumentBack: String,

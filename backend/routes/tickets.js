@@ -40,6 +40,18 @@ router.post('/', authenticateToken, async (req, res) => {
   const max = await Ticket.find().sort({ id: -1 }).limit(1).lean();
   const nextId = (max[0]?.id || 0) + 1;
   const newTicket = await Ticket.create({ id: nextId, ...req.body });
+  // Notify dashboard
+  try {
+    const { createAndEmitNotification } = await import('../lib/notify.js');
+    await createAndEmitNotification({
+      type: 'ticket',
+      title: `Ticket ${newTicket.id}`,
+      message: newTicket.subject || 'New ticket created',
+      data: { id: newTicket._id, ticketId: newTicket.id }
+    });
+  } catch (err) {
+    console.warn('Notify failed:', err.message);
+  }
   res.status(201).json(newTicket);
 });
 

@@ -3,6 +3,8 @@ import express from 'express';
 import cors from 'cors';
 import apiRoutes from './routes/api.js';
 import { connectDB, seedDB } from './db.js';
+import http from 'http';
+import { initSocket } from './lib/socket.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -26,8 +28,13 @@ async function start() {
   try {
     await connectDB();
     await seedDB();
+
+    // Create HTTP server and attach socket.io
+    const server = http.createServer(app);
+    initSocket(server);
+
     // ✅ Important: listen on all interfaces
-    app.listen(PORT, "0.0.0.0", () => {
+    server.listen(PORT, "0.0.0.0", () => {
       console.log(`✅ udriver backend listening on http://localhost:${PORT}`);
     });
   } catch (err) {

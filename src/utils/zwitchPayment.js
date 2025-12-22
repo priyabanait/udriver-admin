@@ -3,7 +3,7 @@
  * Documentation: https://docs.zwitch.io/
  */
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
 /**
  * Process a bank payout via ZWITCH

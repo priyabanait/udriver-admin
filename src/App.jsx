@@ -40,7 +40,8 @@ import ManagerPage from './pages/manager/ManagerPage';
 import InvestorCar from './pages/investments/InvestmentCar'
 import InvesterDetails from './components/investors/InvesterDetails.jsx';
 import Profile from './pages/settings/Profile';
-
+import DriverAttendence from './pages/drivers/DriverAttendence.jsx';
+import PrivacyPolicy from './pages/drivers/Privacypolicy.jsx'
 // Protected Route Component
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -133,6 +134,8 @@ function AppRoutes() {
             <Route path="manager" element={<ManagerPage />} />
             <Route path="investerDetails" element={<InvesterDetails />} />
             <Route path="settings" element={<Profile />} />
+                <Route path="attendence" element={<DriverAttendence />} />
+                  <Route path="privacypolicy" element={<PrivacyPolicy />} />
         {/* Add more routes as we create them */}
       </Route>
     </Routes>

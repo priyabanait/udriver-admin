@@ -7,6 +7,7 @@ import {
   User,
   Settings
 } from 'lucide-react';
+import NotificationBell from '../ui/NotificationBell';
 
 export default function Header({ onToggleSidebar, sidebarCollapsed }) {
   const { user, logout } = useAuth();
@@ -53,6 +54,11 @@ export default function Header({ onToggleSidebar, sidebarCollapsed }) {
 
         {/* Right side */}
         <div className="flex items-center space-x-4">
+          {/* Notification bell */}
+          <div>
+            <NotificationBell />
+          </div>
+
           {/* Profile Menu */}
           <div className="relative">
             <button

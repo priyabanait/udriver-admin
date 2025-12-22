@@ -77,6 +77,18 @@ router.post('/', async (req, res) => {
 
     const expenseData = { id: nextId, status: 'pending', ...fields };
     const created = await Expense.create(expenseData);
+    // Notify dashboard
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'expense',
+        title: `Expense ${created.id} - ${created.category || ''}`,
+        message: `Amount: ${created.amount || 0}`,
+        data: { id: created._id, expenseId: created.id }
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
     res.status(201).json(created);
   } catch (err) {
     console.error('Expense create error:', err);

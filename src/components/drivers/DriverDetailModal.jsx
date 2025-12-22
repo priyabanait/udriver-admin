@@ -4,8 +4,30 @@ import { formatDate } from '../../utils';
 
 const docUrl = (doc) => {
   if (!doc) return null;
+  // Strings (URLs or data URLs)
   if (typeof doc === 'string') return doc;
+  // Cloudinary-like objects or other objects with url fields
+  if (typeof doc === 'object') {
+    return doc.secure_url || doc.url || doc.path || null;
+  }
+  // File objects
   if (doc instanceof File) return URL.createObjectURL(doc);
+  return null;
+};
+
+// Resolve a document value for a given key from multiple possible locations
+const getDocument = (drv, key) => {
+  if (!drv) return null;
+  // Direct field
+  if (drv[key]) return drv[key];
+  // Documents sub-object used in some records
+  if (drv.documents && drv.documents[key]) return drv.documents[key];
+  // Common alternate property names
+  if (drv[`${key}Url`]) return drv[`${key}Url`];
+  if (drv[`${key}_url`]) return drv[`${key}_url`];
+  if (drv[`${key}Image`]) return drv[`${key}Image`];
+  // DriverSignup-style storage
+  if (drv.signature && key === 'signature') return drv.signature;
   return null;
 };
 
@@ -327,29 +349,33 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                 <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
                   {[
                     { key: 'profilePhoto', label: 'Profile Photo', number: null },
+                    { key: 'signature', label: 'Signature', number: null },
                     { key: 'licenseDocument', label: 'License Document', number: driver.licenseNumber },
                     { key: 'aadharDocument', label: 'Aadhar Front', number: driver.aadharNumber },
                     { key: 'aadharDocumentBack', label: 'Aadhar Back', number: driver.aadharNumber },
                     { key: 'panDocument', label: 'PAN Card', number: driver.panNumber },
                     { key: 'bankDocument', label: 'Bank Document', number: driver.accountNumber },
                     { key: 'electricBillDocument', label: 'Electric Bill', number: driver.electricBillNo },
-                  ].map(({ key, label, number }) => (
-                    <div key={key} className="border rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
-                      <div className="bg-gray-50 px-3 py-2 border-b">
-                        <div className="text-xs font-medium text-gray-700 truncate" title={label}>
-                          {label}
-                        </div>
-                        {number && (
-                          <div className="text-xs text-gray-500 font-mono truncate mt-1" title={number}>
-                            {number}
+                  ].map(({ key, label, number }) => {
+                    const doc = getDocument(driver, key);
+                    return (
+                      <div key={key} className="border rounded-lg overflow-hidden bg-white shadow-sm hover:shadow-md transition-shadow">
+                        <div className="bg-gray-50 px-3 py-2 border-b">
+                          <div className="text-xs font-medium text-gray-700 truncate" title={label}>
+                            {label}
                           </div>
-                        )}
+                          {number && (
+                            <div className="text-xs text-gray-500 font-mono truncate mt-1" title={number}>
+                              {number}
+                            </div>
+                          )}
+                        </div>
+                        <div className="aspect-square flex items-center justify-center bg-gray-50 p-2">
+                          {renderDocumentPreview(doc, label)}
+                        </div>
                       </div>
-                      <div className="aspect-square flex items-center justify-center bg-gray-50 p-2">
-                        {renderDocumentPreview(driver[key], label)}
-                      </div>
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               </div>
             </div>

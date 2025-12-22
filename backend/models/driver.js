@@ -41,6 +41,7 @@ const DriverSchema = new mongoose.Schema({
   aadharDocumentBack: String,
   panDocument: String,
   bankDocument: String,
+   signature: String,
   electricBillDocument: String,
   status: { type: String, default: 'inactive' },
   kycStatus: String,

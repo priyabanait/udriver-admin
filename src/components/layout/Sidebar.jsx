@@ -34,6 +34,12 @@ const navigation = [
     permission: PERMISSIONS.DASHBOARD_VIEW
   },
   {
+    name: 'Attendence Management',
+    href: '/attendence',
+    icon: LayoutDashboard,
+    permission: PERMISSIONS.DASHBOARD_VIEW
+  },
+  {
     name: 'Manage Manager',
     href: '/manager',
     icon: LayoutDashboard,

@@ -12,6 +12,18 @@ router.post('/', async (req, res) => {
     }
     const msg = new DriverWalletMessage({ phone, message });
     await msg.save();
+    // Create and emit dashboard notification
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'driver_wallet_message',
+        title: `Driver message from ${phone}`,
+        message,
+        data: { id: msg._id, phone }
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
     res.status(201).json(msg);
   } catch (error) {
     res.status(500).json({ error: 'Failed to send message', message: error.message });

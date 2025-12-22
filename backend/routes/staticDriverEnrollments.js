@@ -190,6 +190,18 @@ router.post('/', async (req, res) => {
     };
     
     const newEnrollment = await DriverEnrollment.create(enrollmentData);
+    // Notify dashboard
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'driver_enrollment',
+        title: `Driver enrollment ${newEnrollment.id}`,
+        message: `${newEnrollment.name || ''}`,
+        data: { id: newEnrollment._id, enrollmentId: newEnrollment.id }
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
     res.status(201).json(newEnrollment);
   } catch (err) {
     console.error('Error creating driver enrollment:', err);
