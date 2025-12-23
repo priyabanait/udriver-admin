@@ -3,6 +3,7 @@ import jwt from 'jsonwebtoken';
 import dotenv from 'dotenv';
 import Driver from '../models/driver.js';
 import DriverSignup from '../models/driverSignup.js';
+import { authenticateToken } from './middleware.js';
 
 dotenv.config();
 
@@ -38,6 +39,31 @@ router.post('/signup', async (req, res) => {
 			kycStatus: 'pending'
 		});
 		await driverSignup.save();
+
+		// Emit notification for new driver registration
+		try {
+			const { createAndEmitNotification } = await import('../lib/notify.js');
+			// Create notification visible to all admins (no recipientType/recipientId)
+			await createAndEmitNotification({
+				type: 'driver_signup',
+				title: `New driver registered: ${username || mobile}`,
+				message: `Driver ${username || mobile} has signed up and is pending approval.`,
+				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
+				recipientType: null,
+				recipientId: null
+			});
+			// Also create a targeted notification for the driver
+			await createAndEmitNotification({
+				type: 'driver_signup',
+				title: `Welcome ${username || mobile}!`,
+				message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
+				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
+				recipientType: 'driver',
+				recipientId: driverSignup._id
+			});
+		} catch (err) {
+			console.warn('Notify failed:', err.message);
+		}
 
 		// Generate JWT token
 		const token = jwt.sign(
@@ -137,6 +163,31 @@ router.post('/signup-otp', async (req, res) => {
 			kycStatus: 'pending'
 		});
 		await driverSignup.save();
+
+		// Emit notification for new driver registration
+		try {
+			const { createAndEmitNotification } = await import('../lib/notify.js');
+			// Create notification visible to all admins (no recipientType/recipientId)
+			await createAndEmitNotification({
+				type: 'driver_signup',
+				title: `New driver registered: ${username || mobile}`,
+				message: `Driver ${username || mobile} has signed up via OTP and is pending approval.`,
+				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
+				recipientType: null,
+				recipientId: null
+			});
+			// Also create a targeted notification for the driver
+			await createAndEmitNotification({
+				type: 'driver_signup',
+				title: `Welcome ${username || mobile}!`,
+				message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
+				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
+				recipientType: 'driver',
+				recipientId: driverSignup._id
+			});
+		} catch (err) {
+			console.warn('Notify failed:', err.message);
+		}
 
 		// Generate JWT token
 		const token = jwt.sign(
@@ -243,6 +294,26 @@ router.post('/forgot-password', async (req, res) => {
 	} catch (error) {
 		console.error('Forgot password error:', error);
 		return res.status(500).json({ message: 'Server error during password reset.' });
+	}
+});
+
+// Delete own account (driver) — authenticated route
+router.delete('/delete-account', authenticateToken, async (req, res) => {
+	try {
+		const user = req.user;
+		const id = user && user.id;
+		if (!id) return res.status(401).json({ message: 'Authentication required.' });
+
+		const deleted = await DriverSignup.findByIdAndDelete(id);
+		if (!deleted) {
+			return res.status(404).json({ message: 'Driver account not found.' });
+		}
+
+		// Note: with stateless JWT tokens it's not possible to revoke issued tokens here.
+		return res.json({ message: 'Account deleted. You will need to sign up again to use the app.' });
+	} catch (error) {
+		console.error('Delete account error:', error);
+		return res.status(500).json({ message: 'Server error during account deletion.' });
 	}
 });
 

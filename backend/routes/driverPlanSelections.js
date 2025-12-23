@@ -766,6 +766,28 @@ router.post('/:id/confirm-payment', async (req, res) => {
       paymentType: updatedSelection.paymentType
     });
 
+    // Emit notification for driver payment (cash/manual)
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const paymentAmount = paidAmount || updatedSelection.paidAmount || 0;
+      await createAndEmitNotification({
+        type: 'driver_payment',
+        title: `Driver payment received: ₹${paymentAmount.toLocaleString('en-IN')}`,
+        message: `Payment of ₹${paymentAmount.toLocaleString('en-IN')} received from driver ${updatedSelection.driverUsername || updatedSelection.driverMobile || 'N/A'} via ${updatedSelection.paymentMode || 'cash'}`,
+        data: { 
+          selectionId: updatedSelection._id, 
+          driverId: updatedSelection.driverId,
+          amount: paymentAmount,
+          paymentType: paymentType || 'rent',
+          paymentMode: updatedSelection.paymentMode || 'cash'
+        },
+        recipientType: 'driver',
+        recipientId: updatedSelection.driverId
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
+
     res.json({ 
       message: 'Payment confirmed successfully', 
       selection: updatedSelection 
@@ -856,6 +878,27 @@ router.post('/:id/online-payment', async (req, res) => {
       paymentType: updatedSelection.paymentType,
       totalPayments: updatedSelection.driverPayments?.length || 0
     });
+
+    // Emit notification for driver payment
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'driver_payment',
+        title: `Driver payment received: ₹${newPayment.toLocaleString('en-IN')}`,
+        message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from driver ${selection.driverUsername || selection.driverMobile || 'N/A'} via ${gateway || 'ZWITCH'}`,
+        data: { 
+          selectionId: updatedSelection._id, 
+          driverId: selection.driverId,
+          amount: newPayment,
+          paymentType: paymentType || 'rent',
+          paymentMode: 'online'
+        },
+        recipientType: 'driver',
+        recipientId: selection.driverId
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
 
     res.json({ 
       success: true,

@@ -384,6 +384,18 @@ router.post('/', async (req, res) => {
     });
 
     const savedVehicle = await vehicle.save();
+    // Emit dashboard notification for new vehicle
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'new_vehicle',
+        title: `New vehicle added - ${savedVehicle.registrationNumber || savedVehicle.vehicleId}`,
+        message: `${savedVehicle.registrationNumber || savedVehicle.vehicleId} added to fleet.`,
+        data: { id: savedVehicle._id, vehicleId: savedVehicle.vehicleId }
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
     res.status(201).json(savedVehicle);
   } catch (err) {
     console.error('Error creating vehicle:', err);

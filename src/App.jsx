@@ -76,6 +76,7 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Public standalone Driver Login (not redirected even if authenticated) */}
+       <Route path="privacypolicy" element={<PrivacyPolicy />} />
       <Route path="/drivers/login" element={<DriverLogin />} />
       <Route path="/drivers/select-plan" element={<DriverPlanSelection />} />
       <Route path="/drivers/my-plans" element={<DriverMyPlans />} />
@@ -135,7 +136,7 @@ function AppRoutes() {
             <Route path="investerDetails" element={<InvesterDetails />} />
             <Route path="settings" element={<Profile />} />
                 <Route path="attendence" element={<DriverAttendence />} />
-                  <Route path="privacypolicy" element={<PrivacyPolicy />} />
+                 
         {/* Add more routes as we create them */}
       </Route>
     </Routes>

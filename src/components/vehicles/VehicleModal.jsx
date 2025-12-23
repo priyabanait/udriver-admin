@@ -114,8 +114,10 @@ export default function VehicleModal({ isOpen, onClose, vehicle = null, onSave }
 
   const fetchInvestors = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/investors`);
-      const data = res.ok ? await res.json() : [];
+      // Request a larger limit for dropdowns and support paginated or raw array responses
+      const res = await fetch(`${API_BASE}/api/investors?limit=1000`);
+      const result = res.ok ? await res.json() : [];
+      const data = result.data || result;
       setInvestors(Array.isArray(data) ? data : []);
     } catch (e) {
       setInvestors([]);

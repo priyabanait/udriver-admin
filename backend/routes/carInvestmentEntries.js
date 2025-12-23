@@ -10,6 +10,28 @@ router.post('/', async (req, res) => {
     const entry = new CarInvestmentEntry(req.body);
     await entry.save();
     console.log('Car investment entry created:', entry);
+
+    // Emit notification for investor adding vehicle
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'investor_vehicle_added',
+        title: `Investor added vehicle: ${entry.carname || 'Vehicle'}`,
+        message: `Investor ${entry.carOwnerName || entry.investorMobile || 'N/A'} has added a new vehicle (${entry.carname || 'N/A'}) worth ₹${(entry.carvalue || 0).toLocaleString('en-IN')}`,
+        data: { 
+          id: entry._id, 
+          investorId: entry.investorId,
+          carname: entry.carname,
+          carvalue: entry.carvalue,
+          investorMobile: entry.investorMobile
+        },
+        recipientType: 'investor',
+        recipientId: entry.investorId
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
+
     res.status(201).json(entry);
   } catch (err) {
     console.error('Error creating car investment entry:', err);

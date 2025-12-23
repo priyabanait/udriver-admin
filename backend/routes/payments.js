@@ -741,6 +741,28 @@ router.post('/zwitch/callback', async (req, res) => {
               totalPaid: planSelection.paidAmount,
               paymentType: paymentType
             });
+
+            // Emit notification for driver payment
+            try {
+              const { createAndEmitNotification } = await import('../lib/notify.js');
+              await createAndEmitNotification({
+                type: 'driver_payment',
+                title: `Driver payment received: ₹${newPayment.toLocaleString('en-IN')}`,
+                message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from driver ${planSelection.driverUsername || planSelection.driverMobile || 'N/A'} via ZWITCH`,
+                data: { 
+                  selectionId: planSelection._id, 
+                  driverId: planSelection.driverId,
+                  amount: newPayment,
+                  paymentType: paymentType || 'rent',
+                  paymentMode: 'online',
+                  transactionId: payment_id
+                },
+                recipientType: 'driver',
+                recipientId: planSelection.driverId
+              });
+            } catch (err) {
+              console.warn('Notify failed:', err.message);
+            }
           } else {
             console.warn('⚠️ Plan selection not found:', planSelectionId);
           }

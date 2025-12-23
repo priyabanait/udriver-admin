@@ -5,6 +5,9 @@ const NotificationSchema = new mongoose.Schema({
   title: { type: String, default: '' },
   message: { type: String, default: '' },
   data: { type: mongoose.Schema.Types.Mixed, default: {} },
+  // recipientType can be 'driver', 'investor' or any other string to target notifications
+  recipientType: { type: String, default: null },
+  recipientId: { type: mongoose.Schema.Types.Mixed, default: null },
   read: { type: Boolean, default: false }
 }, { timestamps: true });
 

@@ -171,6 +171,18 @@ router.post('/', async (req, res) => {
       });
 
     const savedInvestment = await newInvestment.save();
+    // Emit dashboard notification for new investment FD
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      await createAndEmitNotification({
+        type: 'new_fd',
+        title: `New FD created - ${savedInvestment.investorName || savedInvestment.phone}`,
+        message: `FD of ₹${savedInvestment.investmentAmount} created.`,
+        data: { id: savedInvestment._id, investorId: savedInvestment.investorId }
+      });
+    } catch (err) {
+      console.warn('Notify failed:', err.message);
+    }
     res.status(201).json(savedInvestment);
   } catch (error) {
     console.error('Error creating investment FD:', error);

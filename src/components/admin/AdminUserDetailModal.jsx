@@ -224,7 +224,33 @@ export default function AdminUserDetailModal({ isOpen, onClose, user, onEdit }) 
                       <button className="w-full btn btn-outline btn-sm">
                         Reset Password
                       </button>
-                      <button className="w-full btn btn-outline btn-sm">
+                      <button
+                        className="w-full btn btn-outline btn-sm"
+                        onClick={async () => {
+                          try {
+                            const title = window.prompt('Notification title');
+                            if (!title) return;
+                            const message = window.prompt('Message');
+                            if (!message) return;
+                            const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+                            const res = await fetch(`${API_BASE}/api/notifications`, {
+                              method: 'POST',
+                              headers: { 'Content-Type': 'application/json' },
+                              body: JSON.stringify({
+                                type: 'admin_message',
+                                title,
+                                message,
+                                recipientType: user.role || 'manager',
+                                recipientId: user.id
+                              })
+                            });
+                            if (!res.ok) throw new Error('Failed to send notification');
+                            toast.success('Notification sent');
+                          } catch (err) {
+                            toast.error(err.message || 'Failed to send notification');
+                          }
+                        }}
+                      >
                         Send Notification
                       </button>
                       <button className="w-full btn btn-outline btn-sm">

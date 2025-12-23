@@ -202,15 +202,33 @@ router.post('/', async (req, res) => {
     }
 
     const newDriver = await Driver.create(driverData);
-    // Notify dashboard
+    // Notify dashboard - create global notification for admins and targeted for driver
     try {
       const { createAndEmitNotification } = await import('../lib/notify.js');
+      // Create notification visible to all admins (no recipientType/recipientId)
       await createAndEmitNotification({
-        type: 'driver',
-        title: `Driver added: ${newDriver.name || newDriver.mobile}`,
-        message: `ID: ${newDriver.id}`,
-        data: { id: newDriver._id, driverId: newDriver.id }
+        type: 'driver_added',
+        title: `Driver added: ${newDriver.name || newDriver.mobile || newDriver.username || 'N/A'}`,
+        message: `Admin has added a new driver with ID: ${newDriver.id || newDriver._id}`,
+        data: { id: newDriver._id, driverId: newDriver.id, mobile: newDriver.mobile },
+        recipientType: null,
+        recipientId: null
       });
+      // Also create a targeted notification for the driver if they have a signup account
+      if (newDriver.mobile) {
+        const DriverSignup = (await import('../models/driverSignup.js')).default;
+        const signup = await DriverSignup.findOne({ mobile: newDriver.mobile }).lean();
+        if (signup && signup._id) {
+          await createAndEmitNotification({
+            type: 'driver_added',
+            title: `Your profile has been created`,
+            message: `Admin has created your driver profile. Your ID is ${newDriver.id || newDriver._id}`,
+            data: { id: newDriver._id, driverId: newDriver.id },
+            recipientType: 'driver',
+            recipientId: signup._id
+          });
+        }
+      }
     } catch (err) {
       console.warn('Notify failed:', err.message);
     }
