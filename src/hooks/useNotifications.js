@@ -3,10 +3,7 @@ import axios from 'axios';
 import { io } from 'socket.io-client';
 import { useAuth } from '../contexts/AuthContext';
 
-// Use local backend in development, production URL as fallback
-// In development, use empty string to leverage Vite proxy, or localhost:4000
-const API_BASE = import.meta.env.VITE_API_BASE || 
-  (import.meta.env.DEV ? '' : 'https://udrive-backend-1igb.vercel.app');
+const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
 
 export default function useNotifications(options = {}) {
   const { recipientType: optRecipientType, recipientId: optRecipientId } = options || {};
@@ -49,12 +46,7 @@ export default function useNotifications(options = {}) {
           }
         }
 
-        const url = `${API_BASE}/api/notifications`;
-        console.log('Fetching notifications from:', url);
-        console.log('With params:', params);
-        console.log('With headers:', headers);
-        
-        const res = await axios.get(url, { headers, params });
+        const res = await axios.get(`${API_BASE}/api/notifications`, { headers, params });
         if (!mounted) return;
         // API returns { items, pagination }
         const arr = Array.isArray(res.data) ? res.data : (res.data.items || []);
@@ -65,13 +57,7 @@ export default function useNotifications(options = {}) {
         console.log('Unread notifications:', unread);
         setUnreadCount(unread);
       } catch (err) {
-        console.error('Failed to load notifications:', err);
-        console.error('Error details:', {
-          message: err.message,
-          response: err.response?.data,
-          status: err.response?.status,
-          url: err.config?.url
-        });
+        console.warn('Failed to load notifications', err.message);
         // Set empty state on error to prevent UI issues
         if (mounted) {
           setNotifications([]);
@@ -83,13 +69,8 @@ export default function useNotifications(options = {}) {
     load();
 
     // Initialize socket connection
-    // For socket.io, we need the full URL (can't use proxy)
-    const socketUrl = import.meta.env.VITE_API_BASE || 
-      (import.meta.env.DEV ? 'https://udrive-backend-1igb.vercel.app' : 'https://udrive-backend-1igb.vercel.app');
+    const socketUrl = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
     const token = auth?.token || localStorage.getItem('token');
-    
-    console.log('Connecting to socket at:', socketUrl);
-    console.log('Environment:', import.meta.env.DEV ? 'development' : 'production');
     
     socketRef.current = io(socketUrl, { 
       transports: ['websocket', 'polling'],
@@ -97,8 +78,7 @@ export default function useNotifications(options = {}) {
       reconnectionDelay: 1000,
       reconnectionDelayMax: 5000,
       reconnectionAttempts: 5,
-      auth: token ? { token } : {},
-      timeout: 20000
+      auth: token ? { token } : {}
     });
 
     socketRef.current.on('connect', () => {

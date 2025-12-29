@@ -239,7 +239,12 @@ export default function VehiclesList() {
         throw new Error(msg);
       }
 
-      const saved = normalizeVehicle(await response.json());
+      const resp = await response.json();
+      const saved = normalizeVehicle(resp.vehicle || resp);
+      // If backend indicated selections were updated, notify other pages to refresh
+      if (resp.updatedSelections && resp.updatedSelections > 0) {
+        window.dispatchEvent(new CustomEvent('driverSelectionsUpdated', { detail: { count: resp.updatedSelections } }));
+      }
       
       setVehiclesData(prev => {
         const exists = prev.find(v => v.vehicleId === saved.vehicleId);
@@ -291,8 +296,12 @@ export default function VehiclesList() {
         const b = await res.json().catch(()=>null);
         throw new Error(b && b.message ? b.message : `Failed to update status: ${res.status}`);
       }
-      const updated = await res.json();
-      setVehiclesData(prev => prev.map(v => v.vehicleId === vehicleId ? updated : v));
+      const body = await res.json();
+      const updatedVehicle = normalizeVehicle(body.vehicle || body);
+      setVehiclesData(prev => prev.map(v => v.vehicleId === vehicleId ? updatedVehicle : v));
+      if (body.updatedSelections && body.updatedSelections > 0) {
+        window.dispatchEvent(new CustomEvent('driverSelectionsUpdated', { detail: { count: body.updatedSelections } }));
+      }
       toast.success('Vehicle status updated');
     }catch(err){ console.error(err); toast.error(err.message||'Failed to update status'); }
   };
@@ -309,8 +318,12 @@ export default function VehiclesList() {
         const b = await res.json().catch(()=>null);
         throw new Error(b && b.message ? b.message : `Failed to update KYC status: ${res.status}`);
       }
-      const updated = await res.json();
-      setVehiclesData(prev => prev.map(v => v.vehicleId === vehicleId ? updated : v));
+      const body = await res.json();
+      const updatedVehicle = normalizeVehicle(body.vehicle || body);
+      setVehiclesData(prev => prev.map(v => v.vehicleId === vehicleId ? updatedVehicle : v));
+      if (body.updatedSelections && body.updatedSelections > 0) {
+        window.dispatchEvent(new CustomEvent('driverSelectionsUpdated', { detail: { count: body.updatedSelections } }));
+      }
       toast.success('Vehicle KYC status updated');
     }catch(err){ console.error(err); toast.error(err.message||'Failed to update KYC status'); }
   };
@@ -408,7 +421,7 @@ export default function VehiclesList() {
           <PermissionGuard permission={PERMISSIONS.REPORTS_EXPORT}>
             <button onClick={handleExport} className="btn btn-secondary flex items-center"><Download className="h-4 w-4 mr-2"/>Export</button>
           </PermissionGuard>
-          <PermissionGuard permission={PERMISSIONS.DRIVERS_CREATE}>
+          <PermissionGuard permission={PERMISSIONS.VEHICLES_CREATE}>
             <button onClick={handleCreateVehicle} className="btn btn-primary flex items-center"><Plus className="h-4 w-4 mr-2"/>Add Vehicle</button>
           </PermissionGuard>
         </div>
@@ -652,8 +665,8 @@ export default function VehiclesList() {
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <button title="View" className="p-1 text-gray-400 hover:text-blue-600" onClick={()=>handleViewVehicle(v)}><Eye className="h-4 w-4"/></button>
-                        <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}><button title="Edit" className="p-1 text-gray-400 hover:text-green-600" onClick={()=>handleEditVehicle(v)}><Edit className="h-4 w-4"/></button></PermissionGuard>
-                        <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
+                        <PermissionGuard permission={PERMISSIONS.VEHICLES_EDIT}><button title="Edit" className="p-1 text-gray-400 hover:text-green-600" onClick={()=>handleEditVehicle(v)}><Edit className="h-4 w-4"/></button></PermissionGuard>
+                        <PermissionGuard permission={PERMISSIONS.VEHICLES_EDIT}>
                           <select value={v.kycStatus || v.kyc || 'incomplete'} onChange={e=>handleChangeKyc(v.vehicleId, e.target.value)} className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white" style={{ minWidth: '120px' }}>
                             <option value="verified">Verified</option>
                             <option value="pending">Pending</option>
@@ -667,7 +680,7 @@ export default function VehiclesList() {
                             <option value="suspended">Suspended</option>
                           </select>
                         </PermissionGuard>
-                        <PermissionGuard permission={PERMISSIONS.DRIVERS_DELETE}><button title="Delete" className="p-1 text-gray-400 hover:text-red-600" onClick={()=>handleDeleteVehicle(v)}><Trash2 className="h-4 w-4"/></button></PermissionGuard>
+                        <PermissionGuard permission={PERMISSIONS.VEHICLES_DELETE}><button title="Delete" className="p-1 text-gray-400 hover:text-red-600" onClick={()=>handleDeleteVehicle(v)}><Trash2 className="h-4 w-4"/></button></PermissionGuard>
                       </div>
                     </TableCell>
                   </TableRow>

@@ -87,13 +87,13 @@ router.post('/signup', async (req, res) => {
     const newInvestorSignup = new InvestorSignup({ investorName, email, phone, password });
     await newInvestorSignup.save();
 
-    // Emit a welcome notification targeted to this investor
+    // Emit a welcome notification (no pending approval message yet - that comes after registration completion)
     try {
       const { createAndEmitNotification } = await import('../lib/notify.js');
       await createAndEmitNotification({
         type: 'investor_signup',
         title: `Welcome, ${newInvestorSignup.investorName || newInvestorSignup.phone}`,
-        message: 'Your investor account has been created successfully.',
+        message: 'Your investor account has been created. Please complete your registration.',
         recipientType: 'investor',
         recipientId: newInvestorSignup._id,
         data: { id: newInvestorSignup._id, phone: newInvestorSignup.phone }
@@ -195,13 +195,13 @@ router.post('/signup-otp', async (req, res) => {
     });
     await newInvestorSignup.save();
 
-    // Emit notification for new investor registration
+    // Emit notification for new investor signup (no pending approval message yet - that comes after registration completion)
     try {
       const { createAndEmitNotification } = await import('../lib/notify.js');
       await createAndEmitNotification({
         type: 'investor_signup',
-        title: `New investor registered: ${investorName || phone}`,
-        message: `Investor ${investorName || phone} has signed up via OTP and is pending approval.`,
+        title: `New investor signed up: ${investorName || phone}`,
+        message: `Investor ${investorName || phone} has signed up via OTP. Please complete registration to proceed.`,
         data: { id: newInvestorSignup._id, phone: newInvestorSignup.phone },
         recipientType: 'investor',
         recipientId: newInvestorSignup._id
@@ -446,6 +446,21 @@ router.post('/', async (req, res) => {
         investorData,
         { upsert: true, new: true, setDefaultsOnInsert: true }
       );
+
+      // Notify the investor that their registration is pending approval
+      try {
+        const { createAndEmitNotification } = await import('../lib/notify.js');
+        await createAndEmitNotification({
+          type: 'investor_registration_completed',
+          title: `Registration Submitted`,
+          message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
+          data: { id: savedInvestor._id, phone: updated.phone },
+          recipientType: 'investor',
+          recipientId: investorSignup._id
+        });
+      } catch (err) {
+        console.warn('Notify failed:', err.message);
+      }
 
       return res.json({
         message: 'Registration completed successfully',

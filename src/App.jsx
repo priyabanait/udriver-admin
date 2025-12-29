@@ -37,11 +37,53 @@ import DriverWallet from './pages/drivers/DriverWallet';
 import InvestorWallet from './pages/investors/InvestorWallet';
 import InvestmentWalletMessages from './pages/investors/InvestmentWalletMessages';
 import ManagerPage from './pages/manager/ManagerPage';
-import InvestorCar from './pages/investments/InvestmentCar'
+import InvestorCar from './pages/investments/InvestmentCar';
 import InvesterDetails from './components/investors/InvesterDetails.jsx';
 import Profile from './pages/settings/Profile';
-import DriverAttendence from './pages/drivers/DriverAttendence.jsx';
-import PrivacyPolicy from './pages/drivers/Privacypolicy.jsx'
+import StaffAttendence from './pages/drivers/StaffAttendence.jsx';
+import PrivacyPolicy from './pages/drivers/Privacypolicy.jsx';
+import Notification from './components/notification/notification.jsx';
+
+
+// Error Boundary Component
+class ErrorBoundary extends React.Component {
+  constructor(props) {
+    super(props);
+    this.state = { hasError: false, error: null };
+  }
+
+  static getDerivedStateFromError(error) {
+    return { hasError: true, error };
+  }
+
+  componentDidCatch(error, errorInfo) {
+    console.error('Error caught by boundary:', error, errorInfo);
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="min-h-screen flex items-center justify-center bg-gray-50">
+          <div className="max-w-md w-full bg-white rounded-lg shadow-lg p-8 text-center">
+            <h2 className="text-xl font-semibold text-gray-900 mb-2">Something went wrong</h2>
+            <p className="text-gray-600 mb-4">{this.state.error?.message || 'An error occurred'}</p>
+            <button
+              onClick={() => {
+                this.setState({ hasError: false, error: null });
+                window.location.reload();
+              }}
+              className="px-4 py-2 bg-blue-600 text-white rounded hover:bg-blue-700"
+            >
+              Reload Page
+            </button>
+          </div>
+        </div>
+      );
+    }
+
+    return this.props.children;
+  }
+}
 // Protected Route Component
 function ProtectedRoute({ children }) {
   const { isAuthenticated, loading } = useAuth();
@@ -132,10 +174,15 @@ function AppRoutes() {
                       <Route path="/investments/wallet" element={<InvestorWallet />} />
                       <Route path="/investments/wallet-messages" element={<InvestmentWalletMessages />} />
                        <Route path="/investments/car" element={<InvestorCar />} />
-            <Route path="manager" element={<ManagerPage />} />
+            <Route path="staff" element={<ManagerPage />} />
             <Route path="investerDetails" element={<InvesterDetails />} />
             <Route path="settings" element={<Profile />} />
-                <Route path="attendence" element={<DriverAttendence />} />
+                <Route path="attendence" element={
+                 
+                    <StaffAttendence />
+                
+                } />
+                <Route path="notification" element={<Notification />} /> 
                  
         {/* Add more routes as we create them */}
       </Route>
@@ -145,24 +192,26 @@ function AppRoutes() {
 
 function App() {
   return (
-    <AuthProvider>
-      <Router>
-        <AppRoutes />
-        <Toaster 
-          position="top-right"
-          toastOptions={{
-            duration: 4000,
-            style: {
-              background: '#363636',
-              color: '#fff',
-            },
-            success: {
-              duration: 3000,
-            },
-          }}
-        />
-      </Router>
-    </AuthProvider>
+    <ErrorBoundary>
+      <AuthProvider>
+        <Router>
+          <AppRoutes />
+          <Toaster 
+            position="top-right"
+            toastOptions={{
+              duration: 4000,
+              style: {
+                background: '#363636',
+                color: '#fff',
+              },
+              success: {
+                duration: 3000,
+              },
+            }}
+          />
+        </Router>
+      </AuthProvider>
+    </ErrorBoundary>
   );
 }
 

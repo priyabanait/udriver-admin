@@ -1,22 +1,20 @@
 import express from 'express';
-import { listNotifications, markAsRead } from '../lib/notify.js';
+import { listNotifications, markAsRead, sendNotificationToAppType, sendNotificationToSpecificUsers } from '../lib/notify.js';
+import Driver from '../models/driver.js';
+import Investor from '../models/investor.js';
 
 const router = express.Router();
 
 router.get('/', async (req, res) => {
   try {
-    console.log('GET /api/notifications - Query params:', req.query);
     const page = parseInt(req.query.page) || 1;
     const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Cap at 100
     const { driverId, investorId, recipientType, recipientId } = req.query;
-    console.log('Calling listNotifications with:', { page, limit, driverId, investorId, recipientType, recipientId });
     const result = await listNotifications({ page, limit, driverId, investorId, recipientType, recipientId });
     // Ensure consistent response format
     if (result && result.items) {
-      console.log('Returning', result.items.length, 'notifications');
       res.json(result);
     } else {
-      console.log('No result or items, returning empty array');
       res.json({ items: [], pagination: { total: 0, page, limit, totalPages: 0 } });
     }
   } catch (err) {
@@ -53,6 +51,345 @@ router.post('/:id/read', async (req, res) => {
   } catch (err) {
     console.error('Error marking notification as read:', err);
     res.status(500).json({ message: 'Failed to mark notification as read', error: err.message });
+  }
+});
+
+/**
+ * Admin endpoint to send notifications to driver app or investor app
+ * POST /api/notifications/admin/send
+ * 
+ * Body:
+ * {
+ *   apps: ['customer', 'driver'], // 'customer' = driver app, 'driver' = investor app
+ *   sendType: 'now' | 'schedule',
+ *   scheduledTime?: Date, // Required if sendType is 'schedule'
+ *   data: {
+ *     common: { title, message, link } // if same message
+ *     // OR
+ *     driver: { title, message, link },
+ *     investor: { title, message, link }
+ *   }
+ * }
+ */
+router.post('/admin/send', async (req, res) => {
+  try {
+    const { apps, sendType, scheduledTime, data } = req.body || {};
+
+    // Validate required fields
+    if (!apps || !Array.isArray(apps) || apps.length === 0) {
+      return res.status(400).json({ message: 'apps array is required and must not be empty' });
+    }
+
+    if (!sendType || !['now', 'schedule'].includes(sendType)) {
+      return res.status(400).json({ message: 'sendType must be "now" or "schedule"' });
+    }
+
+    if (sendType === 'schedule' && !scheduledTime) {
+      return res.status(400).json({ message: 'scheduledTime is required when sendType is "schedule"' });
+    }
+
+    if (!data || (!data.common && !data.driver && !data.investor)) {
+      return res.status(400).json({ message: 'data.common or data.driver/investor is required' });
+    }
+
+    // Map frontend app names to backend app types
+    // Frontend: 'customer' = Driver App, 'driver' = Investor App
+    // Backend: 'driver' = driver app, 'investor' = investor app
+    const appTypeMap = {
+      'customer': 'driver',  // Frontend 'customer' maps to backend 'driver' app
+      'driver': 'investor'    // Frontend 'driver' maps to backend 'investor' app
+    };
+
+    const results = [];
+    const errors = [];
+
+    // Handle scheduling (for now, we'll just store it in the notification data)
+    // In a production system, you'd want a job queue (like Bull, Agenda, etc.)
+    if (sendType === 'schedule') {
+      // Store scheduled notification - in a real system, you'd queue this
+      // For now, we'll create it but note it's scheduled
+      console.log('Scheduled notification requested for:', scheduledTime);
+      // TODO: Implement proper scheduling with a job queue
+    }
+
+    // Process each selected app
+    for (const app of apps) {
+      const backendAppType = appTypeMap[app];
+      
+      if (!backendAppType) {
+        errors.push({ app, error: `Unknown app type: ${app}` });
+        continue;
+      }
+
+      try {
+        // Determine which data to use
+        let notificationData;
+        if (data.common) {
+          // Same message for all apps
+          notificationData = {
+            title: data.common.title || '',
+            message: data.common.message || '',
+            data: {
+              link: data.common.link || '',
+              scheduledTime: sendType === 'schedule' ? scheduledTime : undefined
+            }
+          };
+        } else {
+          // Different message per app
+          const appData = data[backendAppType] || data[app];
+          if (!appData) {
+            errors.push({ app, error: `No data provided for ${app}` });
+            continue;
+          }
+          notificationData = {
+            title: appData.title || '',
+            message: appData.message || '',
+            data: {
+              link: appData.link || '',
+              scheduledTime: sendType === 'schedule' ? scheduledTime : undefined
+            }
+          };
+        }
+
+        // Send notification to all users of this app type
+        if (sendType === 'now') {
+          const note = await sendNotificationToAppType({
+            appType: backendAppType,
+            title: notificationData.title,
+            message: notificationData.message,
+            data: notificationData.data,
+            type: 'admin_broadcast'
+          });
+          results.push({
+            app,
+            appType: backendAppType,
+            notificationId: note._id,
+            status: 'sent'
+          });
+        } else {
+          // For scheduled notifications, we'd typically queue them
+          // For now, create the notification but mark it as scheduled
+          const { createAndEmitNotification } = await import('../lib/notify.js');
+          const note = await createAndEmitNotification({
+            type: 'admin_broadcast_scheduled',
+            title: notificationData.title,
+            message: notificationData.message,
+            data: {
+              ...notificationData.data,
+              scheduledFor: scheduledTime,
+              appType: backendAppType
+            },
+            recipientType: backendAppType,
+            recipientId: null
+          });
+          results.push({
+            app,
+            appType: backendAppType,
+            notificationId: note._id,
+            status: 'scheduled',
+            scheduledTime
+          });
+        }
+      } catch (err) {
+        console.error(`Error sending notification to ${app} (${backendAppType}):`, err);
+        errors.push({
+          app,
+          appType: backendAppType,
+          error: err.message
+        });
+      }
+    }
+
+    // Return results
+    if (errors.length > 0 && results.length === 0) {
+      return res.status(500).json({
+        message: 'Failed to send notifications',
+        errors
+      });
+    }
+
+    res.status(200).json({
+      message: 'Notifications processed',
+      results,
+      errors: errors.length > 0 ? errors : undefined
+    });
+  } catch (err) {
+    console.error('Error in admin send notification:', err);
+    res.status(500).json({ message: 'Failed to send notifications', error: err.message });
+  }
+});
+
+/**
+ * Get list of drivers for notification selection
+ * GET /api/notifications/admin/drivers
+ */
+router.get('/admin/drivers', async (req, res) => {
+  try {
+    const { search = '', limit = 100 } = req.query;
+    let query = {};
+    
+    // If search is provided, search across name, phone, email, and mobile fields
+    if (search && search.trim()) {
+      query = {
+        $or: [
+          { name: { $regex: search.trim(), $options: 'i' } },
+          { phone: { $regex: search.trim(), $options: 'i' } },
+          { mobile: { $regex: search.trim(), $options: 'i' } },
+          { email: { $regex: search.trim(), $options: 'i' } }
+        ]
+      };
+    }
+
+    const drivers = await Driver.find(query)
+      .select('_id name phone mobile email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    console.log(`Fetched ${drivers.length} drivers (search: "${search}")`);
+    res.json({ drivers: drivers || [] });
+  } catch (err) {
+    console.error('Error fetching drivers:', err);
+    res.status(500).json({ message: 'Failed to fetch drivers', error: err.message });
+  }
+});
+
+/**
+ * Get list of investors for notification selection
+ * GET /api/notifications/admin/investors
+ */
+router.get('/admin/investors', async (req, res) => {
+  try {
+    const { search = '', limit = 100 } = req.query;
+    let query = {};
+    
+    // If search is provided, search across investorName, phone, and email fields
+    if (search && search.trim()) {
+      query = {
+        $or: [
+          { investorName: { $regex: search.trim(), $options: 'i' } },
+          { phone: { $regex: search.trim(), $options: 'i' } },
+          { email: { $regex: search.trim(), $options: 'i' } }
+        ]
+      };
+    }
+
+    const investors = await Investor.find(query)
+      .select('_id investorName phone email')
+      .sort({ createdAt: -1 })
+      .limit(parseInt(limit))
+      .lean();
+
+    console.log(`Fetched ${investors.length} investors (search: "${search}")`);
+    res.json({ investors: investors || [] });
+  } catch (err) {
+    console.error('Error fetching investors:', err);
+    res.status(500).json({ message: 'Failed to fetch investors', error: err.message });
+  }
+});
+
+/**
+ * Admin endpoint to send notifications to specific drivers and/or investors
+ * POST /api/notifications/admin/send-specific
+ * 
+ * Body:
+ * {
+ *   driverIds: ['id1', 'id2'], // Array of driver IDs
+ *   investorIds: ['id1', 'id2'], // Array of investor IDs
+ *   title: 'Notification Title',
+ *   message: 'Notification Message',
+ *   link: 'optional deep link',
+ *   sendType: 'now' | 'schedule',
+ *   scheduledTime?: Date
+ * }
+ */
+router.post('/admin/send-specific', async (req, res) => {
+  try {
+    const { driverIds, investorIds, title, message, link, sendType, scheduledTime } = req.body || {};
+
+    // Validate required fields
+    if ((!driverIds || driverIds.length === 0) && (!investorIds || investorIds.length === 0)) {
+      return res.status(400).json({ message: 'At least one driverId or investorId is required' });
+    }
+
+    if (!title && !message) {
+      return res.status(400).json({ message: 'title or message is required' });
+    }
+
+    if (sendType === 'schedule' && !scheduledTime) {
+      return res.status(400).json({ message: 'scheduledTime is required when sendType is "schedule"' });
+    }
+
+    const notificationData = {
+      title: title || '',
+      message: message || '',
+      data: {
+        link: link || '',
+        scheduledTime: sendType === 'schedule' ? scheduledTime : undefined
+      }
+    };
+
+    if (sendType === 'now') {
+      const { results, errors } = await sendNotificationToSpecificUsers({
+        driverIds: driverIds || [],
+        investorIds: investorIds || [],
+        ...notificationData,
+        type: 'admin_message'
+      });
+
+      res.status(200).json({
+        message: 'Notifications sent',
+        results,
+        errors: errors.length > 0 ? errors : undefined
+      });
+    } else {
+      // For scheduled notifications, create them but mark as scheduled
+      // TODO: Implement proper scheduling with a job queue
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const notes = [];
+
+      for (const driverId of driverIds || []) {
+        const note = await createAndEmitNotification({
+          type: 'admin_message_scheduled',
+          title: notificationData.title,
+          message: notificationData.message,
+          data: {
+            ...notificationData.data,
+            scheduledFor: scheduledTime
+          },
+          recipientType: 'driver',
+          recipientId: driverId
+        });
+        notes.push(note);
+      }
+
+      for (const investorId of investorIds || []) {
+        const note = await createAndEmitNotification({
+          type: 'admin_message_scheduled',
+          title: notificationData.title,
+          message: notificationData.message,
+          data: {
+            ...notificationData.data,
+            scheduledFor: scheduledTime
+          },
+          recipientType: 'investor',
+          recipientId: investorId
+        });
+        notes.push(note);
+      }
+
+      res.status(200).json({
+        message: 'Notifications scheduled',
+        results: notes.map(note => ({
+          notificationId: note._id,
+          status: 'scheduled',
+          scheduledTime
+        }))
+      });
+    }
+  } catch (err) {
+    console.error('Error in admin send-specific notification:', err);
+    res.status(500).json({ message: 'Failed to send notifications', error: err.message });
   }
 });
 

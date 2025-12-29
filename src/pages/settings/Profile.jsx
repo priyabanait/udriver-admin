@@ -7,7 +7,7 @@ export default function Profile() {
   const profileFields = useMemo(() => ([
     { label: 'Name', value: user?.name },
     { label: 'Email', value: user?.email },
-    { label: 'Role', value: user?.role === 'fleet_manager' ? 'Manager' : (user?.role ? user.role.replace('_', ' ') : null) },
+    { label: 'Role', value: user?.department ? user.department : (user?.role === 'fleet_manager' ? 'Manager' : (user?.role ? user.role.replace('_', ' ') : ''))},
     { label: 'Phone', value: user?.phone || user?.mobile },
    
   ]), [user]);

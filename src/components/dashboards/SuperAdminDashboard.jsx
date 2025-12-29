@@ -357,8 +357,8 @@ export default function SuperAdminDashboard() {
                         </div>
                         <div className="ml-4">
                           <p className="text-sm font-medium text-gray-600">Active Drivers</p>
-                          <p className="text-2xl font-bold text-gray-900">{fleetStats.totalDrivers}</p>
-                          <p className="text-xs text-green-600">{fleetStats.activeDrivers} active</p>
+                          <p className="text-2xl font-bold text-gray-900">{stats.totalDrivers}</p>
+                          <p className="text-xs text-green-600">{stats.activeDrivers} active</p>
                         </div>
                       </div>
                     </CardContent>
@@ -373,8 +373,8 @@ export default function SuperAdminDashboard() {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Vehicles</p>
-                <p className="text-2xl font-bold text-gray-900">{fleetStats.totalVehicles}</p>
-                <p className="text-xs text-green-600">{fleetStats.activeVehicles} active</p>
+                <p className="text-2xl font-bold text-gray-900">{stats.totalVehicles}</p>
+                <p className="text-xs text-green-600">{stats.activeVehicles} active</p>
               </div>
             </div>
           </CardContent>

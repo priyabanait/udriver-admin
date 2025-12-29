@@ -73,7 +73,7 @@ export default function Header({ onToggleSidebar, sidebarCollapsed }) {
               <div className="hidden md:block text-left">
                 <p className="text-sm font-medium text-gray-700">{user?.name}</p>
                 <p className="text-xs text-gray-500 capitalize">
-                  {user?.role === 'fleet_manager' ? 'Manager' : user?.role?.replace('_', ' ')}
+                 {user?.department ? user.department : (user?.role === 'fleet_manager' ? 'Manager' : (user?.role ? user.role.replace('_', ' ') : ''))}
                 </p>
               </div>
             </button>

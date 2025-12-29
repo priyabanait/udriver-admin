@@ -362,14 +362,16 @@ export default function DriverPayments() {
         const data = result.data || result;
         console.log('Payments data received:', Array.isArray(data) ? data.length : 0, 'records');
         
-        // Filter to show only records where driver has been assigned to a vehicle
-        // This means the driver should have a vehicleId or the rentStartDate should be set
+        // Include selections where payment has been made or is pending, or where vehicle assignment/rent has started.
+        // Previously we only showed records with a vehicleId or rentStartDate which hid newly selected plans (paymentStatus: 'pending').
         const assignedDriverRecords = (Array.isArray(data) ? data : []).filter(s => {
-          // Show only if driver is assigned (has vehicleId or rentStartDate indicating vehicle assignment)
-          return s.vehicleId || s.rentStartDate;
+          // Always include pending or completed payments (booked plans or paid plans)
+          if (s.paymentStatus === 'pending' || s.paymentStatus === 'completed') return true;
+          // Otherwise include if driver is assigned (vehicleId) or rent has started
+          return !!(s.vehicleId || s.rentStartDate);
         });
-        
-        console.log('Filtered to assigned drivers:', assignedDriverRecords.length, 'records');
+
+        console.log('Filtered to relevant driver plan selections:', assignedDriverRecords.length, 'records');
         
         // Group by driverMobile or driverUsername
         const grouped = {};
@@ -408,6 +410,16 @@ export default function DriverPayments() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, [openDropdown]);
 
+  // Refresh selections if a vehicle update reports selections were updated
+  useEffect(() => {
+    const handler = (e) => {
+      console.log('Driver selections updated, refreshing list...', e?.detail);
+      loadSelections();
+    };
+    window.addEventListener('driverSelectionsUpdated', handler);
+    return () => window.removeEventListener('driverSelectionsUpdated', handler);
+  }, []);
+
   const loadSelections = async () => {
     setLoading(true);
     try {
@@ -426,8 +438,8 @@ export default function DriverPayments() {
         grouped[key].push(s);
       });
       setSelections(Object.values(grouped));
-      // Fetch rent summaries for all transactions
-      const idsToFetch = withPayments.filter(s => s.rentStartDate).map(s => s._id);
+      // Fetch rent summaries for all transactions where rent has actually started (vehicle active)
+      const idsToFetch = withPayments.filter(s => s.rentStartDate && s.vehicleStatus === 'active').map(s => s._id);
       if (idsToFetch.length > 0) {
         const summaries = {};
         await Promise.all(
@@ -551,9 +563,9 @@ export default function DriverPayments() {
     };
     
     const rows = allRecords.map(s => {
-      // Calculate days for rent
+      // Calculate days for rent (only when vehicle active and rent has actually started)
       let days = 0;
-      if (s.rentStartDate) {
+      if (s.rentStartDate && s.vehicleStatus === 'active') {
         const start = new Date(s.rentStartDate);
         let end = new Date();
         if (s.status === 'inactive' && s.rentPausedDate) {
@@ -1110,7 +1122,7 @@ export default function DriverPayments() {
                                       </div>
                                     </TableCell>
                                     <TableCell>
-                                      {s.rentStartDate ? (
+                                      {s.rentStartDate && s.vehicleStatus === 'active' ? (
                                         <div className="space-y-1">
                                           <p className="text-xs text-gray-600">
                                             <span className="font-semibold">Days:</span> {s.paymentDetails?.days || 0}
@@ -1149,7 +1161,6 @@ export default function DriverPayments() {
                                               )}
                                             </p>
                                           )}
-                                          
                                           <div className="flex items-center gap-4 ">
                                                 <p className="text-xs font-semibold text-yellow-700 whitespace-nowrap">Add Adjustment :</p>
                                                 <input
@@ -1433,7 +1444,7 @@ export default function DriverPayments() {
                         <span className="ml-2 font-medium capitalize">{transaction.paymentType || 'N/A'}</span>
                       </div>
 
-                      {transaction.rentStartDate && (
+                      {transaction.rentStartDate && transaction.vehicleStatus === 'active' && (
                         <>
                           <div>
                             <span className="text-gray-600">Rent Start:</span>

@@ -53,8 +53,8 @@ export default function DriversList() {
       setError(null);
       try {
         // Use Vite env var VITE_API_BASE to point to backend in dev/production.
-        // Fallback to https://udrive-backend-1igb.vercel.app for local development.
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        // Fallback to http://localhost:4000 for local development.
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         
         // Fetch manual drivers
         const res = await fetch(`${API_BASE}/api/drivers?limit=1000`);
@@ -135,7 +135,7 @@ export default function DriversList() {
   const handleEditDriver = async (driver) => {
     try {
       // Fetch complete driver data from the backend
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
       const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
@@ -159,7 +159,7 @@ export default function DriversList() {
 
   const handleSaveDriver = async (driverData) => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
       
       if (selectedDriver) {
@@ -215,7 +215,7 @@ export default function DriversList() {
     if (window.confirm('Are you sure you want to delete this driver?')) {
       (async () => {
         try {
-          const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+          const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
           const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
             method: 'DELETE'
           });
@@ -248,7 +248,7 @@ export default function DriversList() {
 
   const handleChangeDriverStatus = async (driverId, newStatus) => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app'||'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'||'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
       const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
         method: 'PUT',
@@ -271,7 +271,7 @@ export default function DriversList() {
 
   const handleChangeDriverKyc = async (driverId, newKyc) => {
     try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
       const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
         method: 'PUT',
@@ -652,7 +652,7 @@ export default function DriversList() {
                         <button
                           onClick={async () => {
                             try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
                               const token = localStorage.getItem('udriver_token');
                               const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
                                 headers: token ? { 'Authorization': `Bearer ${token}` } : {}

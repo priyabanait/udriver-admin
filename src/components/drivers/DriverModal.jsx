@@ -359,6 +359,11 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
       if (value.trim().length < 10) return 'Please enter complete address (min 10 characters)';
       return '';
     }
+    if (field === 'pincode') {
+      if (!value || !value.trim()) return 'Pincode is required';
+      if (!/^\d{6}$/.test(value.trim())) return 'Enter valid 6 digit pincode';
+      return '';
+    }
     // if (field === 'licenseNumber') {
     //   if (!value || !value.trim()) return 'License number is required';
     //   // Format: XX[0-9]{13} (2 characters followed by 13 numbers)
@@ -450,7 +455,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     const newErrors = {};
     switch (step) {
       case 1: // Personal Information
-        await Promise.all(['name', 'email', 'phone', 'dateOfBirth', 'address'].map(async (f) => {
+        await Promise.all(['name', 'email', 'phone', 'dateOfBirth', 'address', 'pincode'].map(async (f) => {
           const err = await validateField(f, formData[f]);
           if (err) newErrors[f] = err;
         }));
@@ -694,6 +699,20 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   <option value="Delhi">Delhi</option>
                   {/* Add more states */}
                 </select>
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pincode *
+                </label>
+                <input
+                  type="text"
+                  value={formData.pincode}
+                  onChange={(e) => handleInputChange('pincode', e.target.value)}
+                  className={`input ${errors.pincode ? 'border-red-300' : ''}`}
+                  placeholder="Enter pincode"
+                />
+                {errors.pincode && <p className="mt-1 text-sm text-red-600">{errors.pincode}</p>}
               </div>
 
               <div>

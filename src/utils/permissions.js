@@ -34,7 +34,10 @@ export const PERMISSIONS = {
   EXPENSES_DELETE: 'expenses:delete',
   EXPENSES_APPROVE: 'expenses:approve',
 
-  // Payment Management
+ ATTENDANCE_VIEW: 'attendance.view',
+ATTENDANCE_CREATE: 'attendance.create',
+ATTENDANCE_EDIT: 'attendance.edit',
+ATTENDANCE_APPROVE: 'attendance.approve',
   
   // Payment management permissions
   PAYMENTS_VIEW: 'payments.view',
@@ -65,16 +68,16 @@ export const PERMISSIONS = {
   HR_PAYROLL: 'hr.payroll',
   
   // Ticket system permissions
-  TICKETS_VIEW: 'tickets.view',
-  TICKETS_CREATE: 'tickets.create',
-  TICKETS_EDIT: 'tickets.edit',
-  TICKETS_DELETE: 'tickets.delete',
-  TICKETS_ASSIGN: 'tickets.assign',
+  // TICKETS_VIEW: 'tickets.view',
+  // TICKETS_CREATE: 'tickets.create',
+  // TICKETS_EDIT: 'tickets.edit',
+  // TICKETS_DELETE: 'tickets.delete',
+  // TICKETS_ASSIGN: 'tickets.assign',
   
   // Settings permissions
-  SETTINGS_VIEW: 'settings.view',
-  SETTINGS_EDIT: 'settings.edit',
-  SETTINGS_SYSTEM: 'settings.system',
+  // SETTINGS_VIEW: 'settings.view',
+  // SETTINGS_EDIT: 'settings.edit',
+  // SETTINGS_SYSTEM: 'settings.system',
   
   // Reports permissions
   REPORTS_VIEW: 'reports.view',
@@ -165,27 +168,31 @@ export const ROLES = {
     color: 'green'
   },
   
-  HR_MANAGER: {
-    id: 'hr_manager',
-    name: 'HR Manager',
-    description: 'Manage employees, attendance, and payroll',
-    permissions: [
-      PERMISSIONS.DASHBOARD_VIEW,
-      PERMISSIONS.HR_VIEW,
-      PERMISSIONS.HR_CREATE,
-      PERMISSIONS.HR_EDIT,
-      PERMISSIONS.HR_PAYROLL,
-      PERMISSIONS.DRIVERS_VIEW,
-      // DRIVERS_CREATE intentionally omitted for manager
-      PERMISSIONS.REPORTS_EXPORT,
-      PERMISSIONS.DRIVERS_EDIT,
-      PERMISSIONS.DRIVERS_KYC,
-      PERMISSIONS.REPORTS_VIEW,
-      PERMISSIONS.TICKETS_VIEW,
-      PERMISSIONS.TICKETS_CREATE,
-    ],
-    color: 'purple'
-  },
+ HR_MANAGER: {
+  id: 'hr_manager',
+  name: 'HR Manager',
+  description: 'Manage employees, attendance, and payroll',
+  permissions: [
+    PERMISSIONS.DASHBOARD_VIEW,
+
+    // ✅ Attendance
+    PERMISSIONS.ATTENDANCE_VIEW,
+    PERMISSIONS.ATTENDANCE_CREATE,
+    PERMISSIONS.ATTENDANCE_EDIT,
+
+    // HR
+    PERMISSIONS.HR_VIEW,
+    PERMISSIONS.HR_CREATE,
+    PERMISSIONS.HR_EDIT,
+    PERMISSIONS.HR_PAYROLL,
+
+    // Optional
+    PERMISSIONS.REPORTS_VIEW,
+    PERMISSIONS.REPORTS_EXPORT,
+  ],
+  color: 'purple'
+},
+
   
   OPERATIONS_MANAGER: {
     id: 'operations_manager',

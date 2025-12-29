@@ -19,6 +19,16 @@ export default function DriverPlanSelections() {
     fetchSelections();
   }, []);
 
+  // Refresh selections if vehicle updates changed selections
+  useEffect(() => {
+    const handler = (e) => {
+      console.log('Driver selections updated (plans page) - refreshing...', e?.detail);
+      fetchSelections();
+    };
+    window.addEventListener('driverSelectionsUpdated', handler);
+    return () => window.removeEventListener('driverSelectionsUpdated', handler);
+  }, []);
+
   const fetchSelections = async () => {
     setLoading(true);
     try {
@@ -26,8 +36,8 @@ export default function DriverPlanSelections() {
       if (res.ok) {
         const data = await res.json();
         setSelections(data);
-        // Fetch daily rent summaries for selections that have started
-        const ids = data.filter(s => s.rentStartDate).map(s => s._id);
+        // Fetch daily rent summaries for selections that have started and whose vehicle is active
+        const ids = data.filter(s => s.rentStartDate && s.vehicleStatus === 'active').map(s => s._id);
         if (ids.length) {
           const results = await Promise.allSettled(
             ids.map(id => fetch(`${API_BASE}/api/driver-plan-selections/${id}/rent-summary`).then(r => r.json()))
@@ -362,7 +372,7 @@ export default function DriverPlanSelections() {
                       </div>
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
-                      {selection.rentStartDate ? (
+                      {selection.rentStartDate && selection.vehicleStatus === 'active' ? (
                         <div className="text-xs text-gray-700">
                           <div>
                             Rent/Day: ₹{(summaries[selection._id]?.rentPerDay ?? selection.selectedRentSlab?.rentDay ?? 0).toLocaleString('en-IN')}

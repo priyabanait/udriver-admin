@@ -38,6 +38,18 @@ export function formatDateTime(date) {
   }).format(d);
 }
 
+export function formatTime(date) {
+  if (!date) return '-';
+  const d = new Date(date);
+  if (Number.isNaN(d.getTime())) return '-';
+  return new Intl.DateTimeFormat('en-IN', {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: true,
+  }).format(d);
+}
+
 export function getInitials(name) {
   return name
     .split(' ')

@@ -40,26 +40,17 @@ router.post('/signup', async (req, res) => {
 		});
 		await driverSignup.save();
 
-		// Emit notification for new driver registration
+		// Emit notification for new driver signup (admin notification only, no pending approval message yet)
 		try {
 			const { createAndEmitNotification } = await import('../lib/notify.js');
 			// Create notification visible to all admins (no recipientType/recipientId)
 			await createAndEmitNotification({
 				type: 'driver_signup',
-				title: `New driver registered: ${username || mobile}`,
-				message: `Driver ${username || mobile} has signed up and is pending approval.`,
+				title: `New driver signed up: ${username || mobile}`,
+				message: `Driver ${username || mobile} has signed up. Please complete registration to proceed.`,
 				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
 				recipientType: null,
 				recipientId: null
-			});
-			// Also create a targeted notification for the driver
-			await createAndEmitNotification({
-				type: 'driver_signup',
-				title: `Welcome ${username || mobile}!`,
-				message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
-				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
-				recipientType: 'driver',
-				recipientId: driverSignup._id
 			});
 		} catch (err) {
 			console.warn('Notify failed:', err.message);
@@ -164,26 +155,17 @@ router.post('/signup-otp', async (req, res) => {
 		});
 		await driverSignup.save();
 
-		// Emit notification for new driver registration
+		// Emit notification for new driver signup (admin notification only, no pending approval message yet)
 		try {
 			const { createAndEmitNotification } = await import('../lib/notify.js');
 			// Create notification visible to all admins (no recipientType/recipientId)
 			await createAndEmitNotification({
 				type: 'driver_signup',
-				title: `New driver registered: ${username || mobile}`,
-				message: `Driver ${username || mobile} has signed up via OTP and is pending approval.`,
+				title: `New driver signed up: ${username || mobile}`,
+				message: `Driver ${username || mobile} has signed up via OTP. Please complete registration to proceed.`,
 				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
 				recipientType: null,
 				recipientId: null
-			});
-			// Also create a targeted notification for the driver
-			await createAndEmitNotification({
-				type: 'driver_signup',
-				title: `Welcome ${username || mobile}!`,
-				message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
-				data: { id: driverSignup._id, mobile: driverSignup.mobile, username: driverSignup.username },
-				recipientType: 'driver',
-				recipientId: driverSignup._id
 			});
 		} catch (err) {
 			console.warn('Notify failed:', err.message);

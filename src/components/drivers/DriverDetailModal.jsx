@@ -273,29 +273,13 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         <label className="block text-sm font-medium text-gray-700">Vehicle Preference</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.vehiclePreference || driver.vehicleAssigned || '—'}</div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Total Trips</label>
-                        <div className="mt-1 text-sm text-gray-900">{driver.totalTrips || 0}</div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Total Earnings</label>
-                        <div className="mt-1 text-sm font-medium text-gray-900">₹{driver.totalEarnings?.toLocaleString() || 0}</div>
-                      </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Rating</label>
-                        <div className="mt-1 flex items-center">
-                          <span className="text-yellow-400 mr-1">★</span>
-                          <span className="text-sm font-medium text-gray-900">{driver.rating || 0}</span>
-                        </div>
-                      </div>
+                     
+                      
                       <div>
                         <label className="block text-sm font-medium text-gray-700">KYC Status</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.kycStatus || '—'}</div>
                       </div>
-                      <div>
-                        <label className="block text-sm font-medium text-gray-700">Status</label>
-                        <div className="mt-1 text-sm text-gray-900">{driver.status || '—'}</div>
-                      </div>
+                    
                       {driver.previousEmployment && (
                         <div className="md:col-span-2">
                           <label className="block text-sm font-medium text-gray-700">Previous Employment</label>

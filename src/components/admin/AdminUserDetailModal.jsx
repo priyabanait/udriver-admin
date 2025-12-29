@@ -1,4 +1,5 @@
 import { X, User, Mail, Phone, Shield, Building, Calendar, Clock, Activity } from 'lucide-react';
+import toast from 'react-hot-toast';
 import { ROLES, formatRoleName } from '../../utils/permissions';
 import { formatDate, formatDateTime } from '../../utils';
 

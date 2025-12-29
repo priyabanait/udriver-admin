@@ -74,9 +74,11 @@ router.get('/', async (req, res) => {
     const sortBy = req.query.sortBy || 'createdAt';
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
-    // Only fetch drivers added manually by admin (not self-registered)
-    const filter = { isManualEntry: true };
-    
+    // By default include all drivers (both admin-added and self-registered).
+    // If `manualOnly=true` query param is provided, only return admin-added drivers to preserve legacy behavior.
+    const manualOnly = req.query.manualOnly === 'true';
+    const filter = manualOnly ? { isManualEntry: true } : {};
+
     const total = await Driver.countDocuments(filter);
     const list = await Driver.find(filter)
       .sort({ [sortBy]: sortOrder })
@@ -142,21 +144,32 @@ router.get('/:id', async (req, res) => {
 });
 
 
-// Create new driver with document uploads
+// Create new driver with document uploads (or complete registration for existing driver)
 router.post('/', async (req, res) => {
   try {
     const fields = stripAuthFields(req.body);
+    // Determine next id only when creating a new driver
     const max = await Driver.find().sort({ id: -1 }).limit(1).lean();
     const nextId = (max[0]?.id || 0) + 1;
 
-    // Handle document uploads to Cloudinary
+    // Document fields we expect
     const documentFields = ['profilePhoto', 'signature', 'licenseDocument', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument', 'electricBillDocument'];
-    const uploadedDocs = {};
 
+    // If mobile provided, check if a Driver already exists. If yes, we'll update instead of creating a duplicate.
+    let existingDriver = null;
+    if (fields.mobile) {
+      existingDriver = await Driver.findOne({ mobile: fields.mobile }).lean();
+    }
+
+    // Use target id for uploads: existing driver's id if updating, otherwise nextId
+    const targetId = existingDriver ? existingDriver.id : nextId;
+
+    // Handle document uploads to Cloudinary (use targetId in path)
+    const uploadedDocs = {};
     for (const field of documentFields) {
-      if (fields[field] && fields[field].startsWith('data:')) {
+      if (fields[field] && typeof fields[field] === 'string' && fields[field].startsWith('data:')) {
         try {
-          const result = await uploadToCloudinary(fields[field], `drivers/${nextId}/${field}`);
+          const result = await uploadToCloudinary(fields[field], `drivers/${targetId}/${field}`);
           uploadedDocs[field] = result.secure_url;
         } catch (uploadErr) {
           console.error(`Failed to upload ${field}:`, uploadErr);
@@ -164,78 +177,116 @@ router.post('/', async (req, res) => {
       }
     }
 
-
-    // Add emergency contact relation and secondary phone
-    const driverData = {
-      id: nextId,
+    // Build update/create payload
+    const baseData = {
       ...fields,
       ...uploadedDocs,
-      isManualEntry: true,
-      registrationCompleted: true, // Mark registration as completed when admin fills the form
       emergencyRelation: fields.emergencyRelation || '',
       emergencyPhoneSecondary: fields.emergencyPhoneSecondary || ''
     };
 
-    // Remove base64 data to prevent large document size
-    documentFields.forEach(field => {
-      if (driverData[field]?.startsWith('data:')) {
-        delete driverData[field];
-      }
-    });
-
-    // Set registrationCompleted=true in DriverSignup if mobile matches,
-    // and copy document fields (including signature) from signup if they exist.
-    if (driverData.mobile) {
-      const signup = await DriverSignup.findOneAndUpdate(
-        { mobile: driverData.mobile },
+    // If there is a DriverSignup for this mobile, mark registration complete there and copy any missing docs
+    let signupDoc = null;
+    if (baseData.mobile) {
+      signupDoc = await DriverSignup.findOneAndUpdate(
+        { mobile: baseData.mobile },
         { registrationCompleted: true, status: 'active' },
         { new: true }
       ).lean();
-      const docFields = ['profilePhoto','signature','licenseDocument','aadharDocument','aadharDocumentBack','panDocument','bankDocument','electricBillDocument'];
-      if (signup) {
-        for (const f of docFields) {
-          if (!driverData[f] && signup[f]) {
-            driverData[f] = signup[f];
-          }
+      if (signupDoc) {
+        for (const f of documentFields) {
+          if (!baseData[f] && signupDoc[f]) baseData[f] = signupDoc[f];
         }
       }
     }
 
-    const newDriver = await Driver.create(driverData);
-    // Notify dashboard - create global notification for admins and targeted for driver
+    // Remove raw base64 data from payload
+    documentFields.forEach(field => {
+      if (baseData[field]?.startsWith && baseData[field].startsWith('data:')) {
+        delete baseData[field];
+      }
+    });
+
+    // If a Driver with same mobile exists -> update it (complete registration)
+    if (existingDriver) {
+      const updateData = {
+        ...existingDriver,
+        ...baseData,
+        registrationCompleted: true,
+        // If signup exists, mark that this was a self-registration completion
+        isManualEntry: signupDoc ? false : existingDriver.isManualEntry
+      };
+
+      const updated = await Driver.findOneAndUpdate({ mobile: baseData.mobile }, updateData, { new: true }).lean();
+
+      if (!updated) {
+        return res.status(404).json({ message: 'Driver not found to update' });
+      }
+
+      // Notify the driver that their registration is pending approval (if signup exists)
+      try {
+        if (signupDoc && signupDoc._id) {
+          const { createAndEmitNotification } = await import('../lib/notify.js');
+          await createAndEmitNotification({
+            type: 'driver_registration_completed',
+            title: `Registration Submitted`,
+            message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
+            data: { id: updated._id, driverId: updated.id },
+            recipientType: 'driver',
+            recipientId: signupDoc._id
+          });
+        }
+      } catch (err) {
+        console.warn('Notify failed:', err.message);
+      }
+
+      return res.json(updated);
+    }
+
+    // Otherwise create a new driver (admin flow)
+    const driverData = {
+      id: nextId,
+      ...baseData,
+      isManualEntry: signupDoc ? false : true,
+      registrationCompleted: true
+    };
+
+    const created = await Driver.create(driverData);
+
+    // Notify admins and the driver (if signup exists)
     try {
       const { createAndEmitNotification } = await import('../lib/notify.js');
-      // Create notification visible to all admins (no recipientType/recipientId)
       await createAndEmitNotification({
         type: 'driver_added',
-        title: `Driver added: ${newDriver.name || newDriver.mobile || newDriver.username || 'N/A'}`,
-        message: `Admin has added a new driver with ID: ${newDriver.id || newDriver._id}`,
-        data: { id: newDriver._id, driverId: newDriver.id, mobile: newDriver.mobile },
+        title: `Driver added: ${created.name || created.mobile || created.username || 'N/A'}`,
+        message: `Admin has added a new driver with ID: ${created.id || created._id}`,
+        data: { id: created._id, driverId: created.id, mobile: created.mobile },
         recipientType: null,
         recipientId: null
       });
-      // Also create a targeted notification for the driver if they have a signup account
-      if (newDriver.mobile) {
-        const DriverSignup = (await import('../models/driverSignup.js')).default;
-        const signup = await DriverSignup.findOne({ mobile: newDriver.mobile }).lean();
-        if (signup && signup._id) {
-          await createAndEmitNotification({
-            type: 'driver_added',
-            title: `Your profile has been created`,
-            message: `Admin has created your driver profile. Your ID is ${newDriver.id || newDriver._id}`,
-            data: { id: newDriver._id, driverId: newDriver.id },
-            recipientType: 'driver',
-            recipientId: signup._id
-          });
-        }
+
+      if (created.mobile && signupDoc && signupDoc._id) {
+        await createAndEmitNotification({
+          type: 'driver_added',
+          title: `Your profile has been created`,
+          message: `Admin has created your driver profile. Your ID is ${created.id || created._id}`,
+          data: { id: created._id, driverId: created.id },
+          recipientType: 'driver',
+          recipientId: signupDoc._id
+        });
       }
     } catch (err) {
       console.warn('Notify failed:', err.message);
     }
-    res.status(201).json(newDriver);
+
+    res.status(201).json(created);
   } catch (err) {
     console.error('Driver create error:', err);
-    res.status(500).json({ message: 'Failed to create driver', error: err.message });
+    // If duplicate key error slips through, try to return a helpful message instead of crashing
+    if (err && err.code === 11000) {
+      return res.status(409).json({ message: 'Driver with this mobile already exists', error: err.message });
+    }
+    res.status(500).json({ message: 'Failed to create/update driver', error: err.message });
   }
 });
 

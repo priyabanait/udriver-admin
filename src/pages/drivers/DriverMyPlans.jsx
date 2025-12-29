@@ -23,6 +23,16 @@ export default function DriverMyPlans() {
     fetchMyPlans();
   }, []);
 
+  // Refresh plans if vehicle updates changed selections
+  useEffect(() => {
+    const handler = (e) => {
+      console.log('Driver selections updated (my plans) - refreshing...', e?.detail);
+      fetchMyPlans();
+    };
+    window.addEventListener('driverSelectionsUpdated', handler);
+    return () => window.removeEventListener('driverSelectionsUpdated', handler);
+  }, []);
+
   const fetchMyPlans = async () => {
     setLoading(true);
     try {
@@ -36,9 +46,9 @@ export default function DriverMyPlans() {
       if (res.ok) {
         const data = await res.json();
         setPlans(data);
-        // Load daily rent summaries for plans that have started
+        // Load daily rent summaries for plans that have started and whose vehicle is active
         const idsToFetch = data
-          .filter(p => p.rentStartDate)
+          .filter(p => p.rentStartDate && p.vehicleStatus === 'active')
           .map(p => p._id);
         if (idsToFetch.length) {
           const results = await Promise.allSettled(
@@ -225,7 +235,7 @@ export default function DriverMyPlans() {
                 )}
 
                 {/* Daily Rent Summary */}
-                {plan.rentStartDate && (
+                {plan.rentStartDate && plan.vehicleStatus === 'active' && (
                   <div className="mt-4 bg-white/10 rounded-lg p-4 border border-white/20">
                     <h4 className="text-white font-semibold mb-2">Daily Rent Summary</h4>
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-3 text-white">

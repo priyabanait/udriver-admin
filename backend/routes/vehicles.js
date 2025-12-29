@@ -524,8 +524,16 @@ router.put('/:id', async (req, res) => {
     // Get assigned driver information for updating plan selections
     const assignedDriver = existing.assignedDriver || updates.assignedDriver;
     
+    // Track how many driver plan selections we update as part of vehicle changes
+    let selectionsUpdated = 0;
+    
     // Check if driver assignment is new (driver wasn't assigned before but is now)
     const isNewDriverAssignment = !existing.assignedDriver && updates.assignedDriver;
+    
+    // Store driver signup ID for notification after vehicle update
+    let assignedDriverSignupId = null;
+    let assignedDriverName = null;
+    let assignedVehicleInfo = null;
     
     // If a driver is being assigned for the first time
     if (isNewDriverAssignment) {
@@ -537,11 +545,27 @@ router.put('/:id', async (req, res) => {
         // Find driver by assigned driver field (could be username, mobile, or ID)
         let driverMobiles = [];
         let driverUsernames = [];
+        let driverSignupIds = []; // Declare outside if block for use later
         
         if (updates.assignedDriver) {
+          // If assignedDriver is an ObjectId (Driver._id), try to resolve the Driver first
+          try {
+            const mongoose = await import('mongoose');
+            if (mongoose.default.Types.ObjectId.isValid(updates.assignedDriver)) {
+              const byId = await Driver.findById(updates.assignedDriver).lean();
+              if (byId) {
+                if (byId.mobile) driverMobiles.push(byId.mobile);
+                if (byId.phone) driverMobiles.push(byId.phone);
+                if (byId.username) driverUsernames.push(byId.username);
+              }
+            }
+          } catch (err) {
+            console.warn('Assigned driver id lookup failed:', err.message);
+          }
+
+          // Also treat assignedDriver as username/mobile/phone and try finding Driver by those fields
           driverUsernames.push(updates.assignedDriver);
           
-          // Try to find driver in Driver collection
           const driver = await Driver.findOne({
             $or: [
               { username: updates.assignedDriver },
@@ -557,44 +581,148 @@ router.put('/:id', async (req, res) => {
           }
           
           // Also check DriverSignup collection
-          const driverSignup = await DriverSignup.findOne({
+          let driverSignup = await DriverSignup.findOne({
             $or: [
               { username: updates.assignedDriver },
               { mobile: updates.assignedDriver }
             ]
           }).lean();
           
+          // If assignedDriver is an ObjectId, also try to find by _id directly
+          if (!driverSignup) {
+            try {
+              const mongoose = await import('mongoose');
+              if (mongoose.default.Types.ObjectId.isValid(updates.assignedDriver)) {
+                driverSignup = await DriverSignup.findById(updates.assignedDriver).lean();
+              }
+            } catch (err) {
+              console.warn('Failed to find driverSignup by ObjectId:', err.message);
+            }
+          }
+          
+          // Store driver signup ID and name for notification
+          if (driverSignup) {
+            assignedDriverSignupId = driverSignup._id;
+            assignedDriverName = driverSignup.username || driverSignup.mobile || 'Driver';
+          }
+          
+          // Collect signup identifiers (for matching by driverSignupId in selections)
           if (driverSignup) {
             if (driverSignup.mobile) driverMobiles.push(driverSignup.mobile);
             if (driverSignup.username) driverUsernames.push(driverSignup.username);
+            if (driverSignup._id) driverSignupIds.push(driverSignup._id);
+          }
+          
+          // Also try to get driver name from Driver collection if not found in signup
+          if (!assignedDriverName && driver) {
+            assignedDriverName = driver.name || driver.username || driver.mobile || 'Driver';
+          }
+          
+          // Store vehicle info for notification
+          assignedVehicleInfo = {
+            vehicleId: vehicleId,
+            registrationNumber: existing.registrationNumber || updates.registrationNumber || '',
+            model: existing.model || updates.model || '',
+            brand: existing.brand || updates.brand || ''
+          };
+          // If assignedDriver looks like an ObjectId string, also include that as candidate signup id (string and ObjectId)
+          try {
+            const mongoose = await import('mongoose');
+            if (mongoose.default.Types.ObjectId.isValid(updates.assignedDriver)) {
+              driverSignupIds.push(new mongoose.default.Types.ObjectId(updates.assignedDriver));
+            }
+          } catch (err) {
+            console.warn('Failed to validate assignedDriver as ObjectId (collecting signup ids)', err.message);
           }
         }
         
         // Update plan selections for this driver - set vehicleId and rentStartDate
         const updateQuery = {
           $or: [],
-          status: { $ne: 'completed' }
+          status: { $ne: 'completed' },
+          rentStartDate: null // only set start date if not already set
         };
         
+        // Add matches found via lookups
         if (driverMobiles.length > 0) {
           updateQuery.$or.push({ driverMobile: { $in: driverMobiles } });
         }
         if (driverUsernames.length > 0) {
           updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
         }
-        
-        if (updateQuery.$or.length > 0) {
-          const result = await DriverPlanSelection.updateMany(
-            updateQuery,
-            { 
-              $set: { 
-                vehicleId: vehicleId,
-                rentStartDate: new Date() // Start rent counting from driver assignment
-              } 
+        // Also add direct matches in case assignedDriver is itself a mobile or username
+        if (updates.assignedDriver) {
+          updateQuery.$or.push({ driverMobile: updates.assignedDriver });
+          updateQuery.$or.push({ driverUsername: updates.assignedDriver });
+        }
+
+        // If we have collected signup IDs, match by them as well (covers the driverSignupId field)
+        if (driverSignupIds && driverSignupIds.length > 0) {
+          updateQuery.$or.push({ driverSignupId: { $in: driverSignupIds } });
+        }
+
+        // Also add match by vehicleId (covers selections already referencing this vehicle)
+        updateQuery.$or.push({ vehicleId: vehicleId });
+
+        // Log collected signup ids for debugging
+        if (driverSignupIds && driverSignupIds.length > 0) {
+          console.log('(assignment) Collected driverSignupIds:', driverSignupIds.map(x => String(x)));
+        }
+        // Log the driver mobile/username candidates for debugging
+        console.log('(assignment) driverMobiles:', driverMobiles, 'driverUsernames:', driverUsernames);
+
+        // Debug: list matching selections before update
+        try {
+          console.log('(assignment) updateQuery:', JSON.stringify(updateQuery));
+          const matchedBefore = await DriverPlanSelection.find(updateQuery).lean();
+          console.log(`(assignment) Found ${matchedBefore.length} matching selections before update. Examples:`, matchedBefore.slice(0,5).map(m => ({_id: m._id, driverMobile: m.driverMobile, driverUsername: m.driverUsername, vehicleId: m.vehicleId, rentStartDate: m.rentStartDate})));
+          if (matchedBefore.length === 0 && updates.assignedDriver) {
+            // Additional permissive lookup to help debugging only (no updates)
+            const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapeRegex(updates.assignedDriver), 'i');
+            try {
+              const fallback = await DriverPlanSelection.find({
+                $or: [
+                  { driverMobile: regex },
+                  { driverUsername: regex },
+                  { vehicleId: vehicleId }
+                ],
+                status: { $ne: 'completed' }
+              }).limit(10).lean();
+              console.log(`(assignment) Fallback found ${fallback.length} selections (regex on assignedDriver). Examples:`, fallback.map(m => ({_id: m._id, driverMobile: m.driverMobile, driverUsername: m.driverUsername, vehicleId: m.vehicleId, rentStartDate: m.rentStartDate})));
+            } catch (err) {
+              console.error('Error running fallback debug query (assignment):', err.message);
             }
-          );
-          
-          console.log(`Updated ${result.modifiedCount} driver plan selections with vehicleId and rentStartDate for newly assigned driver on vehicle ${vehicleId}`);
+          }
+        } catch (err) {
+          console.error('Error listing matching selections before update (assignment):', err.message);
+        }
+
+        const result = await DriverPlanSelection.updateMany(
+          updateQuery,
+          { 
+            $set: { 
+              vehicleId: vehicleId,
+              rentStartDate: new Date() // Start rent counting from driver assignment
+            } 
+          }
+        );
+        selectionsUpdated += (result.modifiedCount || 0);
+        console.log(`Updated ${result.modifiedCount} driver plan selections with vehicleId and rentStartDate for newly assigned driver on vehicle ${vehicleId}`);
+
+        // Auto-activate vehicle and start rent periods when assigning a driver
+        // (This ensures UI shows rent counting started immediately after assignment.)
+        try {
+          if (existing.status !== 'active') {
+            updates.status = 'active';
+            updates.rentStartDate = new Date();
+            updates.rentPausedDate = null;
+            existing.rentPeriods = [{ start: new Date(), end: null }];
+            updates.rentPeriods = existing.rentPeriods;
+            console.log(`Auto-activated vehicle ${vehicleId} and started rent due to driver assignment.`);
+          }
+        } catch (err) {
+          console.warn('Failed to auto-activate vehicle after assignment:', err.message);
         }
       } catch (err) {
         console.error('Error updating driver plan selections for new driver assignment:', err);
@@ -618,11 +746,28 @@ router.put('/:id', async (req, res) => {
         // Find driver by assigned driver field (could be username, mobile, or ID)
         let driverMobiles = [];
         let driverUsernames = [];
+        // Always declare driverSignupIds so subsequent logic can reference it even when assignedDriver is not provided
+        let driverSignupIds = [];
         
         if (assignedDriver) {
+          // If assignedDriver is an ObjectId (Driver._id), try to resolve the Driver first
+          try {
+            const mongoose = await import('mongoose');
+            if (mongoose.default.Types.ObjectId.isValid(assignedDriver)) {
+              const byId = await Driver.findById(assignedDriver).lean();
+              if (byId) {
+                if (byId.mobile) driverMobiles.push(byId.mobile);
+                if (byId.phone) driverMobiles.push(byId.phone);
+                if (byId.username) driverUsernames.push(byId.username);
+              }
+            }
+          } catch (err) {
+            console.warn('Assigned driver id lookup failed (activation):', err.message);
+          }
+
           driverUsernames.push(assignedDriver);
           
-          // Try to find driver in Driver collection
+          // Try to find driver in Driver collection by username/mobile/phone
           const driver = await Driver.findOne({
             $or: [
               { username: assignedDriver },
@@ -637,7 +782,7 @@ router.put('/:id', async (req, res) => {
             if (driver.username) driverUsernames.push(driver.username);
           }
           
-          // Also check DriverSignup collection
+          // Also check DriverSignup collection by username/mobile and collect signup ids
           const driverSignup = await DriverSignup.findOne({
             $or: [
               { username: assignedDriver },
@@ -645,13 +790,26 @@ router.put('/:id', async (req, res) => {
             ]
           }).lean();
           
+          // Collect signup identifiers (append to outer driverSignupIds)
           if (driverSignup) {
             if (driverSignup.mobile) driverMobiles.push(driverSignup.mobile);
             if (driverSignup.username) driverUsernames.push(driverSignup.username);
+            if (driverSignup._id) driverSignupIds.push(driverSignup._id);
+          }
+
+          // If assignedDriver looks like an ObjectId string, also include that as candidate signup id (covers rare cases where the assigned value is a signup id)
+          try {
+            const mongoose = await import('mongoose');
+            if (mongoose.default.Types.ObjectId.isValid(assignedDriver)) {
+              driverSignupIds.push(new mongoose.default.Types.ObjectId(assignedDriver));
+            }
+          } catch (err) {
+            console.warn('Failed to validate assignedDriver as ObjectId (activation signup ids)', err.message);
           }
         }
         
         // Update plan selections by vehicleId OR by driver mobile/username
+        // NOTE: remove the rentStartDate: null check so activation will overwrite any previous start date
         const updateQuery = {
           $or: [
             { vehicleId: vehicleId }
@@ -665,7 +823,48 @@ router.put('/:id', async (req, res) => {
         if (driverUsernames.length > 0) {
           updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
         }
-        
+        // Also add direct matches in case assignedDriver is a raw mobile/username
+        if (assignedDriver) {
+          updateQuery.$or.push({ driverMobile: assignedDriver });
+          updateQuery.$or.push({ driverUsername: assignedDriver });
+        }
+
+        // If we have collected signup IDs, use them too
+        if (driverSignupIds && driverSignupIds.length > 0) {
+          updateQuery.$or.push({ driverSignupId: { $in: driverSignupIds } });
+          console.log('(activation) Collected driverSignupIds:', driverSignupIds.map(x => String(x)));
+        }
+
+        // Log the driver mobile/username candidates for debugging
+        console.log('(activation) driverMobiles:', driverMobiles, 'driverUsernames:', driverUsernames);
+
+        // Debug: list matching selections before status->active update
+        try {
+          console.log('(activation) updateQuery:', JSON.stringify(updateQuery), 'assignedDriver:', assignedDriver);
+          const matchedBefore = await DriverPlanSelection.find(updateQuery).lean();
+          console.log(`(activation) Found ${matchedBefore.length} matching selections before update. Examples:`, matchedBefore.slice(0,5).map(m => ({_id: m._id, driverMobile: m.driverMobile, driverUsername: m.driverUsername, vehicleId: m.vehicleId, rentStartDate: m.rentStartDate})));
+          if (matchedBefore.length === 0 && assignedDriver) {
+            // Additional permissive lookup to help debugging only (no updates)
+            const escapeRegex = (s) => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+            const regex = new RegExp(escapeRegex(assignedDriver), 'i');
+            try {
+              const fallback = await DriverPlanSelection.find({
+                $or: [
+                  { driverMobile: regex },
+                  { driverUsername: regex },
+                  { vehicleId: vehicleId }
+                ],
+                status: { $ne: 'completed' }
+              }).limit(10).lean();
+              console.log(`(activation) Fallback found ${fallback.length} selections (regex on assignedDriver). Examples:`, fallback.map(m => ({_id: m._id, driverMobile: m.driverMobile, driverUsername: m.driverUsername, vehicleId: m.vehicleId, rentStartDate: m.rentStartDate})));
+            } catch (err) {
+              console.error('Error running fallback debug query (activation):', err.message);
+            }
+          }
+        } catch (err) {
+          console.error('Error listing matching selections before update (activation):', err.message);
+        }
+
         const result = await DriverPlanSelection.updateMany(
           updateQuery,
           { 
@@ -677,6 +876,7 @@ router.put('/:id', async (req, res) => {
             } 
           }
         );
+        selectionsUpdated += (result.modifiedCount || 0);
         
         console.log(`Updated ${result.modifiedCount} driver plan selections to active for vehicle ${vehicleId}`);
       } catch (err) {
@@ -700,9 +900,24 @@ router.put('/:id', async (req, res) => {
         let driverUsernames = [];
         
         if (assignedDriver) {
+          // If assignedDriver is an ObjectId (Driver._id), try to resolve the Driver first
+          try {
+            const mongoose = await import('mongoose');
+            if (mongoose.default.Types.ObjectId.isValid(assignedDriver)) {
+              const byId = await Driver.findById(assignedDriver).lean();
+              if (byId) {
+                if (byId.mobile) driverMobiles.push(byId.mobile);
+                if (byId.phone) driverMobiles.push(byId.phone);
+                if (byId.username) driverUsernames.push(byId.username);
+              }
+            }
+          } catch (err) {
+            console.warn('Assigned driver id lookup failed (inactivation):', err.message);
+          }
+
           driverUsernames.push(assignedDriver);
           
-          // Try to find driver in Driver collection
+          // Try to find driver in Driver collection by username/mobile/phone
           const driver = await Driver.findOne({
             $or: [
               { username: assignedDriver },
@@ -717,7 +932,7 @@ router.put('/:id', async (req, res) => {
             if (driver.username) driverUsernames.push(driver.username);
           }
           
-          // Also check DriverSignup collection
+          // Also check DriverSignup collection by username/mobile
           const driverSignup = await DriverSignup.findOne({
             $or: [
               { username: assignedDriver },
@@ -752,11 +967,13 @@ router.put('/:id', async (req, res) => {
             $set: { 
               status: 'inactive',
               rentPausedDate: new Date(),
-              vehicleId: vehicleId // Also set vehicleId for future reference
+              vehicleId: vehicleId, // Also set vehicleId for future reference
+              rentStartDate: null // Clear rent start so rent restarts when vehicle is re-activated
             } 
           }
         );
         
+        selectionsUpdated += (result.modifiedCount || 0);
         console.log(`Updated ${result.modifiedCount} driver plan selections to inactive for vehicle ${vehicleId}`);
       } catch (err) {
         console.error('Error updating driver plan selections:', err);
@@ -805,7 +1022,33 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Vehicle not found' });
     }
 
-    res.json(vehicle);
+    // Send notification to driver if vehicle was just assigned
+    if (isNewDriverAssignment && assignedDriverSignupId) {
+      try {
+        const { createAndEmitNotification } = await import('../lib/notify.js');
+        const vehicleDetails = `${assignedVehicleInfo.carName ? assignedVehicleInfo.carName + ' ' : ''}${assignedVehicleInfo.model || ''} (${assignedVehicleInfo.registrationNumber || 'N/A'})`.trim();
+        
+        await createAndEmitNotification({
+          type: 'vehicle_assigned',
+          title: `Vehicle Assigned`,
+          message: `A vehicle has been assigned to you: ${vehicleDetails}`,
+          data: { 
+            vehicleId: assignedVehicleInfo.vehicleId,
+            registrationNumber: assignedVehicleInfo.registrationNumber,
+            model: assignedVehicleInfo.model,
+            brand: assignedVehicleInfo.brand
+          },
+          recipientType: 'driver',
+          recipientId: assignedDriverSignupId
+        });
+        console.log(`✅ Notification sent to driver ${assignedDriverSignupId} for vehicle assignment ${assignedVehicleInfo.vehicleId}`);
+      } catch (notifyErr) {
+        console.warn('Failed to send vehicle assignment notification:', notifyErr.message);
+      }
+    }
+
+    // Include selectionsUpdated so callers can know whether to refresh related plan selections
+    res.json({ vehicle, updatedSelections: selectionsUpdated });
   } catch (err) {
     console.error('Error updating vehicle:', err);
     if (err && (err.code === 11000 || err.code === '11000')) {

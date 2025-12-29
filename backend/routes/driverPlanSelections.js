@@ -683,12 +683,38 @@ router.post('/', authenticateDriver, async (req, res) => {
       calculatedRent: rent,
       calculatedCover: cover,
       calculatedTotal: totalAmount,
-      // Start daily rent accrual from today
-      rentStartDate: new Date(),
+      // Do NOT start daily rent accrual at plan selection time. rentStartDate will be set when the driver is assigned to a vehicle, when the vehicle becomes active, or via explicit confirmation.
+      rentStartDate: null,
       rentPerDay: rentPerDay
     });
 
     await selection.save();
+
+    // Emit notification: driver booked a plan
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const amount = selection.calculatedTotal || 0;
+      // Notify driver
+      await createAndEmitNotification({
+        type: 'driver_booking',
+        title: `Plan booked: ${selection.planName}`,
+        message: `You have successfully booked ${selection.planName}. Total ₹${(amount).toLocaleString('en-IN')}`,
+        data: { selectionId: selection._id, planName: selection.planName, amount },
+        recipientType: 'driver',
+        recipientId: String(selection.driverSignupId)
+      });
+      // Also create a global/admin notification so admins see new bookings
+      await createAndEmitNotification({
+        type: 'booking_admin',
+        title: `Driver booked plan: ${selection.planName}`,
+        message: `Driver ${selection.driverUsername || selection.driverMobile || 'N/A'} booked ${selection.planName} (₹${(amount).toLocaleString('en-IN')})`,
+        data: { selectionId: selection._id, driverSignupId: String(selection.driverSignupId), amount },
+        recipientType: null,
+        recipientId: null
+      });
+    } catch (err) {
+      console.warn('Notify failed (booking):', err.message);
+    }
 
     res.status(201).json({
       message: 'Plan selected successfully',
@@ -770,22 +796,39 @@ router.post('/:id/confirm-payment', async (req, res) => {
     try {
       const { createAndEmitNotification } = await import('../lib/notify.js');
       const paymentAmount = paidAmount || updatedSelection.paidAmount || 0;
+      const recipientId = String(updatedSelection.driverSignupId || '');
+      // Notify driver
       await createAndEmitNotification({
         type: 'driver_payment',
-        title: `Driver payment received: ₹${paymentAmount.toLocaleString('en-IN')}`,
-        message: `Payment of ₹${paymentAmount.toLocaleString('en-IN')} received from driver ${updatedSelection.driverUsername || updatedSelection.driverMobile || 'N/A'} via ${updatedSelection.paymentMode || 'cash'}`,
+        title: `Payment received: ₹${paymentAmount.toLocaleString('en-IN')}`,
+        message: `Payment of ₹${paymentAmount.toLocaleString('en-IN')} received from you via ${updatedSelection.paymentMode || 'cash'}`,
         data: { 
           selectionId: updatedSelection._id, 
-          driverId: updatedSelection.driverId,
+          driverSignupId: recipientId,
           amount: paymentAmount,
           paymentType: paymentType || 'rent',
           paymentMode: updatedSelection.paymentMode || 'cash'
         },
         recipientType: 'driver',
-        recipientId: updatedSelection.driverId
+        recipientId: recipientId
+      });
+      // Also notify admins globally
+      await createAndEmitNotification({
+        type: 'driver_payment_admin',
+        title: `Driver payment received: ₹${paymentAmount.toLocaleString('en-IN')}`,
+        message: `Payment of ₹${paymentAmount.toLocaleString('en-IN')} received from driver ${updatedSelection.driverUsername || updatedSelection.driverMobile || 'N/A'} via ${updatedSelection.paymentMode || 'cash'}`,
+        data: { 
+          selectionId: updatedSelection._id, 
+          driverSignupId: recipientId,
+          amount: paymentAmount,
+          paymentType: paymentType || 'rent',
+          paymentMode: updatedSelection.paymentMode || 'cash'
+        },
+        recipientType: null,
+        recipientId: null
       });
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn('Notify failed (confirm-payment):', err.message);
     }
 
     res.json({ 
@@ -882,22 +925,39 @@ router.post('/:id/online-payment', async (req, res) => {
     // Emit notification for driver payment
     try {
       const { createAndEmitNotification } = await import('../lib/notify.js');
+      const recipientId = String(selection.driverSignupId || '');
+      // Notify driver
       await createAndEmitNotification({
         type: 'driver_payment',
-        title: `Driver payment received: ₹${newPayment.toLocaleString('en-IN')}`,
-        message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from driver ${selection.driverUsername || selection.driverMobile || 'N/A'} via ${gateway || 'ZWITCH'}`,
+        title: `Payment received: ₹${newPayment.toLocaleString('en-IN')}`,
+        message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from you via ${gateway || 'ZWITCH'}`,
         data: { 
           selectionId: updatedSelection._id, 
-          driverId: selection.driverId,
+          driverSignupId: recipientId,
           amount: newPayment,
           paymentType: paymentType || 'rent',
           paymentMode: 'online'
         },
         recipientType: 'driver',
-        recipientId: selection.driverId
+        recipientId: recipientId
+      });
+      // Also notify admins globally
+      await createAndEmitNotification({
+        type: 'driver_payment_admin',
+        title: `Driver payment received: ₹${newPayment.toLocaleString('en-IN')}`,
+        message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from driver ${selection.driverUsername || selection.driverMobile || 'N/A'} via ${gateway || 'ZWITCH'}`,
+        data: { 
+          selectionId: updatedSelection._id, 
+          driverSignupId: recipientId,
+          amount: newPayment,
+          paymentType: paymentType || 'rent',
+          paymentMode: 'online'
+        },
+        recipientType: null,
+        recipientId: null
       });
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn('Notify failed (online-payment):', err.message);
     }
 
     res.json({ 

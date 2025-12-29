@@ -30,8 +30,8 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
         city: initialData.city || '',
         pincode: initialData.pincode || '',
         salary: initialData.salary || '',
-        department: initialData.department || 'Manager',
-        serviceCategory: initialData.serviceCategory || '',
+      department: initialData.department || 'Manager',
+     
         dob: initialData.dob ? initialData.dob.slice(0, 10) : '',
       });
     } else if (isOpen) {
@@ -46,7 +46,7 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
         pincode: '',
         salary: '',
         department: 'Manager',
-        serviceCategory: '',
+        
         dob: '',
       });
     }
@@ -77,7 +77,7 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
         salary: '',
       
         department: 'Manager',
-        serviceCategory: '',
+        
         dob: '',
       });
     } catch (err) {
@@ -111,12 +111,18 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
           <input name="pincode" value={form.pincode} onChange={handleChange} placeholder="Pincode" className="border p-2 rounded" />
           <input name="salary" value={form.salary} onChange={handleChange} placeholder="Salary per month" className="border p-2 rounded" />
          
-          <select name="serviceCategory" value={form.serviceCategory} onChange={handleChange} className="border p-2 rounded">
-            <option value="">Select Department</option>
-            {/* <option value="Admin">Admin</option> */}
-            <option value="Manager">Manager</option>
-            {/* <option value="Finance">Finance</option> */}
-          </select>
+          <select
+  name="department"
+  value={form.department}
+  onChange={handleChange}
+  className="border p-2 rounded"
+  required
+>
+  <option value="">Select Department</option>
+  <option value="Manager">Manager</option>
+  <option value="HR">HR</option>
+  <option value="Onboard Team">Onboard Team</option>
+</select>
           <input name="dob" value={form.dob} onChange={handleChange} placeholder="mm/dd/yyyy" type="date" className="border p-2 rounded" />
           <div className="col-span-2 flex justify-center mt-4">
             <button type="submit" className="bg-green-600 text-white px-6 py-2 rounded hover:bg-green-700" disabled={submitting}>

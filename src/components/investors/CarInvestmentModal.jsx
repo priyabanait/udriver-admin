@@ -118,7 +118,7 @@ export default function CarInvestmentModal({ isOpen, onClose, onSuccess, carInve
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40 overflow-y-auto">
       <div className="bg-white rounded-lg shadow-lg p-6 w-full max-w-2xl">
         <h2 className="text-2xl font-bold mb-4">{carInvestment ? 'Edit Car Investment' : 'Add New Car Investment'}</h2>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -126,38 +126,14 @@ export default function CarInvestmentModal({ isOpen, onClose, onSuccess, carInve
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Car Name *</label>
               <input name="carname" value={form.carname} onChange={handleChange} required placeholder="e.g., Wagon R" className="input w-full" />
+           
+             
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Car Owner Name</label>
-              <input name="carOwnerName" value={form.carOwnerName} onChange={handleChange} placeholder="Owner's Name" className="input w-full" />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">Investor</label>
-              <select 
-                name="investorId" 
-                value={form.investorId} 
-                onChange={(e) => {
-                  const investor = investors.find(inv => inv.id === e.target.value || inv._id === e.target.value);
-                  setForm({ 
-                    ...form, 
-                    investorId: e.target.value,
-                    investorMobile: investor?.phone || ''
-                  });
-                }} 
-                className="input w-full"
-              >
-                <option value="">Select Investor</option>
-                {investors.map(inv => (
-                  <option key={inv.id || inv._id} value={inv.id || inv._id}>
-                    {inv.investorName} - {inv.phone}
-                  </option>
-                ))}
-              </select>
-            </div>
-            <div>
+           
+            {/* <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Investor Mobile</label>
               <input name="investorMobile" value={form.investorMobile} onChange={handleChange} placeholder="Mobile Number" className="input w-full" />
-            </div>
+            </div> */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">Car Value (₹) *</label>
               <input name="carvalue" value={form.carvalue} onChange={handleChange} required type="number" placeholder="e.g., 500000" className="input w-full" />

@@ -18,11 +18,15 @@ import {
   BarChart3,
   Wallet,
   MapPin,
+  Clock,
+  ClipboardList,
   ChevronDown,
+  CheckCircle,
   ChevronRight,
   Receipt,
   Building,
-  Target
+  Target,
+  Bell 
 } from 'lucide-react';
 import { cn } from '../../utils';
 
@@ -36,15 +40,22 @@ const navigation = [
   {
     name: 'Attendence Management',
     href: '/attendence',
-    icon: LayoutDashboard,
-    permission: PERMISSIONS.DASHBOARD_VIEW
+    icon: Clock,
+    permission: PERMISSIONS.ATTENDANCE_VIEW
   },
+  
   {
-    name: 'Manage Manager',
-    href: '/manager',
-    icon: LayoutDashboard,
-    permission: PERMISSIONS.DASHBOARD_VIEW
+    name: 'Manage Staff',
+    href: '/staff',
+    icon: ClipboardList,
+    permission: PERMISSIONS.HR_VIEW
   },
+  // {
+  //   name: 'Staff Permissions',
+  //   href: '/admin/roles',
+  //   icon: Shield,
+  //   permission: PERMISSIONS.ADMIN_ROLES
+  // },
   {
     name: 'Driver Management',
     icon: Users,
@@ -227,6 +238,12 @@ const navigation = [
     ]
   },
   {
+    name: 'Notification Management',
+    href: '/notification',
+    icon: Bell ,
+    permission: PERMISSIONS.DASHBOARD_VIEW
+  },
+  {
     name: 'Expense Management',
     icon: Receipt,
     permission: PERMISSIONS.EXPENSES_VIEW,
@@ -285,11 +302,11 @@ const navigation = [
       //   href: '/admin/users',
       //   permission: PERMISSIONS.ADMIN_VIEW
       // },
-      // { 
-      //   name: 'Roles & Permissions', 
-      //   href: '/admin/roles',
-      //   permission: PERMISSIONS.ADMIN_ROLES
-      // },
+      { 
+        name: 'Roles & Permissions', 
+        href: '/admin/roles',
+        permission: PERMISSIONS.ADMIN_ROLES
+      },
       {
         name: 'Signup Credentials',
         href: '/admin/signup-credentials',
@@ -355,8 +372,8 @@ const navigation = [
   // }
 ];
 
-export default function Sidebar({ collapsed, onToggle }) {
-  const { user, hasPermission } = useAuth();
+export default function Sidebar({ collapsed }) {
+  const { user, isSuperAdmin, hasPermission } = useAuth();
   const location = useLocation();
   const [expandedItems, setExpandedItems] = useState(new Set());
   const navigate = useNavigate();
@@ -378,14 +395,50 @@ export default function Sidebar({ collapsed, onToggle }) {
     return children?.some(child => isActive(child.href));
   };
 
-  // If user is manager, restrict add/delete actions
-  const isManager = user?.role && user.role.toLowerCase().includes('manager');
-  const restrictedActions = [
-    'create',
-    'delete'
-  ];
+  // Determine super/admin flags early
+  const isSuper = isSuperAdmin();
+  const isAdmin = isSuper || (user?.role === 'super_admin') || hasPermission(PERMISSIONS.ADMIN_VIEW);
+
+  // Determine HR and Onboard Team by role or department only (do not rely on permissions so admins are not misclassified)
+  const isHR = (
+    ((user?.role && user.role.toLowerCase().includes('hr')) ||
+    (user?.department && user.department.toLowerCase().includes('hr')))
+    && !isSuper
+  );
+
+  const isOnboardTeam = (
+    ((user?.role && user.role.toLowerCase().includes('onboard')) ||
+    (user?.department && user.department.toLowerCase().includes('onboard')))
+    && !isSuper
+  );
+
+  // If user is manager, restrict certain actions, but do not treat HR or Onboard team or super admins as a manager
+  const isManager = user?.role && user.role.toLowerCase().includes('manager') && !isHR && !isOnboardTeam && !isSuper;
+ 
   const filteredNavigation = navigation.filter((item) => {
-    if (isManager && item.name === 'Manage Manager') return false;
+    // Hide items that require a permission which the user doesn't have
+    if (item.permission) {
+      const allowed = isSuper || (user?.role === 'super_admin') || hasPermission(item.permission);
+      if (!allowed) return false;
+    }
+
+    // Hide "Manage Manager" for managers
+    if (isManager && item.name === 'Manage Staff') return false;
+
+    // Onboard team: only show Driver Management
+    if (isOnboardTeam) {
+      return item.name === 'Driver Management';
+    }
+
+    if (isHR) {
+      return (
+        item.name === 'Attendence Management' ||
+        item.name === 'Manage Staff'
+      );
+    }
+
+    // Hide "Attendence Management" for non-admins (managers and other staff)
+    if (!isAdmin && item.name === 'Attendence Management') return false;
     return true;
   });
 
@@ -449,7 +502,9 @@ export default function Sidebar({ collapsed, onToggle }) {
                   
                   {!collapsed && isExpanded && (
                     <div className="ml-8 mt-1 space-y-1">
-                      {item.children.map((child) => (
+                      {item.children
+                        .filter(child => !child.permission || isSuper || (user?.role === 'super_admin') || hasPermission(child.permission))
+                        .map((child) => (
                         <NavLink
                           key={child.href}
                           to={child.href}
@@ -493,7 +548,9 @@ export default function Sidebar({ collapsed, onToggle }) {
             </div>
             <div className="ml-3">
               <p className="text-sm font-medium text-gray-700">{user?.name}</p>
-              <p className="text-xs text-gray-500 capitalize">{user?.role === 'fleet_manager' ? 'Manager' : user?.role?.replace('_', ' ')}</p>
+              <p className="text-xs text-gray-500 capitalize">
+                {user?.department ? user.department : (user?.role === 'fleet_manager' ? 'Manager' : (user?.role ? user.role.replace('_', ' ') : ''))}
+              </p>
             </div>
           </div>
         </div>

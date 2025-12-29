@@ -2,6 +2,7 @@
 import React, { useState, useEffect } from 'react';
 import AddManagerModal from '../../components/admin/AddManagerModal';
 import { FiTrash2, FiEdit2, FiEye } from 'react-icons/fi';
+import { useAuth } from '../../contexts/AuthContext';
 
 const ManagerPage = () => {
 
@@ -12,6 +13,20 @@ const ManagerPage = () => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [selectedManager, setSelectedManager] = useState(null);
+
+  const { user } = useAuth();
+  const getAuthHeaders = () => {
+    const token = user?.token || (() => {
+      try {
+        const saved = localStorage.getItem('udriver_user');
+        if (!saved) return null;
+        const parsed = JSON.parse(saved);
+        return parsed?.token || null;
+      } catch (err) { return null; }
+    })();
+
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
 
   // Fetch managers from backend
   useEffect(() => {
@@ -39,11 +54,11 @@ const ManagerPage = () => {
       const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const res = await fetch(`${API_BASE}/api/managers`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(managerData),
       });
       const data = await res.json();
-      if (!res.ok) throw new Error(data.error || 'Failed to add manager');
+      if (!res.ok) throw new Error(data.error || 'Failed to add staff');
       setManagers((prev) => [...prev, data.manager]);
       setModalOpen(false);
     } catch (err) {
@@ -61,6 +76,7 @@ const ManagerPage = () => {
       const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const res = await fetch(`${API_BASE}/api/managers/${id}`, {
         method: 'DELETE',
+        headers: { ...getAuthHeaders() },
       });
       const data = await res.json();
       if (!res.ok) throw new Error(data.error || 'Failed to delete manager');
@@ -89,7 +105,7 @@ const ManagerPage = () => {
       const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
       const res = await fetch(`${API_BASE}/api/managers/${selectedManager._id}`, {
         method: 'PUT',
-        headers: { 'Content-Type': 'application/json' },
+        headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
         body: JSON.stringify(managerData),
       });
       const data = await res.json();
@@ -107,12 +123,12 @@ const ManagerPage = () => {
   return (
     <div className="p-8">
       <div className="flex justify-between items-center mb-6">
-        <h1 className="text-2xl font-bold">Manage Managers</h1>
+        <h1 className="text-2xl font-bold">Manage Staff</h1>
         <button
           className="bg-primary-600 text-white px-4 py-2 rounded hover:bg-primary-700"
           onClick={() => setModalOpen(true)}
         >
-          Add Manager
+          + Add
         </button>
       </div>
       <AddManagerModal
@@ -121,7 +137,7 @@ const ManagerPage = () => {
         onAddManager={handleAddManager}
       />
       <div className="bg-white rounded shadow p-4">
-        <h2 className="text-lg font-semibold mb-4">Managers List</h2>
+        <h2 className="text-lg font-semibold mb-4">Staff Members List</h2>
         {loading && <p className="text-gray-500">Loading...</p>}
         {error && <p className="text-red-500">{error}</p>}
         {!loading && !error && managers.length === 0 && (

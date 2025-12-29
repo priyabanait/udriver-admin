@@ -1,6 +1,6 @@
 import { createContext, useContext, useState, useEffect } from 'react';
 import toast from 'react-hot-toast';
-import { ROLES, hasPermission as checkPermission, hasAnyPermission, hasAllPermissions } from '../utils/permissions';
+import { ROLES, PERMISSIONS, hasPermission as checkPermission, hasAnyPermission, hasAllPermissions } from '../utils/permissions';
 
 const AuthContext = createContext(null);
 
@@ -19,7 +19,7 @@ const MOCK_USERS = [
     email: 'admin@udrive.com',
     password: 'admin123',
     name: 'Admin',
-   
+    role: 'super_admin',
     permissions: ROLES.SUPER_ADMIN.permissions,
     avatar: null,
     phone: '+91 98765 43210',
@@ -123,7 +123,9 @@ export function AuthProvider({ children }) {
     const savedUser = localStorage.getItem('udriver_user');
     if (savedUser) {
       try {
-        setUser(JSON.parse(savedUser));
+        const parsed = JSON.parse(savedUser);
+        setUser(parsed);
+        if (parsed.token) localStorage.setItem('token', parsed.token);
       } catch (error) {
         localStorage.removeItem('udriver_user');
       }
@@ -142,14 +144,18 @@ export function AuthProvider({ children }) {
         const userWithoutPassword = { ...foundUser };
         delete userWithoutPassword.password;
         userWithoutPassword.lastLogin = new Date().toISOString();
+        // Provide a dev-only mock token so dev auth-protected endpoints can be exercised
+        userWithoutPassword.token = 'mock';
         setUser(userWithoutPassword);
         localStorage.setItem('udriver_user', JSON.stringify(userWithoutPassword));
+        // Also mirror token to the legacy 'token' key used by some components
+        localStorage.setItem('token', 'mock');
         toast.success(`Welcome back, ${userWithoutPassword.name}!`);
         setLoading(false);
         return { success: true };
       }
       // If not a mock user, try backend manager login
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const response = await fetch(`${API_BASE}/api/managers/login`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -191,9 +197,11 @@ export function AuthProvider({ children }) {
       userWithoutPassword.lastLogin = new Date().toISOString();
       setUser(userWithoutPassword);
       localStorage.setItem('udriver_user', JSON.stringify(userWithoutPassword));
+      // Persist token separately for code that reads localStorage.getItem('token')
+      if (userWithoutPassword.token) localStorage.setItem('token', userWithoutPassword.token);
       toast.success(`Welcome back, ${userWithoutPassword.name}!`);
       setLoading(false);
-      return { success: true };
+      return { success: true }; 
     } catch (error) {
       setLoading(false);
       toast.error('Login failed. Please try again.');
@@ -201,9 +209,26 @@ export function AuthProvider({ children }) {
     }
   };
 
-  const logout = () => {
+  const logout = async () => {
+    // Track logout time for managers
+    const currentUser = user || JSON.parse(localStorage.getItem('udriver_user') || 'null');
+    if (currentUser && currentUser.role === 'fleet_manager' && currentUser.id) {
+      try {
+        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        await fetch(`${API_BASE}/api/managers/logout`, {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ managerId: currentUser.id })
+        });
+      } catch (err) {
+        // Silently fail - logout should still proceed
+        console.warn('Failed to track logout time:', err);
+      }
+    }
+    
     setUser(null);
     localStorage.removeItem('udriver_user');
+    localStorage.removeItem('token');
     toast.success('Logged out successfully');
   };
 
@@ -249,7 +274,25 @@ export function AuthProvider({ children }) {
   };
 
   const isSuperAdmin = () => {
-    return user?.role === 'super_admin';
+    // Check role first
+    if (user?.role === 'super_admin') return true;
+    // Fallback: check if user has all admin permissions (super admin permissions)
+    if (user?.permissions && Array.isArray(user.permissions)) {
+      const adminPermissions = [
+        PERMISSIONS.ADMIN_VIEW,
+        PERMISSIONS.ADMIN_CREATE,
+        PERMISSIONS.ADMIN_EDIT,
+        PERMISSIONS.ADMIN_DELETE
+      ];
+      // Check if user has all admin permissions (likely a super admin)
+      const hasAllAdminPerms = adminPermissions.every(perm => 
+        user.permissions.includes(perm)
+      );
+      // Also check if user has all permissions (super admin has all permissions)
+      const hasAllPermissions = user.permissions.length === Object.values(PERMISSIONS).length;
+      return hasAllAdminPerms || hasAllPermissions;
+    }
+    return false;
   };
 
   const getUserRole = () => {
@@ -265,6 +308,7 @@ export function AuthProvider({ children }) {
 
   const value = {
     user,
+    token: user?.token,
     login,
     logout,
     forgotPassword,

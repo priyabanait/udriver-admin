@@ -22,3 +22,5 @@ dist-ssr
 *.njsproj
 *.sln
 *.sw?
+# Firebase admin key
+backend/udrive-fba78-firebase-adminsdk-fbsvc-eb39dc3bcf.json
