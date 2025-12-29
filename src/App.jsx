@@ -42,7 +42,7 @@ import InvesterDetails from './components/investors/InvesterDetails.jsx';
 import Profile from './pages/settings/Profile';
 import StaffAttendence from './pages/drivers/StaffAttendence.jsx';
 import PrivacyPolicy from './pages/drivers/Privacypolicy.jsx';
-import Notification from './components/notification/notification.jsx';
+import Notification from './components/notification/Notification.jsx';
 
 
 // Error Boundary Component
