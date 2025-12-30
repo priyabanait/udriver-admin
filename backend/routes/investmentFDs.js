@@ -138,13 +138,39 @@ router.post('/', async (req, res) => {
       }
     }
 
+    // Normalize paymentMode input (if provided) to match schema enum
+    let normalizedPaymentMode = undefined;
+    if (paymentMode !== undefined && paymentMode !== null && String(paymentMode).trim() !== '') {
+      const allowedPM = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
+      const pmMatch = allowedPM.find(a => a.toLowerCase() === String(paymentMode).trim().toLowerCase());
+      if (!pmMatch) {
+        return res.status(400).json({ error: 'Invalid paymentMode' });
+      }
+      normalizedPaymentMode = pmMatch;
+    }
+
+    // Normalize paymentStatus input (accept 'completed' as synonym for 'paid')
+    let normalizedPaymentStatus = undefined;
+    if (paymentStatus !== undefined && paymentStatus !== null && String(paymentStatus).trim() !== '') {
+      let _ps = String(paymentStatus).trim().toLowerCase();
+      if (_ps === 'completed') _ps = 'paid';
+      const allowedPS = ['pending', 'partial', 'paid'];
+      if (!_ps || !allowedPS.includes(_ps)) {
+        return res.status(400).json({ error: 'Invalid paymentStatus' });
+      }
+      normalizedPaymentStatus = _ps;
+    }
+
     // Create new investment FD
-      // Calculate maturity amount (compound interest)
-      const principal = parseFloat(investmentAmount);
-      const rate = parseFloat(investmentRate) / 100;
-      const n = fdType === 'monthly' ? 12 : 1; // compounding frequency
-      const time = fdType === 'monthly' ? parseFloat(termMonths) / 12 : parseFloat(termYears);
-      const maturityAmount = principal * Math.pow(1 + rate / n, n * time);
+      // Calculate maturity amount using helper
+      const { computeFdMaturity } = await import('../lib/fdCalc.js');
+      const { maturityAmount } = computeFdMaturity({
+        principal: parseFloat(investmentAmount),
+        ratePercent: parseFloat(investmentRate),
+        fdType,
+        termMonths: parseInt(termMonths),
+        termYears: parseInt(termYears)
+      });
 
       const newInvestment = new InvestmentFD({
         investorId: investorId || null,
@@ -155,7 +181,7 @@ router.post('/', async (req, res) => {
         investmentDate: new Date(investmentDate),
         paymentMethod,
         investmentRate: parseFloat(investmentRate),
-        investmentAmount: principal,
+        investmentAmount: parseFloat(investmentAmount),
         planId: resolvedPlanId,
         planName: resolvedPlanName,
         fdType,
@@ -165,9 +191,9 @@ router.post('/', async (req, res) => {
         maturityDate: calculatedMaturityDate,
         notes: notes || '',
         maturityAmount,
-        ...(paymentMode && { paymentMode }),
-        paymentStatus: paymentStatus || 'pending',
-        ...(paymentStatus === 'completed' && { paymentDate: new Date() })
+        ...(normalizedPaymentMode && { paymentMode: normalizedPaymentMode }),
+        paymentStatus: normalizedPaymentStatus || 'pending',
+        ...(normalizedPaymentStatus === 'paid' && { paymentDate: new Date() })
       });
 
     const savedInvestment = await newInvestment.save();
@@ -233,19 +259,6 @@ router.put('/:id', async (req, res) => {
       return res.status(400).json({ error: 'For yearly FD, term must be between 1-10 years' });
     }
 
-    // Validate FD type if provided
-    if (fdType && !['monthly', 'yearly'].includes(fdType)) {
-      return res.status(400).json({ error: 'Invalid FD type. Must be monthly or yearly' });
-    }
-
-    // Validate term based on FD type
-    if (fdType === 'monthly' && termMonths !== undefined && (termMonths < 1 || termMonths > 12)) {
-      return res.status(400).json({ error: 'For monthly FD, term must be between 1-12 months' });
-    }
-    if (fdType === 'yearly' && termYears !== undefined && (termYears < 1 || termYears > 10)) {
-      return res.status(400).json({ error: 'For yearly FD, term must be between 1-10 years' });
-    }
-
     // Validate payment method if provided
     if (paymentMethod) {
       const validPaymentMethods = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
@@ -254,18 +267,21 @@ router.put('/:id', async (req, res) => {
       }
     }
 
-    // Validate payment mode if provided
-    if (paymentMode) {
+    // Validate payment mode if provided (case-insensitive)
+    if (paymentMode !== undefined && paymentMode !== null && String(paymentMode).trim() !== '') {
       const validPaymentModes = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
-      if (!validPaymentModes.includes(paymentMode)) {
+      const pmMatch = validPaymentModes.find(a => a.toLowerCase() === String(paymentMode).trim().toLowerCase());
+      if (!pmMatch) {
         return res.status(400).json({ error: 'Invalid payment mode' });
       }
     }
 
-    // Validate payment status if provided
-    if (paymentStatus) {
+    // Validate payment status if provided (accept 'completed' synonym)
+    if (paymentStatus !== undefined && paymentStatus !== null && String(paymentStatus).trim() !== '') {
+      let _ps = String(paymentStatus).trim().toLowerCase();
+      if (_ps === 'completed') _ps = 'paid';
       const validPaymentStatuses = ['pending', 'partial', 'paid'];
-      if (!validPaymentStatuses.includes(paymentStatus)) {
+      if (!validPaymentStatuses.includes(_ps)) {
         return res.status(400).json({ error: 'Invalid payment status' });
       }
     }
@@ -295,11 +311,15 @@ router.put('/:id', async (req, res) => {
     if (
       investmentAmount !== undefined || investmentRate !== undefined || fdType !== undefined || termMonths !== undefined || termYears !== undefined
     ) {
-      const principal = investment.investmentAmount;
-      const rate = investment.investmentRate / 100;
-      const n = investment.fdType === 'monthly' ? 12 : 1;
-      const time = investment.fdType === 'monthly' ? (investment.termMonths || 0) / 12 : (investment.termYears || 0);
-      investment.maturityAmount = principal * Math.pow(1 + rate / n, n * time);
+      const { computeFdMaturity } = await import('../lib/fdCalc.js');
+      const { maturityAmount } = computeFdMaturity({
+        principal: investment.investmentAmount,
+        ratePercent: investment.investmentRate,
+        fdType: investment.fdType,
+        termMonths: investment.termMonths,
+        termYears: investment.termYears
+      });
+      investment.maturityAmount = maturityAmount;
     }
 
     // Update plan if provided
@@ -371,7 +391,7 @@ router.post('/:id/confirm-payment', async (req, res) => {
 
     const { paymentMode } = req.body;
 
-    if (!paymentMode || !['online', 'cash'].includes(paymentMode)) {
+    if (!paymentMode) {
       console.log('Invalid payment mode:', paymentMode);
       return res.status(400).json({ error: 'Invalid payment mode. Must be online or cash' });
     }
@@ -384,12 +404,20 @@ router.post('/:id/confirm-payment', async (req, res) => {
 
     console.log('Current investment payment status:', investment.paymentStatus);
 
-    if (investment.paymentStatus === 'completed') {
+    if (investment.paymentStatus === 'paid') {
       return res.status(400).json({ error: 'Payment already completed' });
     }
 
-    investment.paymentMode = paymentMode;
-    investment.paymentStatus = 'completed';
+    // Map incoming short values (online/cash) to schema enum values
+    const mapping = { online: 'Online', cash: 'Cash' };
+    const normalized = String(paymentMode).trim().toLowerCase();
+    if (!mapping[normalized]) {
+      console.log('Invalid payment mode value (expected online or cash):', paymentMode);
+      return res.status(400).json({ error: 'Invalid payment mode. Must be online or cash' });
+    }
+
+    investment.paymentMode = mapping[normalized];
+    investment.paymentStatus = 'paid';
     investment.paymentDate = new Date();
 
     const updatedInvestment = await investment.save();

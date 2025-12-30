@@ -3,7 +3,7 @@ import { useState } from "react";
 import { Eye, EyeOff, Smartphone, User, Lock } from "lucide-react";
 
 const DriverAuth = () => {
-  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
   const [authMode, setAuthMode] = useState("login"); // 'login' or 'signup'
   const [loginType, setLoginType] = useState("password"); // 'password' or 'otp'
   const [showPassword, setShowPassword] = useState(false);

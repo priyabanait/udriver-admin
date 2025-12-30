@@ -17,14 +17,14 @@ import {
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { Badge } from '../../components/ui/Badge';
-import { formatDate, formatCurrency } from '../../utils';
+import { formatDate, formatCurrency, computeFdMaturity } from '../../utils';
 import toast from 'react-hot-toast';
 import * as XLSX from 'xlsx';
 import { PermissionGuard } from '../../components/guards/PermissionGuards';
 import { PERMISSIONS } from '../../utils/permissions';
 import { useAuth } from '../../contexts/AuthContext';
 
-const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
 const Investors = () => {
   const { hasPermission } = useAuth();
@@ -1048,14 +1048,12 @@ const Investors = () => {
                           <IndianRupee className="h-5 w-5 mr-1" />
                           {(() => {
                             const principal = parseFloat(formData.investmentAmount);
-                            const rate = parseFloat(formData.investmentRate) / 100;
-                            const n = formData.fdType === 'monthly' ? 12 : 1; // compounding frequency
-                            const time = formData.fdType === 'monthly'
-                              ? parseFloat(formData.termMonths) / 12
-                              : parseFloat(formData.termYears);
-                            if (Number.isNaN(principal) || Number.isNaN(rate) || Number.isNaN(time)) return '0';
-                            const amount = principal * Math.pow(1 + rate / n, n * time);
-                            const interest = amount - principal;
+                            const rate = parseFloat(formData.investmentRate);
+                            const fdType = formData.fdType;
+                            const termMonths = formData.termMonths ? parseFloat(formData.termMonths) : undefined;
+                            const termYears = formData.termYears ? parseFloat(formData.termYears) : undefined;
+                            if (Number.isNaN(principal) || Number.isNaN(rate)) return '0';
+                            const { interest } = computeFdMaturity({ principal, ratePercent: rate, fdType, termMonths, termYears });
                             return interest.toLocaleString('en-IN', { maximumFractionDigits: 2 });
                           })()}
                         </p>
@@ -1066,22 +1064,21 @@ const Investors = () => {
                           <IndianRupee className="h-5 w-5 mr-1" />
                           {(() => {
                             const principal = parseFloat(formData.investmentAmount);
-                            const rate = parseFloat(formData.investmentRate) / 100;
-                            const n = formData.fdType === 'monthly' ? 12 : 1; // compounding frequency
-                            const time = formData.fdType === 'monthly'
-                              ? parseFloat(formData.termMonths) / 12
-                              : parseFloat(formData.termYears);
-                            if (Number.isNaN(principal) || Number.isNaN(rate) || Number.isNaN(time)) return '0';
-                            const maturity = principal * Math.pow(1 + rate / n, n * time);
-                            return maturity.toLocaleString('en-IN', { maximumFractionDigits: 2 });
+                            const rate = parseFloat(formData.investmentRate);
+                            const fdType = formData.fdType;
+                            const termMonths = formData.termMonths ? parseFloat(formData.termMonths) : undefined;
+                            const termYears = formData.termYears ? parseFloat(formData.termYears) : undefined;
+                            if (Number.isNaN(principal) || Number.isNaN(rate)) return '0';
+                            const { maturityAmount } = computeFdMaturity({ principal, ratePercent: rate, fdType, termMonths, termYears });
+                            return maturityAmount.toLocaleString('en-IN', { maximumFractionDigits: 2 });
                           })()}
                         </p>
                       </div>
                     </div>
                     <div className="mt-4 text-sm text-gray-600 bg-white rounded p-3">
-                      <p className="font-medium">Calculation: Compound Interest</p>
+                      <p className="font-medium">Calculation: {formData.fdType === 'monthly' ? 'Simple Interest (monthly)' : 'Compound Interest (yearly)'}</p>
                       <p className="text-xs mt-1">
-                        Maturity = Principal × (1 + r/n)<sup>n×t</sup>{formData.fdType === 'monthly' ? ' (monthly compounding)' : ' (yearly compounding)'}
+                        {formData.fdType === 'monthly' ? 'Maturity = Principal + (Principal × r × t) (simple interest, t in years)' : 'Maturity = Principal × (1 + r/n)\u207F (compound interest)'}
                         {formData.fdType === 'monthly' && ` | t = ${formData.termMonths} months = ${(parseFloat(formData.termMonths) / 12).toFixed(2)} years`}
                       </p>
                     </div>

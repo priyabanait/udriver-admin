@@ -233,7 +233,7 @@ export default function AdminUserDetailModal({ isOpen, onClose, user, onEdit }) 
                             if (!title) return;
                             const message = window.prompt('Message');
                             if (!message) return;
-                            const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+                            const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
                             const res = await fetch(`${API_BASE}/api/notifications`, {
                               method: 'POST',
                               headers: { 'Content-Type': 'application/json' },

@@ -9,7 +9,7 @@ export default function DriverMyPlans() {
   const [loading, setLoading] = useState(true);
   const [summaries, setSummaries] = useState({});
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
   useEffect(() => {
     // Check if driver is logged in

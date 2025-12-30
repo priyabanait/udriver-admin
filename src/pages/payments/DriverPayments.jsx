@@ -29,6 +29,12 @@ export default function DriverPayments() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [rentSummaries, setRentSummaries] = useState({});
+  // Vehicles & Plans for assignment
+  const [vehicles, setVehicles] = useState([]);
+  const [weeklyPlans, setWeeklyPlans] = useState([]);
+  const [dailyPlans, setDailyPlans] = useState([]);
+  const [assigningVehicleForSelection, setAssigningVehicleForSelection] = useState(null);
+
   // State for online payment modal
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [selectedPayment, setSelectedPayment] = useState(null);
@@ -99,7 +105,7 @@ export default function DriverPayments() {
       }));
       
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const token = localStorage.getItem('token');
         
         const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
@@ -151,7 +157,7 @@ export default function DriverPayments() {
       [selectionId]: { ...prev[selectionId], loading: true }
     }));
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('token');
       const { amount, reason } = extraInputs[selectionId];
       const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
@@ -211,7 +217,7 @@ export default function DriverPayments() {
     }));
     
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('token');
       
       const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
@@ -303,7 +309,7 @@ export default function DriverPayments() {
     const handleDelete = async (selectionId) => {
       if (!window.confirm('Are you sure you want to delete this payment record?')) return;
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
           method: 'DELETE'
         });
@@ -319,10 +325,57 @@ export default function DriverPayments() {
         toast.error(e.message || 'Failed to delete record');
       }
     };
- 
+
+    // Assign or unassign a vehicle for a driver-plan selection
+    const handleAssignVehicleToSelection = async (selectionId, vehicleId) => {
+      try {
+        if (!selectionId) return;
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const token = localStorage.getItem('token');
+
+        // If blank vehicleId, unassign
+        if (!vehicleId) {
+          setAssigningVehicleForSelection(selectionId);
+          const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
+            method: 'PATCH',
+            headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+            body: JSON.stringify({ vehicleAssigned: '' })
+          });
+          if (!res.ok) throw new Error(`Failed to unassign vehicle: ${res.status}`);
+          await loadSelections();
+          toast.success('Vehicle unassigned from selection');
+          return;
+        }
+
+        const vehicle = vehicles.find(v => (v._id === vehicleId || String(v.vehicleId) === String(vehicleId) || v.registrationNumber === vehicleId || v.vehicleNumber === vehicleId));
+        if (!vehicle) throw new Error('Selected vehicle not found');
+
+        const assignmentValue = vehicle.registrationNumber || vehicle.vehicleNumber || vehicle._id || vehicle.vehicleId;
+        setAssigningVehicleForSelection(selectionId);
+
+        const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
+          method: 'PATCH',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ vehicleAssigned: assignmentValue })
+        });
+
+        if (!res.ok) {
+          const body = await res.json().catch(() => null);
+          throw new Error(body?.message || `Failed to assign vehicle: ${res.status}`);
+        }
+
+        await loadSelections();
+        toast.success(`Assigned vehicle ${assignmentValue} to selection`);
+      } catch (err) {
+        console.error('Assign vehicle error:', err);
+        toast.error(err.message || 'Failed to assign vehicle');
+      } finally {
+        setAssigningVehicleForSelection(null);
+      }
+    };
 
   useEffect(() => {
-    const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
     // If logged-in user is a manager, use their email/ID, otherwise use selected manager filter
     const managerFilter = isManager ? (user?.email || user?.id) : (selectedManagers?.filter || '');
     
@@ -423,7 +476,7 @@ export default function DriverPayments() {
   const loadSelections = async () => {
     setLoading(true);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const res = await fetch(`${API_BASE}/api/driver-plan-selections?limit=1000`);
       if (!res.ok) throw new Error('Failed to load driver payments');
       const result = await res.json();
@@ -438,6 +491,31 @@ export default function DriverPayments() {
         grouped[key].push(s);
       });
       setSelections(Object.values(grouped));
+
+      // Fetch vehicles and plans for assignment dropdowns
+      try {
+        const [vehiclesRes, weeklyRes, dailyRes] = await Promise.all([
+          fetch(`${API_BASE}/api/vehicles?limit=1000`),
+          fetch(`${API_BASE}/api/weekly-rent-plans`),
+          fetch(`${API_BASE}/api/daily-rent-plans`)
+        ]);
+        if (vehiclesRes.ok) {
+          const vd = await vehiclesRes.json();
+          const list = vd.data || vd;
+          setVehicles(Array.isArray(list) ? list : []);
+        }
+        if (weeklyRes.ok) {
+          const wd = await weeklyRes.json();
+          setWeeklyPlans(Array.isArray(wd) ? wd : []);
+        }
+        if (dailyRes.ok) {
+          const dd = await dailyRes.json();
+          setDailyPlans(Array.isArray(dd) ? dd : []);
+        }
+      } catch (fetchErr) {
+        console.error('Failed to fetch vehicles/plans for payments page', fetchErr);
+      }
+
       // Fetch rent summaries for all transactions where rent has actually started (vehicle active)
       const idsToFetch = withPayments.filter(s => s.rentStartDate && s.vehicleStatus === 'active').map(s => s._id);
       if (idsToFetch.length > 0) {
@@ -719,7 +797,7 @@ export default function DriverPayments() {
 
   const handleStatusChange = async (selectionId, newStatus) => {
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('token');
       
       console.log('Updating status:', { selectionId, newStatus });
@@ -1161,6 +1239,43 @@ export default function DriverPayments() {
                                               )}
                                             </p>
                                           )}
+
+                                          {/* Assign Vehicle - only show KYC-verified & inactive vehicles, filter by plan vehicleType if available */}
+                                          <div className="mt-2">
+                                            <label className="block text-xs text-gray-500 mb-1">Assign Vehicle</label>
+                                            <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
+                                              <select
+                                                value={(vehicles.find(v => v.registrationNumber === s.vehicleAssigned || String(v.vehicleId) === String(s.vehicleAssigned) || v._id === s.vehicleAssigned)?._id) || ''}
+                                                onChange={(e) => handleAssignVehicleToSelection(s._id, e.target.value)}
+                                                disabled={assigningVehicleForSelection === s._id}
+                                                className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white w-full max-w-xs"
+                                              >
+                                                <option value="">No Vehicle</option>
+                                                {vehicles
+                                                  .filter(v => v.status === 'inactive' && ((v.kycStatus || '').toString().toLowerCase() === 'verified'))
+                                                  .filter(v => {
+                                                    const plan = [...weeklyPlans, ...dailyPlans].find(p => p.name === s.planName);
+                                                    if (!plan || !plan.vehicleType) return true;
+                                                    const vt = (plan.vehicleType || '').toString().toLowerCase();
+                                                    return (v.vehicleType || v.category || v.carName || v.model || '').toString().toLowerCase().includes(vt);
+                                                  })
+                                                  .map(v => (
+                                                    <option key={v._id || v.vehicleId || v.registrationNumber} value={v._id || v.vehicleId || v.registrationNumber}>
+                                                      {`${v.registrationNumber || v.vehicleNumber || v._id}${v.carName ? ` — ${v.carName}` : (v.model ? ` — ${v.model}` : '')}`}
+                                                    </option>
+                                                  ))}
+                                              </select>
+                                            </PermissionGuard>
+
+                                            {!s.vehicleAssigned && (
+                                              <div className="text-xs text-gray-500 mt-1">No Vehicle</div>
+                                            )}
+
+                                            {s.vehicleAssigned && (
+                                              <div className="text-xs text-gray-500 mt-1">Assigned: {s.vehicleAssigned}</div>
+                                            )}
+                                          </div>
+
                                           <div className="flex items-center gap-4 ">
                                                 <p className="text-xs font-semibold text-yellow-700 whitespace-nowrap">Add Adjustment :</p>
                                                 <input

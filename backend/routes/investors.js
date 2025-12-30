@@ -635,8 +635,15 @@ router.post('/fd-records/:id', async (req, res) => {
       maturityDate.setFullYear(maturityDate.getFullYear() + termYears);
     }
 
-    const termInYears = fdType === 'monthly' ? termMonths / 12 : termYears;
-    const maturityAmount = investmentAmount * Math.pow(1 + investmentRate / 100, termInYears);
+    // Use centralized FD maturity helper
+    const { computeFdMaturity } = await import('../lib/fdCalc.js');
+    const { maturityAmount } = computeFdMaturity({
+      principal: Number(investmentAmount),
+      ratePercent: Number(investmentRate),
+      fdType,
+      termMonths: Number(termMonths),
+      termYears: Number(termYears)
+    });
 
     // Create new FD record
     const newFD = new InvestmentFD({

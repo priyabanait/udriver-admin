@@ -56,7 +56,7 @@ export default function ExpenseReports() {
     (async () => {
       setLoading(true);
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const res = await fetch(`${API_BASE}/api/expenses`);
         if (!res.ok) throw new Error(`Failed to load expenses: ${res.status}`);
         const data = await res.json();
@@ -75,7 +75,7 @@ export default function ExpenseReports() {
     let mounted = true;
     (async () => {
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const res = await fetch(`${API_BASE}/api/expenses/categories`);
         if (res.ok) {
           const cats = await res.json();

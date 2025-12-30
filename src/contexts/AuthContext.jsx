@@ -33,7 +33,7 @@ const MOCK_USERS = [
     email: 'manager@udrive.com',
     password: 'manager123',
     name: 'Manager',
-   
+    role: 'fleet_manager',
     permissions: ROLES.FLEET_MANAGER.permissions,
     avatar: null,
     phone: '+91 98765 43211',
@@ -47,7 +47,7 @@ const MOCK_USERS = [
     email: 'finance@udrive.com',
     password: 'finance123',
     name: 'Finance',
-   
+    role: 'finance_admin',
     permissions: ROLES.FINANCE_ADMIN.permissions,
     avatar: null,
     phone: '+91 98765 43212',
@@ -214,7 +214,7 @@ export function AuthProvider({ children }) {
     const currentUser = user || JSON.parse(localStorage.getItem('udriver_user') || 'null');
     if (currentUser && currentUser.role === 'fleet_manager' && currentUser.id) {
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         await fetch(`${API_BASE}/api/managers/logout`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },

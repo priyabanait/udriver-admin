@@ -1,8 +1,8 @@
 import { useAuth } from '../../contexts/AuthContext';
 import SuperAdminDashboard from '../../components/dashboards/SuperAdminDashboard';
 import FleetManagerDashboard from '../../components/dashboards/FleetManagerDashboard';
-import FinanceAdminDashboard from '../../components/dashboards/FinanceAdminDashboard';
-import DefaultDashboard from '../../components/dashboards/DefaultDashboard';
+import HRDashboard from '../../components/dashboards/HRDashboard';
+import OnboardTeamDashboard from '../../components/dashboards/OnboardTeamDashboard';
 
 export default function Dashboard() {
   const { user } = useAuth();
@@ -11,17 +11,16 @@ export default function Dashboard() {
   const renderDashboard = () => {
     switch (user?.role) {
       case 'super_admin':
-        return <DefaultDashboard />;
+        return <SuperAdminDashboard />;
       case 'fleet_manager':
         return <FleetManagerDashboard />;
-      case 'finance_admin':
-        return <FinanceAdminDashboard />;
       case 'hr_manager':
+        return <HRDashboard />;
       case 'operations_manager':
       case 'support_agent':
       case 'auditor':
       default:
-        return <DefaultDashboard />;
+        return <OnboardTeamDashboard />;
     }
   };
 

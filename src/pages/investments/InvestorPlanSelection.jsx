@@ -3,10 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { IndianRupee, Calendar, TrendingUp, Shield, CheckCircle } from 'lucide-react';
 import toast from 'react-hot-toast';
 import PaymentConfirmationModal from '../../components/investors/PaymentConfirmationModal';
+import { computeFdMaturity } from '../../utils';
 
 export default function InvestorPlanSelection() {
   const navigate = useNavigate();
-  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
   const [plans, setPlans] = useState([]);
   const [loading, setLoading] = useState(false);
@@ -372,6 +373,33 @@ export default function InvestorPlanSelection() {
                   <p className="text-white/70 text-xs">Term</p>
                   <p className="text-white font-semibold">{fdType === 'monthly' ? `${termMonths} months` : `${termYears} years`}</p>
                 </div>
+              </div>
+
+              {/* Maturity preview */}
+              <div className="mt-4 bg-white/10 rounded-lg p-3">
+                <p className="text-white/70 text-xs">Estimated Maturity</p>
+                {Number(investmentAmount) > 0 && Number(investmentRate) > 0 ? (
+                  (() => {
+                    const fdResult = computeFdMaturity({
+                      principal: Number(investmentAmount),
+                      ratePercent: Number(investmentRate || 0),
+                      fdType,
+                      termMonths: fdType === 'monthly' ? Number(termMonths) : undefined,
+                      termYears: fdType === 'yearly' ? Number(termYears) : undefined
+                    });
+                    return (
+                      <div className="mt-2 flex items-center justify-between">
+                        <div>
+                          <div className="text-white font-semibold">{fdResult.maturityAmount.toLocaleString('en-IN')}</div>
+                          <div className="text-xs text-white/70">Interest: ₹{fdResult.interest.toLocaleString('en-IN')}</div>
+                        </div>
+                        <div className="text-xs text-white/70">{fdType === 'monthly' ? 'Simple Interest' : 'Compound Interest'}</div>
+                      </div>
+                    );
+                  })()
+                ) : (
+                  <div className="mt-2 text-white/70">Enter amount and rate to preview</div>
+                )}
               </div>
             </div>
 

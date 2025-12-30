@@ -14,6 +14,7 @@ import {
   CheckCircle,
   XCircle,
   Clock,
+  User,
   AlertTriangle,
   MoreHorizontal
 } from 'lucide-react';
@@ -45,6 +46,10 @@ export default function DriversList() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedViewDriver, setSelectedViewDriver] = useState(null);
   const [signupCredentials, setSignupCredentials] = useState([]);
+  const [dailyPlans, setDailyPlans] = useState([]);
+  const [assigningPlanFor, setAssigningPlanFor] = useState(null);
+  const [vehicles, setVehicles] = useState([]);
+  const [assigningVehicleFor, setAssigningVehicleFor] = useState(null);
 
   useEffect(() => {
     let mounted = true;
@@ -69,6 +74,29 @@ export default function DriversList() {
           const credResult = await credRes.json();
           const credData = credResult.data || credResult;
           if (mounted) setSignupCredentials(credData);
+        }
+
+        // Fetch daily rent plans for assigning to drivers
+        try {
+          const plansRes = await fetch(`${API_BASE}/api/daily-rent-plans`);
+          if (plansRes.ok) {
+            const plansData = await plansRes.json();
+            if (mounted) setDailyPlans(plansData);
+          }
+        } catch (planErr) {
+          console.error('Failed to load daily rent plans', planErr);
+        }
+
+        // Fetch vehicles so admins can assign vehicles to drivers
+        try {
+          const vehiclesRes = await fetch(`${API_BASE}/api/vehicles?limit=1000`);
+          if (vehiclesRes.ok) {
+            const vehiclesData = await vehiclesRes.json();
+            const list = vehiclesData.data || vehiclesData;
+            if (mounted) setVehicles(Array.isArray(list) ? list : []);
+          }
+        } catch (vErr) {
+          console.error('Failed to load vehicles', vErr);
         }
       } catch (err) {
         console.error(err);
@@ -127,10 +155,76 @@ export default function DriversList() {
     }
   };
 
+  const findAssignedVehicle = (driver) => vehicles.find(v => v.registrationNumber === driver.vehicleAssigned || String(v.vehicleId) === String(driver.vehicleAssigned) || String(v._id) === String(driver.vehicleAssigned) || v.vehicleNumber === driver.vehicleAssigned);
+
+  // State for tracking vehicle status updates in progress
+  const [changingVehicleStatusFor, setChangingVehicleStatusFor] = useState(null);
+
+  // Auth helpers for backend requests
+  const getAuthHeaders = () => {
+    const token = localStorage.getItem('udriver_token');
+    return token ? { Authorization: `Bearer ${token}` } : {};
+  };
+
+  const handleAuthRedirectIfNeeded = (res) => {
+    if (res && (res.status === 401 || res.status === 403)) {
+      localStorage.removeItem('udriver_token');
+      toast.error('Session expired. Please log in again');
+      navigate('/login');
+      return true;
+    }
+    return false;
+  };
+
+  const resolveApiVehicleId = (vehicle) => {
+    if (!vehicle) return undefined;
+    const id = vehicle.vehicleId ?? vehicle.vehicleId ?? vehicle.vehicleId;
+    if (typeof id === 'number') return id;
+    if (typeof id === 'string' && id.trim() !== '' && !Number.isNaN(Number(id))) return Number(id);
+    return undefined;
+  };
+
+  const normalizeVehicle = (v) => {
+    if (!v) return v;
+    const numericId = typeof v.vehicleId === 'number' ? v.vehicleId : (v.vehicleId ? Number(v.vehicleId) : undefined);
+    return numericId !== undefined && !Number.isNaN(numericId) ? { ...v, vehicleId: numericId } : { ...v };
+  };
+
+  const handleChangeVehicleStatus = async (vehicle, newStatus) => {
+    try {
+      const apiId = resolveApiVehicleId(vehicle);
+      if (apiId == null) { toast.error('Unable to resolve vehicle API id'); return; }
+      setChangingVehicleStatusFor(apiId);
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const res = await fetch(`${API_BASE}/api/vehicles/${apiId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type':'application/json', ...getAuthHeaders() },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) {
+        if (handleAuthRedirectIfNeeded(res)) { setChangingVehicleStatusFor(null); return; }
+        const b = await res.json().catch(()=>null);
+        throw new Error(b && b.message ? b.message : `Failed to update status: ${res.status}`);
+      }
+      const body = await res.json();
+      const updatedVehicle = normalizeVehicle(body.vehicle || body);
+      setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === apiId ? updatedVehicle : v));
+      if (body.updatedSelections && body.updatedSelections > 0) {
+        window.dispatchEvent(new CustomEvent('driverSelectionsUpdated', { detail: { count: body.updatedSelections } }));
+      }
+      toast.success('Vehicle status updated');
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Failed to update vehicle status');
+    } finally {
+      setChangingVehicleStatusFor(null);
+    }
+  };
+
   const handleCreateDriver = () => {
     setSelectedDriver(null);
     setShowDriverModal(true);
-  };
+  }; 
 
   const handleEditDriver = async (driver) => {
     try {
@@ -292,6 +386,234 @@ export default function DriversList() {
     }
   };
 
+  const handleAssignPlan = async (driverId, planId) => {
+    try {
+      if (!planId) {
+        // Unassign plan (clear currentPlan)
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const token = localStorage.getItem('udriver_token');
+        const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
+          body: JSON.stringify({ currentPlan: '', planAmount: 0 })
+        });
+        if (!res.ok) throw new Error(`Failed to unassign plan: ${res.status}`);
+        const updated = await res.json();
+        setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+        toast.success('Plan unassigned');
+        return;
+      }
+
+      const plan = dailyPlans.find(p => (p._id || p.id) === planId || String(p._id) === String(planId));
+      if (!plan) throw new Error('Selected plan not found');
+
+      const planAmount = (plan.dailyRentSlabs && plan.dailyRentSlabs[0] && (plan.dailyRentSlabs[0].rentDay || plan.dailyRentSlabs[0].rent)) ? (plan.dailyRentSlabs[0].rentDay || plan.dailyRentSlabs[0].rent) : (plan.weeklyRentSlabs && plan.weeklyRentSlabs[0] ? (plan.weeklyRentSlabs[0].weeklyRent || 0) : 0);
+
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const token = localStorage.getItem('udriver_token');
+
+      setAssigningPlanFor(driverId);
+
+      const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
+        body: JSON.stringify({ currentPlan: plan.name, planAmount })
+      });
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
+        let msg = `Failed to assign plan: ${res.status}`;
+        try { const b = await res.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+
+      const updated = await res.json();
+      setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+      toast.success(`Assigned plan "${plan.name}" to driver`);
+
+      // Create a DriverPlanSelection so plan selection works from admin UI
+      try {
+        const driverObj = driversData.find(d => d.id === driverId || String(d._id) === String(driverId));
+        const mobile = (driverObj && (driverObj.phone || driverObj.mobile || driverObj.contact)) ? (driverObj.phone || driverObj.mobile || driverObj.contact) : '';
+        if (mobile) {
+          const selectedRentSlab = (plan.dailyRentSlabs && plan.dailyRentSlabs.length > 0) ? plan.dailyRentSlabs[0] : (plan.weeklyRentSlabs && plan.weeklyRentSlabs.length > 0 ? plan.weeklyRentSlabs[0] : null);
+          const body = {
+            planName: plan.name,
+            planType: plan.dailyRentSlabs ? 'daily' : 'weekly',
+            securityDeposit: plan.securityDeposit || 0,
+            rentSlabs: plan.dailyRentSlabs || plan.weeklyRentSlabs || [],
+            selectedRentSlab: selectedRentSlab,
+            driverMobile: String(mobile).trim(),
+            driverUsername: driverObj?.username || ''
+          };
+
+          const selRes = await fetch(`${API_BASE}/api/driver-plan-selections/public`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body)
+          });
+
+          if (selRes.ok) {
+            const selData = await selRes.json();
+            console.log('Admin created selection:', selData.selection);
+            toast.success('Plan booking created for driver');
+          } else {
+            try {
+              const errBody = await selRes.json();
+              console.warn('Create selection response:', selRes.status, errBody);
+              // If selection already exists, show info
+              if (selRes.status === 400 && errBody.message) {
+                toast(() => <div>{errBody.message}</div>);
+              }
+            } catch (e) {
+              console.warn('Failed to parse selection response', e);
+            }
+          }
+        } else {
+          console.warn('Driver mobile not found - skipping plan selection creation');
+        }
+      } catch (e) {
+        console.warn('Failed to create plan selection from admin UI', e);
+      }
+    } catch (err) {
+      console.error('Assign plan error:', err);
+      toast.error(err.message || 'Failed to assign plan');
+    } finally {
+      setAssigningPlanFor(null);
+    }
+  };
+
+  // Assign or unassign vehicle for a driver
+  const handleAssignVehicle = async (driverId, vehicleId) => {
+    try {
+      if (!driverId) return;
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const token = localStorage.getItem('udriver_token');
+
+      // find driver object and previous assignment (if any)
+      const driverObj = driversData.find(d => d.id === driverId || String(d._id) === String(driverId));
+      const prevAssignment = driverObj ? driverObj.vehicleAssigned : null;
+
+      // Unassign
+      if (!vehicleId) {
+        setAssigningVehicleFor(driverId);
+        const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ vehicleAssigned: '' })
+        });
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
+          let msg = `Failed to unassign vehicle: ${res.status}`;
+          try { const b = await res.json(); if (b && b.message) msg = b.message; } catch {}
+          throw new Error(msg);
+        }
+        const updated = await res.json();
+        setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+
+        // Clear previous vehicle's assignedDriver if it exists
+        if (prevAssignment) {
+          const prevVehicle = vehicles.find(v => (v.registrationNumber === prevAssignment || String(v.vehicleId) === String(prevAssignment) || String(v._id) === String(prevAssignment) || v.vehicleNumber === prevAssignment));
+          if (prevVehicle) {
+            const prevApiId = resolveApiVehicleId(prevVehicle);
+            if (prevApiId != null) {
+              try {
+                const vr = await fetch(`${API_BASE}/api/vehicles/${prevApiId}`, {
+                  method: 'PUT',
+                  headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                  body: JSON.stringify({ assignedDriver: '' })
+                });
+                if (vr.ok) {
+                  const vb = await vr.json();
+                  const newVehicle = normalizeVehicle(vb.vehicle || vb);
+                  setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === prevApiId ? newVehicle : v));
+                }
+              } catch (e) { console.warn('Failed to clear previous vehicle assignment', e); }
+            }
+          }
+        }
+
+        toast.success('Vehicle unassigned');
+        return;
+      }
+
+      // Find vehicle record from loaded vehicles list
+      const vehicle = vehicles.find(v => (v._id === vehicleId || String(v.vehicleId) === String(vehicleId) || v.registrationNumber === vehicleId || v.vehicleNumber === vehicleId));
+      if (!vehicle) throw new Error('Selected vehicle not found');
+
+      const assignmentValue = vehicle.registrationNumber || vehicle.vehicleNumber || vehicle._id || vehicle.vehicleId;
+      setAssigningVehicleFor(driverId);
+
+      // Update driver record first
+      const drRes = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+        body: JSON.stringify({ vehicleAssigned: assignmentValue })
+      });
+
+      if (!drRes.ok) {
+        if (drRes.status === 401 || drRes.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
+        let msg = `Failed to assign vehicle: ${drRes.status}`;
+        try { const b = await drRes.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+
+      const updatedDriver = await drRes.json();
+      setDriversData(prev => prev.map(d => d.id === driverId ? updatedDriver : d));
+
+      // Now update the vehicle record to reflect the assigned driver (use driver._id when available)
+      const apiId = resolveApiVehicleId(vehicle);
+      const driverIdForVehicle = driverObj?._id || updatedDriver._id || driverId;
+      if (apiId != null) {
+        const vr = await fetch(`${API_BASE}/api/vehicles/${apiId}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ assignedDriver: driverIdForVehicle })
+        });
+        if (!vr.ok) {
+          if (vr.status === 401 || vr.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
+          let msg = `Failed to update vehicle: ${vr.status}`;
+          try { const b = await vr.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
+          throw new Error(msg);
+        }
+        const vb = await vr.json();
+        const updatedVehicle = normalizeVehicle(vb.vehicle || vb);
+        setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === apiId ? updatedVehicle : v));
+      }
+
+      // If driver had a previous vehicle assigned which is different, clear it
+      if (prevAssignment && prevAssignment !== assignmentValue) {
+        const prevVehicle = vehicles.find(v => (v.registrationNumber === prevAssignment || String(v.vehicleId) === String(prevAssignment) || String(v._id) === String(prevAssignment) || v.vehicleNumber === prevAssignment));
+        if (prevVehicle) {
+          const prevApiId = resolveApiVehicleId(prevVehicle);
+          if (prevApiId != null) {
+            try {
+              const vr2 = await fetch(`${API_BASE}/api/vehicles/${prevApiId}`, {
+                method: 'PUT',
+                headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+                body: JSON.stringify({ assignedDriver: '' })
+              });
+              if (vr2.ok) {
+                const vb2 = await vr2.json();
+                const newVehicle2 = normalizeVehicle(vb2.vehicle || vb2);
+                setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === prevApiId ? newVehicle2 : v));
+              }
+            } catch (e) { console.warn('Failed to clear previous vehicle assignment', e); }
+          }
+        }
+      }
+
+      toast.success(`Assigned vehicle ${assignmentValue} to driver`);
+      // Notify other pages (Vehicles) that an assignment changed so they can refresh
+      try { window.dispatchEvent(new CustomEvent('vehicleAssigned', { detail: { vehicleId: apiId } })); } catch (e) { /* ignore */ }
+    } catch (err) {
+      console.error('Assign vehicle error:', err);
+      toast.error(err.message || 'Failed to assign vehicle');
+    } finally {
+      setAssigningVehicleFor(null);
+    }
+  };
+
   // Permissions can be referenced directly via <PermissionGuard>, so local vars are not needed
 
   const handleExportToCSV = () => {
@@ -432,6 +754,20 @@ export default function DriversList() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-6">
+         <Card>
+                  <CardContent className="p-6">
+                    <div className="flex items-center">
+                      <div className="p-2 bg-green-100 rounded-lg">
+                        <User className="h-6 w-6 mb-2 text-green-600" />
+                      </div>
+                      <div className="ml-4">
+                        <p className="text-sm font-medium text-gray-600">Total Drivers</p>
+                        <p className="text-2xl font-bold text-gray-900">{filteredDrivers.length}</p>
+              
+                      </div>
+                    </div>
+                  </CardContent>
+                </Card>
         <Card>
           <CardContent className="p-6">
             <div className="flex items-center">
@@ -522,16 +858,17 @@ export default function DriversList() {
                 <option value="pending">Pending</option>
               </select> */}
 
-              {/* <select
+              <select
                 value={planFilter}
                 onChange={(e) => setPlanFilter(e.target.value)}
-                className="input"
+                className="border border-gray-300 rounded-md text-sm py-2 px-3 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                style={{ minWidth: '150px' }}
               >
                 <option value="all">All Plans</option>
-                <option value="Uber Rent Plan">Uber Plan</option>
-                <option value="Daily Rent Plan">Daily Collection</option>
-     
-              </select> */}
+                {dailyPlans.map(plan => (
+                  <option key={plan._id || plan.id} value={plan.name}>{plan.name}</option>
+                ))}
+              </select> 
 
               <select
                 value={kycFilter}
@@ -578,9 +915,10 @@ export default function DriversList() {
                 <TableRow>
                   <TableHead>Driver</TableHead>
                   <TableHead>Contact</TableHead>
-                  {/* <TableHead>Vehicle</TableHead> */}
-                  {/* <TableHead>Plan</TableHead> */}
+                  <TableHead>Vehicle</TableHead>
+                  <TableHead>Plan</TableHead>
                   <TableHead>KYC Status</TableHead>
+                   <TableHead>Car Status</TableHead>
                   {/* <TableHead>Status</TableHead> */}
                   {/* <TableHead>Earnings</TableHead> */}
                   {/* <TableHead>Rating</TableHead> */}
@@ -609,28 +947,89 @@ export default function DriversList() {
                         </div>
                       </div>
                     </TableCell>
-                    {/* <TableCell>
-                      {driver.vehicleAssigned ? (
-                        <div>
-                          <div className="font-medium text-gray-900">{driver.vehicleAssigned}</div>
-                          <div className="text-sm text-gray-500">Assigned</div>
-                        </div>
-                      ) : (
-                        <Badge variant="warning">Not Assigned</Badge>
-                      )}
-                    </TableCell> */}
-                    {/* <TableCell>
-                      {driver.currentPlan ? (
-                        <div>
-                          <div className="font-medium text-gray-900">{driver.currentPlan}</div>
-                          <div className="text-sm text-gray-500">{formatCurrency(driver.planAmount)}/day</div>
-                        </div>
-                      ) : (
-                        <Badge variant="warning">No Plan</Badge>
-                      )}
-                    </TableCell> */}
+
+                    <TableCell>
+                      <div>
+                        <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
+                          <select
+                            value={(vehicles.find(v => v.registrationNumber === driver.vehicleAssigned || String(v.vehicleId) === String(driver.vehicleAssigned) || String(v._id) === String(driver.vehicleAssigned) || v.vehicleNumber === driver.vehicleAssigned)?._id) || ''}
+                            onChange={(e) => handleAssignVehicle(driver.id, e.target.value)}
+                            disabled={assigningVehicleFor === driver.id}
+                            className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            style={{ minWidth: '180px' }}
+                          >
+                            <option value="">Select Vehicle</option>
+                            {vehicles.filter(v => v.status === 'inactive' && ((v.kycStatus || '').toString().toLowerCase() === 'verified')).length > 0 && (
+                              <optgroup label="KYC Verified & Inactive">
+                                {vehicles.filter(v => v.status === 'inactive' && ((v.kycStatus || '').toString().toLowerCase() === 'verified')).map(v => (
+                                  <option key={v._id || v.vehicleId || v.registrationNumber} value={v._id || v.vehicleId || v.registrationNumber}>
+                                    {`${v.registrationNumber || v.vehicleNumber || v._id}${v.carName ? ` — ${v.carName}` : (v.model ? ` — ${v.model}` : '')}`}
+                                  </option>
+                                ))}
+                              </optgroup>
+                            )}
+                          </select>
+                        </PermissionGuard>
+
+                        {!driver.vehicleAssigned && (
+                          <div className="text-sm text-gray-500 mt-1">No Vehicle</div>
+                        )}
+
+                        {driver.vehicleAssigned && (
+                          <div className="text-sm text-gray-500 mt-1">{driver.vehicleAssigned}</div>
+                        )}
+                      </div>
+                    </TableCell>
+
+                    <TableCell>
+                      <div>
+                        <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
+                          <select
+                            value={(dailyPlans.find(p => p.name === driver.currentPlan)?._id) || ''}
+                            onChange={(e) => handleAssignPlan(driver.id, e.target.value)}
+                            disabled={assigningPlanFor === driver.id}
+                            className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            style={{ minWidth: '160px' }}
+                          >
+                            <option value="">Select Plan</option>
+                            {dailyPlans.map(plan => (
+                              <option key={plan._id || plan.id} value={plan._id || plan.id}>{plan.name}</option>
+                            ))}
+                          </select>
+                        </PermissionGuard>
+
+                        {!driver.currentPlan && (
+                          <div className="text-sm text-gray-500 mt-1">No Plan</div>
+                        )}
+
+                        {driver.currentPlan && (
+                          <div className="text-sm text-gray-500 mt-1">{driver.currentPlan} • {formatCurrency(driver.planAmount)}/day</div>
+                        )}
+                      </div>
+                    </TableCell>
                     <TableCell>
                       {getKycBadge(driver.kycStatus)}
+                    </TableCell>
+                    <TableCell>
+                      {findAssignedVehicle(driver) ? (
+                        <div>
+                          <PermissionGuard permission={PERMISSIONS.VEHICLES_EDIT}>
+                            <select
+                              value={findAssignedVehicle(driver).status || 'inactive'}
+                              onChange={(e) => handleChangeVehicleStatus(findAssignedVehicle(driver), e.target.value)}
+                              disabled={changingVehicleStatusFor === resolveApiVehicleId(findAssignedVehicle(driver))}
+                              className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                              style={{ minWidth: '110px' }}
+                            >
+                              <option value="active">Active</option>
+                              <option value="pending">Pending</option>
+                              <option value="inactive">Inactive</option>
+                              <option value="suspended">Suspended</option>
+                            </select>
+                          </PermissionGuard>
+                          <div className="text-sm text-gray-500 mt-1">{findAssignedVehicle(driver).registrationNumber || findAssignedVehicle(driver).vehicleNumber || ''}</div>
+                        </div>
+                      ) : <div className="text-sm text-gray-500">No Vehicle</div>}
                     </TableCell>
                     {/* <TableCell>
                       {getStatusBadge(driver.status)}
@@ -695,12 +1094,12 @@ export default function DriversList() {
                             <option value="incomplete">Incomplete</option>
                           </select>
                         </PermissionGuard>
-
                         {/* <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
                           <select
                             value={driver.status || 'inactive'}
                             onChange={(e)=>handleChangeDriverStatus(driver.id, e.target.value)}
-                            className="input text-sm h-10 leading-6 text-center"
+                            className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                            style={{ minWidth: '110px' }}
                           >
                             <option value="active">Active</option>
                             <option value="pending">Pending</option>

@@ -4,12 +4,12 @@ import axios from 'axios';
 export default function InvestmentWalletMessages() {
   const [messages, setMessages] = useState([]);
   const [loading, setLoading] = useState(false);
-
+const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
   useEffect(() => {
     async function fetchMessages() {
       setLoading(true);
       try {
-        const res = await axios.get('https://udrive-backend-1igb.vercel.app/api/investor-wallet-message');
+        const res = await axios.get(`${API_BASE}/api/investor-wallet-message`);
         setMessages(res.data);
       } catch (err) {
         setMessages([]);

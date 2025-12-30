@@ -629,7 +629,98 @@ router.get('/:id', async (req, res) => {
     res.status(500).json({ message: 'Failed to load plan selection' });
   }
 });
+// Create new plan selection (Public - mobile only)
+router.post('/public', async (req, res) => {
+  try {
+    const { planName, planType, securityDeposit, rentSlabs, selectedRentSlab, driverMobile, driverUsername } = req.body;
+    if (!planName || !planType) {
+      return res.status(400).json({ message: 'Plan name and type are required' });
+    }
+    if (!driverMobile) {
+      return res.status(400).json({ message: 'driverMobile is required when not authenticated' });
+    }
 
+    const mobile = driverMobile.toString().trim();
+
+    // Try to find existing signup by mobile
+    const driverSignup = await DriverSignup.findOne({ mobile });
+
+    // Check if driver already has an active selection (by signupId if available, otherwise by mobile)
+    const existingSelection = driverSignup
+      ? await DriverPlanSelection.findOne({ driverSignupId: driverSignup._id, status: 'active' })
+      : await DriverPlanSelection.findOne({ driverMobile: mobile, status: 'active' });
+
+    if (existingSelection) {
+      return res.status(400).json({ message: 'Driver already has an active plan. Please complete or deactivate the current plan before selecting a new one.' });
+    }
+
+    // Calculate payment breakdown
+    const deposit = securityDeposit || 0;
+    const slab = selectedRentSlab || {};
+    const rent = planType === 'weekly' ? (slab.weeklyRent || 0) : (slab.rentDay || 0);
+    const cover = planType === 'weekly' ? (slab.accidentalCover || 105) : 0;
+    const totalAmount = deposit + rent + cover;
+    const rentPerDay = typeof slab.rentDay === 'number' ? slab.rentDay : 0;
+
+    const selection = new DriverPlanSelection({
+      driverSignupId: driverSignup ? driverSignup._id : null,
+      driverUsername: (driverSignup && driverSignup.username) ? driverSignup.username : (driverUsername || ''),
+      driverMobile: mobile,
+      planName,
+      planType,
+      securityDeposit: deposit,
+      rentSlabs: rentSlabs || [],
+      selectedRentSlab: selectedRentSlab || null,
+      status: 'active',
+      paymentStatus: 'pending',
+      paymentMethod: 'Cash',
+      calculatedDeposit: deposit,
+      calculatedRent: rent,
+      calculatedCover: cover,
+      calculatedTotal: totalAmount,
+      rentStartDate: null,
+      rentPerDay: rentPerDay
+    });
+
+    await selection.save();
+
+    // Emit notification: driver booked a plan
+    try {
+      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const amount = selection.calculatedTotal || 0;
+      // Notify driver if signup exists
+      if (driverSignup && driverSignup._id) {
+        await createAndEmitNotification({
+          type: 'driver_booking',
+          title: `Plan booked: ${selection.planName}`,
+          message: `You have successfully booked ${selection.planName}. Total ₹${(amount).toLocaleString('en-IN')}`,
+          data: { selectionId: selection._id, planName: selection.planName, amount },
+          recipientType: 'driver',
+          recipientId: String(selection.driverSignupId)
+        });
+      }
+      // Also create a global/admin notification so admins see new bookings
+      await createAndEmitNotification({
+        type: 'booking_admin',
+        title: `Driver booked plan: ${selection.planName}`,
+        message: `Driver ${selection.driverUsername || selection.driverMobile || 'N/A'} booked ${selection.planName} (₹${(amount).toLocaleString('en-IN')})`,
+        data: { selectionId: selection._id, driverSignupId: selection.driverSignupId ? String(selection.driverSignupId) : null, amount },
+        recipientType: null,
+        recipientId: null
+      });
+    } catch (err) {
+      console.warn('Notify failed (booking public):', err.message);
+    }
+
+    res.status(201).json({
+      message: 'Plan selected successfully',
+      selection
+    });
+  } catch (err) {
+    console.error('Create public plan selection error:', err);
+    res.status(500).json({ message: 'Failed to select plan' });
+  }
+});
 // Create new plan selection (Driver selects a plan)
 router.post('/', authenticateDriver, async (req, res) => {
   try {
@@ -1092,7 +1183,7 @@ router.put('/:id', authenticateDriver, async (req, res) => {
     }
 
     // Verify the driver owns this selection
-    if (selection.driverSignupId.toString() !== req.driver.id) {
+    if (!selection.driverSignupId || selection.driverSignupId.toString() !== req.driver.id) {
       return res.status(403).json({ message: 'Unauthorized' });
     }
 
@@ -1131,7 +1222,7 @@ router.delete('/:id', async (req, res) => {
         const user = jwt.verify(token, SECRET);
         // If driver, check ownership
         if (user && user.role === 'driver') {
-          if (selection.driverSignupId.toString() !== user.id) {
+          if (!selection.driverSignupId || selection.driverSignupId.toString() !== user.id) {
             return res.status(403).json({ message: 'Unauthorized' });
           }
         }

@@ -52,7 +52,7 @@ export default function StaffAttendence() {
   const [salaryAmount, setSalaryAmount] = useState(0);
   const [loadingSalary, setLoadingSalary] = useState(false);
 
-  const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+  const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
   useEffect(() => {
     let mounted = true;
@@ -572,10 +572,39 @@ export default function StaffAttendence() {
           });
         }
       } else {
-        // If API fails, fallback to old method
-        const error = await response.json();
-        console.error('Error fetching salary data:', error);
-        toast.error('Failed to load salary data');
+        // If API fails, fallback to constructing attendance map from staff.attendanceRecords (if available)
+        try {
+          const error = await response.json();
+          console.error('Error fetching salary data:', error);
+        } catch (err) {
+          console.error('Error parsing salary fetch error:', err);
+        }
+
+        // Build fallback attendance map using staff.attendanceRecords
+        const daysInMonth = new Date(year, month, 0).getDate();
+        const fallbackMap = {};
+        for (let d = 1; d <= daysInMonth; d++) {
+          const date = new Date(year, month - 1, d);
+          fallbackMap[d.toString()] = date.getDay() === 0 ? 'S' : 'A';
+        }
+
+        if (staff && staff.attendanceRecords && staff.attendanceRecords.length > 0) {
+          staff.attendanceRecords.forEach((rec) => {
+            if (!rec.date) return;
+            const recDate = new Date(rec.date);
+            if (recDate.getFullYear() === year && recDate.getMonth() + 1 === month) {
+              fallbackMap[recDate.getDate().toString()] = 'P';
+            }
+          });
+        }
+
+        const salaryAmt = (staff && (staff.salary || staff.salary === 0)) ? staff.salary : 0;
+        setSalaryAmount(salaryAmt);
+        setSalaryData({
+          attendanceMap: fallbackMap,
+          summary: recalculateSummary(fallbackMap, month, year, salaryAmt)
+        });
+        toast.error('Failed to load salary data from server — using fallback from attendance records');
       }
     } catch (err) {
       console.error('Error fetching salary data:', err);

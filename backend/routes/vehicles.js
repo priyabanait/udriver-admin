@@ -808,30 +808,33 @@ router.put('/:id', async (req, res) => {
           }
         }
         
-        // Update plan selections by vehicleId OR by driver mobile/username
-        // NOTE: remove the rentStartDate: null check so activation will overwrite any previous start date
+        // Update plan selections by vehicleId OR by driver mobile/username (use regex to handle formatting differences)
+        const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
         const updateQuery = {
           $or: [
             { vehicleId: vehicleId }
           ],
           status: { $ne: 'completed' }
         };
-        
+
         if (driverMobiles.length > 0) {
-          updateQuery.$or.push({ driverMobile: { $in: driverMobiles } });
+          updateQuery.$or.push({ driverMobile: { $in: driverMobiles.map(m => new RegExp(`^${escapeRegex(m)}$`, 'i')) } });
         }
         if (driverUsernames.length > 0) {
-          updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
+          updateQuery.$or.push({ driverUsername: { $in: driverUsernames.map(u => new RegExp(`^${escapeRegex(u)}$`, 'i')) } });
         }
-        // Also add direct matches in case assignedDriver is a raw mobile/username
+        // Also add permissive regex matches in case assignedDriver is a raw mobile/username or id string
         if (assignedDriver) {
-          updateQuery.$or.push({ driverMobile: assignedDriver });
-          updateQuery.$or.push({ driverUsername: assignedDriver });
+          const esc = escapeRegex(assignedDriver);
+          updateQuery.$or.push({ driverMobile: new RegExp(`^${esc}$`, 'i') });
+          updateQuery.$or.push({ driverUsername: new RegExp(`^${esc}$`, 'i') });
         }
 
-        // If we have collected signup IDs, use them too
+        // If we have collected signup IDs, use them too (include ObjectId or string representations)
         if (driverSignupIds && driverSignupIds.length > 0) {
           updateQuery.$or.push({ driverSignupId: { $in: driverSignupIds } });
+          // Also include string forms in case older documents stored string ids
+          updateQuery.$or.push({ driverSignupId: { $in: driverSignupIds.map(x => x.toString()) } });
           console.log('(activation) Collected driverSignupIds:', driverSignupIds.map(x => String(x)));
         }
 
@@ -898,6 +901,7 @@ router.put('/:id', async (req, res) => {
         // Find driver by assigned driver field (could be username, mobile, or ID)
         let driverMobiles = [];
         let driverUsernames = [];
+        let driverSignupIds = [];
         
         if (assignedDriver) {
           // If assignedDriver is an ObjectId (Driver._id), try to resolve the Driver first
@@ -909,6 +913,8 @@ router.put('/:id', async (req, res) => {
                 if (byId.mobile) driverMobiles.push(byId.mobile);
                 if (byId.phone) driverMobiles.push(byId.phone);
                 if (byId.username) driverUsernames.push(byId.username);
+                // If driver._id matches, also include as a signup id candidate
+                if (byId._id) driverSignupIds.push(byId._id);
               }
             }
           } catch (err) {
@@ -930,6 +936,7 @@ router.put('/:id', async (req, res) => {
             if (driver.mobile) driverMobiles.push(driver.mobile);
             if (driver.phone) driverMobiles.push(driver.phone);
             if (driver.username) driverUsernames.push(driver.username);
+            if (driver._id) driverSignupIds.push(driver._id);
           }
           
           // Also check DriverSignup collection by username/mobile
@@ -943,24 +950,42 @@ router.put('/:id', async (req, res) => {
           if (driverSignup) {
             if (driverSignup.mobile) driverMobiles.push(driverSignup.mobile);
             if (driverSignup.username) driverUsernames.push(driverSignup.username);
+            if (driverSignup._id) driverSignupIds.push(driverSignup._id);
           }
         }
         
-        // Update plan selections by vehicleId OR by driver mobile/username
+        // Update plan selections by vehicleId OR by driver mobile/username (use regex to handle formatting differences)
+        const escapeRegex = (s) => String(s).replace(/[.*+?^${}()|[\\]\\]/g, '\\$&');
         const updateQuery = {
           $or: [
             { vehicleId: vehicleId }
           ],
           status: { $ne: 'completed' }
         };
-        
+
         if (driverMobiles.length > 0) {
-          updateQuery.$or.push({ driverMobile: { $in: driverMobiles } });
+          updateQuery.$or.push({ driverMobile: { $in: driverMobiles.map(m => new RegExp(`^${escapeRegex(m)}$`, 'i')) } });
         }
         if (driverUsernames.length > 0) {
-          updateQuery.$or.push({ driverUsername: { $in: driverUsernames } });
+          updateQuery.$or.push({ driverUsername: { $in: driverUsernames.map(u => new RegExp(`^${escapeRegex(u)}$`, 'i')) } });
         }
-        
+        // If assignedDriver present, add permissive regex matches as well
+        if (assignedDriver) {
+          const esc = escapeRegex(assignedDriver);
+          updateQuery.$or.push({ driverMobile: new RegExp(`^${esc}$`, 'i') });
+          updateQuery.$or.push({ driverUsername: new RegExp(`^${esc}$`, 'i') });
+        }
+
+        // If we have collected signup IDs, use them too (include ObjectId or string representations)
+        if (driverSignupIds && driverSignupIds.length > 0) {
+          updateQuery.$or.push({ driverSignupId: { $in: driverSignupIds } });
+          updateQuery.$or.push({ driverSignupId: { $in: driverSignupIds.map(x => x.toString()) } });
+          console.log('(inactivation) Collected driverSignupIds:', driverSignupIds.map(x => String(x)));
+        }
+
+        // Debug: log the query we're running for inactivation
+        console.log('(inactivation) updateQuery:', JSON.stringify(updateQuery));
+
         const result = await DriverPlanSelection.updateMany(
           updateQuery,
           { 

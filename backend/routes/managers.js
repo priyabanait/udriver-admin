@@ -515,7 +515,40 @@ router.get('/:id/salary/:month/:year', async (req, res) => {
     // Convert attendanceMap from object to Map format for response
     const attendanceMapObj = salaryRecord.attendanceMap || {};
     const attendanceMap = new Map(Object.entries(attendanceMapObj));
-    
+
+    // Merge any recent attendanceRecords for this manager/month into the salary record
+    // This ensures that if the manager logged in after a salary record was created,
+    // the calendar will still show that day as Present ('P').
+    if (manager.attendanceRecords && manager.attendanceRecords.length > 0) {
+      const startDate = new Date(yearNum, monthNum - 1, 1);
+      const endDate = new Date(yearNum, monthNum, 0);
+
+      let changed = false;
+      manager.attendanceRecords.forEach(record => {
+        if (!record.date) return;
+        const recordDate = new Date(record.date);
+        if (recordDate >= startDate && recordDate <= endDate) {
+          const day = recordDate.getDate();
+          // Mark as Present for that day
+          if (attendanceMap.get(day.toString()) !== 'P') {
+            attendanceMap.set(day.toString(), 'P');
+            changed = true;
+          }
+        }
+      });
+
+      if (changed) {
+        // Persist the merged attendance map and recalculate summary
+        salaryRecord.attendanceMap = Object.fromEntries(attendanceMap);
+        salaryRecord.summary = calculateSalarySummary(salaryRecord.attendanceMap, monthNum, yearNum, salaryRecord.salaryAmount || manager.salary || 0);
+        try {
+          await salaryRecord.save();
+        } catch (err) {
+          console.warn('Failed to save merged salary attendance:', err.message);
+        }
+      }
+    }
+
     res.json({
       data: {
         managerId: salaryRecord.managerId,

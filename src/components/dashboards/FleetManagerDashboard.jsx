@@ -62,7 +62,7 @@ export default function SuperAdminDashboard() {
     (async () => {
       setLoading(true);
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         
         // Fetch all data in parallel
         const [
@@ -345,7 +345,7 @@ export default function SuperAdminDashboard() {
       {/* Welcome Header */}
         <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-6 text-white">
         <h1 className="text-2xl font-bold mb-2">Welcome, {user?.name || 'Manager'}</h1>
-        <p className="text-green-100">Manage drivers, vehicles, and fleet operations</p>
+        {/* <p className="text-green-100">Manage drivers, vehicles, and fleet operations</p> */}
       </div>
 
       {/* System Stats */}

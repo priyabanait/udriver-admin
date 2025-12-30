@@ -15,9 +15,9 @@ import {
   Wallet,
   Shield,
   Database,
-  CalendarCheck,
   ClipboardList,
-  User
+  User,
+  CalendarCheck 
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { formatCurrency, formatDate } from '../../utils';
@@ -27,7 +27,7 @@ import toast from 'react-hot-toast';
 
 export default function SuperAdminDashboard() {
   const navigate = useNavigate();
-  const { hasPermission } = useAuth();
+  const { hasPermission, user } = useAuth();
   const [loading, setLoading] = useState(true);
   const [stats, setStats] = useState({
     totalUsers: 0,
@@ -343,9 +343,9 @@ export default function SuperAdminDashboard() {
   return (
     <div className="space-y-6">
       {/* Welcome Header */}
-      <div className="bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg p-6 text-white">
-        <h1 className="text-2xl font-bold mb-2">Admin Dashboard</h1>
-        <p className="text-blue-100">Complete system overview and administrative controls</p>
+        <div className="bg-gradient-to-r from-green-600 to-blue-600 rounded-lg p-6 text-white">
+        <h1 className="text-2xl font-bold mb-2">Welcome, {user?.name || 'Manager'}</h1>
+        <p className="text-green-100">Manage drivers</p>
       </div>
 
       {/* System Stats */}
@@ -356,7 +356,7 @@ export default function SuperAdminDashboard() {
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-green-100 rounded-lg">
-                <User className="h-6 w-6 mb-2 text-green-600" />
+                 <User className="h-6 w-6 mb-2 text-green-600" />
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Drivers</p>
@@ -441,7 +441,7 @@ export default function SuperAdminDashboard() {
                 onClick={() => navigate('/drivers')}
                 className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-green-50 transition-colors"
               >
-               <User className="h-6 w-6 mb-2 text-green-600" />
+                 <User className="h-6 w-6 mb-2 text-green-600" />
                 <span className="text-sm font-medium">All Drivers</span>
                 <span className="text-xs text-gray-500 mt-1">{stats.totalDrivers} drivers</span>
               </button>
@@ -569,7 +569,7 @@ export default function SuperAdminDashboard() {
                 <span className="text-xs text-gray-500 mt-1">{formatCurrency(stats.totalExpenses)}</span>
               </button>
             )}
-             {hasPermission(PERMISSIONS.ATTENDANCE_VIEW) && (
+              {hasPermission(PERMISSIONS.ATTENDANCE_VIEW) && (
                           <button 
                             onClick={() => navigate('/attendence')}
                             className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-red-50 transition-colors"
@@ -579,7 +579,7 @@ export default function SuperAdminDashboard() {
                             <span className="text-xs text-gray-500 mt-1">Manage Attendence</span>
                           </button>
                         )}
-                         {hasPermission(PERMISSIONS.HR_VIEW) && (
+                          {hasPermission(PERMISSIONS.HR_VIEW) && (
                           <button 
                             onClick={() => navigate('/staff')}
                             className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-red-50 transition-colors"
@@ -597,6 +597,7 @@ export default function SuperAdminDashboard() {
           {!hasPermission(PERMISSIONS.ADMIN_VIEW) && 
            !hasPermission(PERMISSIONS.DRIVERS_VIEW) && 
            !hasPermission(PERMISSIONS.VEHICLES_VIEW) && 
+            !hasPermission(PERMISSIONS.HR_VIEW) && 
            !hasPermission(PERMISSIONS.REPORTS_VIEW) && (
             <div className="text-center py-8 text-gray-500">
               <Activity className="h-12 w-12 text-gray-400 mx-auto mb-2" />

@@ -33,7 +33,7 @@ const ManagerPage = () => {
     const fetchManagers = async () => {
       setLoading(true);
       try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const res = await fetch(`${API_BASE}/api/managers?limit=1000`);
         const result = await res.json();
         const data = result.data || result;
@@ -51,7 +51,7 @@ const ManagerPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const res = await fetch(`${API_BASE}/api/managers`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },
@@ -73,7 +73,7 @@ const ManagerPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const res = await fetch(`${API_BASE}/api/managers/${id}`, {
         method: 'DELETE',
         headers: { ...getAuthHeaders() },
@@ -102,7 +102,7 @@ const ManagerPage = () => {
     setLoading(true);
     setError(null);
     try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const res = await fetch(`${API_BASE}/api/managers/${selectedManager._id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json', ...getAuthHeaders() },

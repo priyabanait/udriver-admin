@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://udrive-backend-1igb.vercel.app', // Use local backend in development
+        target: 'http://localhost:4000', // Use local backend in development
         changeOrigin: true,
         secure: false,
         ws: true // Enable websocket proxying for socket.io

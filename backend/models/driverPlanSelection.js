@@ -9,7 +9,7 @@ const DriverPlanSelectionSchema = new mongoose.Schema({
   driverSignupId: { 
     type: mongoose.Schema.Types.ObjectId, 
     ref: 'DriverSignup', 
-    required: true 
+    required: false 
   },
   driverUsername: { type: String },
   driverMobile: { type: String, required: true },

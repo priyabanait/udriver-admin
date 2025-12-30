@@ -75,10 +75,11 @@ export default function VehiclesList() {
 
   useEffect(() => {
     let mounted = true;
+    let handleVehicleAssigned = null;
     (async function fetchAll(){
       setLoading(true);
       try{
-        const API_BASE =  'https://udrive-backend-1igb.vercel.app';
+       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const [vehicleRes, driverRes, managerRes] = await Promise.all([
           fetch(`${API_BASE}/api/vehicles?limit=1000`),
           fetch(`${API_BASE}/api/drivers?limit=1000`),
@@ -97,6 +98,24 @@ export default function VehiclesList() {
         if(mounted) setVehiclesData(normalized);
         if(mounted) setDrivers(driverData);
         if(mounted) setManagers(managerData);
+
+        // Listen for vehicle assignment events to refresh a single vehicle row
+        handleVehicleAssigned = async (e) => {
+          try {
+            const vid = e?.detail?.vehicleId;
+            if (!vid) return;
+            const id = vid; // already numeric id where possible
+            const res = await fetch(`${API_BASE}/api/vehicles/${id}`);
+            if (!res.ok) return;
+            const v = await res.json();
+            const n = normalizeVehicle(v);
+            setVehiclesData(prev => prev.map(x => resolveApiVehicleId(x) === resolveApiVehicleId(n) ? n : x));
+          } catch (err) {
+            console.warn('vehicleAssigned handler failed', err);
+          }
+        };
+        window.addEventListener('vehicleAssigned', handleVehicleAssigned);
+
       }catch(err){
         console.error(err);
         setError(err.message || 'Failed to load vehicles');
@@ -105,7 +124,7 @@ export default function VehiclesList() {
         if(mounted) setLoading(false);
       }
     })();
-    return () => { mounted = false; };
+    return () => { mounted = false; if (handleVehicleAssigned) window.removeEventListener('vehicleAssigned', handleVehicleAssigned); };
   }, [normalizeVehicle]);
 
   const getStatusBadge = (status) => {
@@ -129,7 +148,7 @@ export default function VehiclesList() {
     // fetch fresh vehicle data from backend before opening modal so all fields are populated
     try{
       setLoading(true);
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const apiId = resolveApiVehicleId(vehicle);
       if (apiId == null || Number.isNaN(apiId)) {
         // If we can't resolve an API id, skip fetching and use available data
@@ -154,7 +173,7 @@ export default function VehiclesList() {
   const handleViewVehicle = async (vehicle) => {
     try{
       setLoading(true);
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const id = resolveApiVehicleId(vehicle);
       if (id == null || Number.isNaN(id)) {
         setSelectedVehicle(normalizeVehicle(vehicle));
@@ -208,7 +227,7 @@ export default function VehiclesList() {
         }
       }
 
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const headers = {
         'Content-Type': 'application/json',
         ...getAuthHeaders()
@@ -252,6 +271,51 @@ export default function VehiclesList() {
         return [...prev, saved];
       });
 
+      // If vehicle has an assignedDriver, ensure driver's record has vehicleAssigned set
+      try {
+        const assigned = saved.assignedDriver;
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const tokenHeaders = getAuthHeaders();
+        const assignmentValue = saved.registrationNumber || saved.vehicleNumber || saved._id || saved.vehicleId;
+
+        if (assigned) {
+          // find matching driver record
+          const foundDriver = drivers.find(d => String(d._id) === String(assigned) || d.username === assigned || d.mobile === assigned || d.phone === assigned);
+          if (foundDriver) {
+            // update driver.vehicleAssigned
+            const drvRes = await fetch(`${API_BASE}/api/drivers/${foundDriver.id || foundDriver._id || foundDriver.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type': 'application/json', ...(tokenHeaders || {}) },
+              body: JSON.stringify({ vehicleAssigned: assignmentValue })
+            });
+            if (drvRes.ok) {
+              const updatedDriver = await drvRes.json();
+              setDrivers(prev => prev.map(d => (d.id === (foundDriver.id || foundDriver._id) ? updatedDriver : d)));
+            }
+          }
+        }
+
+        // Also, if this was an update and previously assigned to a different driver, clear that previous driver's vehicleAssigned
+        const previousAssigned = selectedVehicle?.assignedDriver;
+        if (selectedVehicle && previousAssigned && String(previousAssigned) !== String(assigned)) {
+          const prevDrv = drivers.find(d => String(d._id) === String(previousAssigned) || d.username === previousAssigned || d.mobile === previousAssigned || d.phone === previousAssigned);
+          if (prevDrv) {
+            const clearRes = await fetch(`${API_BASE}/api/drivers/${prevDrv.id || prevDrv._id || prevDrv.id}`, {
+              method: 'PUT',
+              headers: { 'Content-Type':'application/json', ...(tokenHeaders || {}) },
+              body: JSON.stringify({ vehicleAssigned: '' })
+            });
+            if (clearRes.ok) {
+              const cd = await clearRes.json();
+              setDrivers(prev => prev.map(d => (d.id === (prevDrv.id || prevDrv._id) ? cd : d)));
+
+            }
+          }
+        }
+      } catch (e) {
+        console.warn('Failed to sync driver assignment after vehicle save', e);
+      }
+
       setShowVehicleModal(false);
       setSelectedVehicle(null);
       toast.success(`Vehicle ${selectedVehicle ? 'updated' : 'created'} successfully`);
@@ -264,7 +328,7 @@ export default function VehiclesList() {
   const handleDeleteVehicle = async (vehicleOrId) => {
     if (!window.confirm('Delete this vehicle?')) return;
     try{
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const resolvedId = typeof vehicleOrId === 'object' ? resolveApiVehicleId(vehicleOrId) : (Number.isFinite(Number(vehicleOrId)) ? Number(vehicleOrId) : undefined);
       if (!resolvedId && resolvedId !== 0) {
         throw new Error('Vehicle not found');
@@ -286,7 +350,7 @@ export default function VehiclesList() {
 
   const handleChangeStatus = async (vehicleId, newStatus) => {
     try{
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
         method: 'PUT',
         headers: { 'Content-Type':'application/json', ...getAuthHeaders() },
@@ -308,7 +372,7 @@ export default function VehiclesList() {
 
   const handleChangeKyc = async (vehicleId, newKyc) => {
     try{
-      const API_BASE = import.meta.env.VITE_API_BASE || 'https://udrive-backend-1igb.vercel.app';
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}`, {
         method: 'PUT',
         headers: { 'Content-Type':'application/json', ...getAuthHeaders() },
@@ -429,6 +493,19 @@ export default function VehiclesList() {
 
       {/* Top stats cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-6">
+          <Card>
+          <CardContent className="p-2">
+            <div className="flex items-start">
+              <div className="p-2 bg-green-100 rounded-lg">
+                <Car className="h-6 w-6 text-green-600" />
+              </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Total Vehicles</p>
+                <p className="text-2xl font-bold text-gray-900">{vehiclesData.length}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
         <Card>
           <CardContent className="p-2">
             <div className="flex items-start">
@@ -615,20 +692,39 @@ export default function VehiclesList() {
                     {/* <TableCell>{v.trafficFine ?? '-'}</TableCell>
                     <TableCell>{formatDate(v.trafficFineDate)}</TableCell> */}
                     <TableCell>{
-                      v.assignedDriver
-                        ? (() => {
-                            const found = drivers.find(d => d._id === v.assignedDriver);
-                            return found ? (found.name || found.username || found.phone) : v.assignedDriver;
+                      v.assignedDriver ? (
+                        typeof v.assignedDriver === 'object' ? (
+                          // If backend populated the driver object, prefer the name/username/phone
+                          v.assignedDriver.name || v.assignedDriver.username || v.assignedDriver.phone || '-'
+                        ) : (
+                          // Otherwise treat it as an id/string and try multiple lookup strategies
+                          (() => {
+                            const key = String(v.assignedDriver);
+                            const found = drivers.find(d => (
+                              String(d._id) === key ||
+                              String(d.id) === key ||
+                              (d.username && String(d.username) === key) ||
+                              (d.mobile && String(d.mobile) === key) ||
+                              (d.phone && String(d.phone) === key)
+                            ));
+                            if (found) return found.name || found.username || found.phone || key;
+                            return key;
                           })()
-                        : <Badge variant="warning">Not Assigned</Badge>
+                        )
+                      ) : <Badge variant="warning">Not Assigned</Badge>
                     }</TableCell>
                     <TableCell>{
-                      v.assignedManager
-                        ? (() => {
-                            const found = managers.find(m => m._id === v.assignedManager);
-                            return found ? (found.name || found.username || found.email) : v.assignedManager;
+                      v.assignedManager ? (
+                        typeof v.assignedManager === 'object' ? (
+                          v.assignedManager.name || v.assignedManager.username || v.assignedManager.email || '-'
+                        ) : (
+                          (() => {
+                            const id = String(v.assignedManager);
+                            const found = managers.find(m => m._id === id);
+                            return found ? (found.name || found.username || found.email) : id;
                           })()
-                        : <Badge variant="warning">Not Assigned</Badge>
+                        )
+                      ) : <Badge variant="warning">Not Assigned</Badge>
                     }</TableCell>
                     <TableCell>{
                       v.rentStartDate
