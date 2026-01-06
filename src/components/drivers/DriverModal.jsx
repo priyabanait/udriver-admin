@@ -4,7 +4,7 @@ import toast from 'react-hot-toast';
 
 // Razorpay IFSC validation API (public, no key required)
 const RAZORPAY_IFSC_API = 'https://ifsc.razorpay.com';
-
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 export default function DriverModal({ isOpen, onClose, driver = null, onSave }) {
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
@@ -217,10 +217,12 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
   // and set the udbCounter so generated IDs continue from the last saved UDB.
   useEffect(() => {
     const initUdbCounter = async () => {
+      
       if (!isOpen) return;
       try {
+              const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         // Fetch computed next UDB from backend
-        const res = await fetch('/api/drivers/udb/next');
+        const res = await fetch(`${API_BASE}/api/drivers/udb/next`);
         if (!res.ok) return;
         const data = await res.json();
         if (data && typeof data.next === 'number') {
@@ -467,144 +469,100 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     }
   };
 
+  // Validation disabled per user request — stubbed to always succeed
   const validateField = async (field, value) => {
-    // return error message string or empty/null if valid
-    if (field === 'name') {
-      if (!value || !value.trim()) return 'Name is required';
-      if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Name should only contain letters and spaces (2-50 characters)';
-      return '';
-    }
-
-    if (field === 'username') {
-      if (!value || !value.trim()) return 'Username is required';
-      if (!/^[a-zA-Z0-9._-]{3,30}$/.test(value.trim())) return 'Username must be 3-30 characters and may contain letters, numbers, . _ -';
-      return '';
-    }
-
-    if (field === 'password') {
-      // Password required when creating a new driver; optional when editing (leave blank to keep existing)
-      if (!driver) {
-        if (!value || !value.trim()) return 'Password is required';
-      } else {
-        if (!value) return '';
-      }
-      if (value && value.length < 6) return 'Password must be at least 6 characters';
-      return '';
-    }
-
-    // if (field === 'email') {
-    //   if (!value || !value.trim()) return 'Email is required';
-    //   if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) return 'Please enter a valid email address';
-    //   return '';
-    // }
-    if (field === 'phone' || field === 'emergencyPhone') {
-      if (!value || !value.trim()) return field === 'phone' ? 'Phone is required' : '';
-      const digits = String(value).replace(/\D/g, '');
-      if (digits.length !== 10) return 'Phone number must be exactly 10 digits';
-      if (!/^[6789]\d{9}$/.test(digits)) return 'Please enter a valid Indian mobile number';
-      return '';
-    }
-    if (field === 'dateOfBirth') {
-      if (!value) return ''; // skip validation if no date is entered
-      const age = calculateAge(value);
-      if (age < 18) return 'Driver must be at least 18 years old';
-      if (age > 65) return 'Driver age cannot exceed 65 years';
-      return '';
-    }
-
-    if (field === 'joinDate') {
-      if (!value) return ''; // optional
-      const d = new Date(value);
-      if (isNaN(d.getTime())) return 'Please enter a valid join date';
-      const now = new Date();
-      if (d > now) return 'Join date cannot be in the future';
-      return '';
-    }
-
-
-    if (field === 'address') {
-      if (!value || !value.trim()) return 'Address is required';
-      if (value.trim().length < 10) return 'Please enter complete address (min 10 characters)';
-      return '';
-    }
-    if (field === 'pincode') {
-      if (!value || !value.trim()) return 'Pincode is required';
-      if (!/^\d{6}$/.test(value.trim())) return 'Enter valid 6 digit pincode';
-      return '';
-    }
-    // if (field === 'licenseNumber') {
-    //   if (!value || !value.trim()) return 'License number is required';
-    //   // Format: XX[0-9]{13} (2 characters followed by 13 numbers)
-    //   if (!/^[A-Z]{2}[0-9]{13}$/.test(value.toUpperCase())) return 'Enter valid license number (e.g., DL0120160000000)';
-    //   return '';
-    // }
-    if (field === 'licenseExpiryDate') {
-      if (!value) return 'License expiry date is required';
-      const expiryDate = new Date(value);
-      const today = new Date();
-      if (expiryDate <= today) return 'License must not be expired';
-      return '';
-    }
-    if (field === 'aadharNumber') {
-      if (!value || !value.trim()) return 'Aadhar number is required';
-      const digits = value.replace(/\D/g, '');
-      if (digits.length !== 12) return 'Aadhar must be exactly 12 digits';
-      // Verhoeff algorithm validation could be added here
-      if (!/^\d{4}\s?\d{4}\s?\d{4}$/.test(value.trim())) return 'Enter valid Aadhar number (e.g., 1234 5678 9012)';
-      return '';
-    }
-    if (field === 'panNumber') {
-      if (!value || !value.trim()) return 'PAN number is required';
-      if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(value.toUpperCase())) return 'Enter valid PAN (e.g., ABCDE1234F)';
-      return '';
-    }
-    if (field === 'experience') {
-      if (!value) return 'Experience is required';
-      return '';
-    }
-    if (field === 'planType') {
-      if (!value) return 'Plan type is required';
-      return '';
-    }
-    if (field === 'bankName') {
-      if (!value || !value.trim()) return 'Bank name is required';
-      if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Enter valid bank name';
-      return '';
-    }
-    if (field === 'accountNumber') {
-      if (!value || !value.trim()) return 'Account number is required';
-      const digits = value.replace(/\D/g, '');
-      if (digits.length < 9 || digits.length > 18) return 'Account number should be 9-18 digits';
-      if (!/^\d+$/.test(value.trim())) return 'Account number should only contain digits';
-      return '';
-    }
-    if (field === 'ifscCode') {
-      if (!value || !value.trim()) return 'IFSC code is required';
-      if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.toUpperCase())) return 'Enter valid IFSC code (e.g., SBIN0123456)';
-      // Call Razorpay IFSC API for validation
-      try {
-        const res = await fetch(`${RAZORPAY_IFSC_API}/${encodeURIComponent(value)}`);
-        if (!res.ok) {
-          return 'Invalid IFSC code (not found in bank database)';
-        }
-        // Optionally, you can parse and use the returned bank details here
-      } catch (err) {
-        return 'Could not validate IFSC code (API error)';
-      }
-      return '';
-    }
-    if (field === 'accountHolderName') {
-      if (!value || !value.trim()) return 'Account holder name is required';
-      if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Enter valid account holder name';
-      return '';
-    }
-    if (field === 'accountBranchName') {
-      if (!value || !value.trim()) return 'Account branch name is required';
-      if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Enter valid branch name';
-      return '';
-    }
+    // Intentionally no validation; return empty string to indicate no error
     return '';
   };
+
+  //     if (d > now) return 'Join date cannot be in the future';
+  //     return '';
+  //   }
+
+
+  //   if (field === 'address') {
+  //     if (!value || !value.trim()) return 'Address is required';
+  //     if (value.trim().length < 10) return 'Please enter complete address (min 10 characters)';
+  //     return '';
+  //   }
+  //   if (field === 'pincode') {
+  //     if (!value || !value.trim()) return 'Pincode is required';
+  //     if (!/^\d{6}$/.test(value.trim())) return 'Enter valid 6 digit pincode';
+  //     return '';
+  //   }
+  //   // if (field === 'licenseNumber') {
+  //   //   if (!value || !value.trim()) return 'License number is required';
+  //   //   // Format: XX[0-9]{13} (2 characters followed by 13 numbers)
+  //   //   if (!/^[A-Z]{2}[0-9]{13}$/.test(value.toUpperCase())) return 'Enter valid license number (e.g., DL0120160000000)';
+  //   //   return '';
+  //   // }
+  //   if (field === 'licenseExpiryDate') {
+  //     if (!value) return 'License expiry date is required';
+  //     const expiryDate = new Date(value);
+  //     const today = new Date();
+  //     if (expiryDate <= today) return 'License must not be expired';
+  //     return '';
+  //   }
+  //   if (field === 'aadharNumber') {
+  //     if (!value || !value.trim()) return 'Aadhar number is required';
+  //     const digits = value.replace(/\D/g, '');
+  //     if (digits.length !== 12) return 'Aadhar must be exactly 12 digits';
+  //     // Verhoeff algorithm validation could be added here
+  //     if (!/^\d{4}\s?\d{4}\s?\d{4}$/.test(value.trim())) return 'Enter valid Aadhar number (e.g., 1234 5678 9012)';
+  //     return '';
+  //   }
+  //   if (field === 'panNumber') {
+  //     if (!value || !value.trim()) return 'PAN number is required';
+  //     if (!/^[A-Z]{5}[0-9]{4}[A-Z]$/.test(value.toUpperCase())) return 'Enter valid PAN (e.g., ABCDE1234F)';
+  //     return '';
+  //   }
+  //   if (field === 'experience') {
+  //     if (!value) return 'Experience is required';
+  //     return '';
+  //   }
+  //   if (field === 'planType') {
+  //     if (!value) return 'Plan type is required';
+  //     return '';
+  //   }
+  //   if (field === 'bankName') {
+  //     if (!value || !value.trim()) return 'Bank name is required';
+  //     if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Enter valid bank name';
+  //     return '';
+  //   }
+  //   if (field === 'accountNumber') {
+  //     if (!value || !value.trim()) return 'Account number is required';
+  //     const digits = value.replace(/\D/g, '');
+  //     if (digits.length < 9 || digits.length > 18) return 'Account number should be 9-18 digits';
+  //     if (!/^\d+$/.test(value.trim())) return 'Account number should only contain digits';
+  //     return '';
+  //   }
+  //   if (field === 'ifscCode') {
+  //     if (!value || !value.trim()) return 'IFSC code is required';
+  //     if (!/^[A-Z]{4}0[A-Z0-9]{6}$/.test(value.toUpperCase())) return 'Enter valid IFSC code (e.g., SBIN0123456)';
+  //     // Call Razorpay IFSC API for validation
+  //     try {
+  //       const res = await fetch(`${RAZORPAY_IFSC_API}/${encodeURIComponent(value)}`);
+  //       if (!res.ok) {
+  //         return 'Invalid IFSC code (not found in bank database)';
+  //       }
+  //       // Optionally, you can parse and use the returned bank details here
+  //     } catch (err) {
+  //       return 'Could not validate IFSC code (API error)';
+  //     }
+  //     return '';
+  //   }
+  //   if (field === 'accountHolderName') {
+  //     if (!value || !value.trim()) return 'Account holder name is required';
+  //     if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Enter valid account holder name';
+  //     return '';
+  //   }
+  //   if (field === 'accountBranchName') {
+  //     if (!value || !value.trim()) return 'Account branch name is required';
+  //     if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Enter valid branch name';
+  //     return '';
+  //   }
+  //   return '';
+  // };
 
   const handleFileUpload = (field, file) => {
     if (file) {
@@ -620,36 +578,11 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
   };
 
   const validateStep = async (step) => {
-    const newErrors = {};
-    switch (step) {
-      case 1: // Personal Information
-        await Promise.all([ 'username','password','name', 'email', 'phone', 'dateOfBirth', 'joinDate', 'address', 'pincode'].map(async (f) => {
-          const err = await validateField(f, formData[f]);
-          if (err) newErrors[f] = err;
-        }));
-        break;
-      case 2: // Documents
-        await Promise.all(['licenseNumber', 'licenseExpiryDate', 'aadharNumber', 'panNumber'].map(async (f) => {
-          const err = await validateField(f, formData[f]);
-          if (err) newErrors[f] = err;
-        }));
-        break;
-      case 3: // Professional
-        await Promise.all(['experience', 'planType'].map(async (f) => {
-          const err = await validateField(f, formData[f]);
-          if (err) newErrors[f] = err;
-        }));
-        break;
-      case 4: // Banking
-        await Promise.all(['bankName', 'accountNumber', 'ifscCode', 'accountHolderName', 'accountBranchName'].map(async (f) => {
-          const err = await validateField(f, formData[f]);
-          if (err) newErrors[f] = err;
-        }));
-        break;
-    }
-    setErrors(newErrors);
-    return Object.keys(newErrors).length === 0;
+    // Validation disabled: always allow progressing between steps
+    setErrors({});
+    return true;
   };
+
 
   const handleNext = async () => {
     const valid = await validateStep(currentStep);
