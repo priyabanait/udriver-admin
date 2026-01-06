@@ -227,6 +227,12 @@ const navigation = [
     icon: ClipboardList,
     permission: PERMISSIONS.HR_VIEW
   },
+   {
+    name: 'Manage Sliders',
+    href: '/sliders',
+    icon: Sliders,
+    permission: PERMISSIONS.NOTIFICATIONS_VIEW
+  },
   {
     name: 'Attendence Management',
     href: '/attendence',
@@ -323,12 +329,7 @@ const navigation = [
       }
     ]
   },
-  {
-    name: 'Manage Sliders',
-    href: '/sliders',
-    icon: Sliders,
-    permission: PERMISSIONS.NOTIFICATIONS_VIEW
-  },
+ 
 
   // {
   //   name: 'Ticket System',
