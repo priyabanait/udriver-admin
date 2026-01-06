@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -8,6 +8,7 @@ import {
   Edit, 
   Trash2,
   Download,
+  FileText,
   Phone,
   Mail,
   Car,
@@ -50,66 +51,162 @@ export default function DriversList() {
   const [assigningPlanFor, setAssigningPlanFor] = useState(null);
   const [vehicles, setVehicles] = useState([]);
   const [assigningVehicleFor, setAssigningVehicleFor] = useState(null);
+const [vehicleSearch, setVehicleSearch] = useState('');
+const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
+  const fileInputRef = useRef();
+  const previewMode = useRef(false);
+  const [importing, setImporting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewResults, setPreviewResults] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
+
+  // Signature upload handling for agreements
+  const signatureFileRef = useRef();
+  const [signingFor, setSigningFor] = useState(null);
+  const [updatingSignature, setUpdatingSignature] = useState(false);
+
+  const fetchDrivers = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+
+      // Fetch manual drivers
+      const res = await fetch(`${API_BASE}/api/drivers?limit=1000`);
+      if (!res.ok) throw new Error(`Failed to load drivers: ${res.status}`);
+      const result = await res.json();
+      const data = result.data || result;
+      setDriversData(data);
+
+      // Fetch signup credentials
+      const credRes = await fetch(`${API_BASE}/api/drivers/signup/credentials?limit=1000`);
+      if (credRes.ok) {
+        const credResult = await credRes.json();
+        const credData = credResult.data || credResult;
+        setSignupCredentials(credData);
+      }
+
+      // Fetch daily rent plans for assigning to drivers
+      try {
+        const plansRes = await fetch(`${API_BASE}/api/daily-rent-plans`);
+        if (plansRes.ok) {
+          const plansData = await plansRes.json();
+          setDailyPlans(plansData);
+        }
+      } catch (planErr) {
+        console.error('Failed to load daily rent plans', planErr);
+      }
+
+      // Fetch vehicles so admins can assign vehicles to drivers
+      try {
+        const vehiclesRes = await fetch(`${API_BASE}/api/vehicles?limit=1000`);
+        if (vehiclesRes.ok) {
+          const vehiclesData = await vehiclesRes.json();
+          const list = vehiclesData.data || vehiclesData;
+          setVehicles(Array.isArray(list) ? list : []);
+        }
+      } catch (vErr) {
+        console.error('Failed to load vehicles', vErr);
+      }
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to load drivers');
+      toast.error('Failed to load drivers');
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
-    async function fetchDrivers() {
-      setLoading(true);
-      setError(null);
-      try {
-        // Use Vite env var VITE_API_BASE to point to backend in dev/production.
-        // Fallback to http://localhost:4000 for local development.
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-        
-        // Fetch manual drivers
-        const res = await fetch(`${API_BASE}/api/drivers?limit=1000`);
-        if (!res.ok) throw new Error(`Failed to load drivers: ${res.status}`);
-        const result = await res.json();
-        const data = result.data || result;
-        if (mounted) setDriversData(data);
-        
-        // Fetch signup credentials
-        const credRes = await fetch(`${API_BASE}/api/drivers/signup/credentials?limit=1000`);
-        if (credRes.ok) {
-          const credResult = await credRes.json();
-          const credData = credResult.data || credResult;
-          if (mounted) setSignupCredentials(credData);
-        }
-
-        // Fetch daily rent plans for assigning to drivers
-        try {
-          const plansRes = await fetch(`${API_BASE}/api/daily-rent-plans`);
-          if (plansRes.ok) {
-            const plansData = await plansRes.json();
-            if (mounted) setDailyPlans(plansData);
-          }
-        } catch (planErr) {
-          console.error('Failed to load daily rent plans', planErr);
-        }
-
-        // Fetch vehicles so admins can assign vehicles to drivers
-        try {
-          const vehiclesRes = await fetch(`${API_BASE}/api/vehicles?limit=1000`);
-          if (vehiclesRes.ok) {
-            const vehiclesData = await vehiclesRes.json();
-            const list = vehiclesData.data || vehiclesData;
-            if (mounted) setVehicles(Array.isArray(list) ? list : []);
-          }
-        } catch (vErr) {
-          console.error('Failed to load vehicles', vErr);
-        }
-      } catch (err) {
-        console.error(err);
-        setError(err.message || 'Failed to load drivers');
-        toast.error('Failed to load drivers');
-      } finally {
-        if (mounted) setLoading(false);
-      }
-    }
-
     fetchDrivers();
     return () => { mounted = false; };
   }, []);
+
+  const handleImportClick = () => { previewMode.current = false; if (fileInputRef.current) fileInputRef.current.click(); };
+  const handlePreviewClick = () => { previewMode.current = true; if (fileInputRef.current) fileInputRef.current.click(); };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const isPreview = !!previewMode.current;
+    try {
+      if (isPreview) setPreviewing(true); else setImporting(true);
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const token = localStorage.getItem('udriver_token');
+      const fd = new FormData();
+      fd.append('file', file);
+      const url = isPreview ? `${API_BASE}/api/drivers/import?preview=true` : `${API_BASE}/api/drivers/import`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body && body.message ? body.message : `Import failed: ${res.status}`);
+      }
+
+      if (isPreview) {
+        setPreviewResults(body);
+        setShowPreviewModal(true);
+        toast.success(`Preview completed — rows: ${body.results ? body.results.length : 0}`);
+      } else {
+        toast.success(`Import completed — created ${body.created}, updated ${body.updated}, skipped ${body.skipped}`);
+        await fetchDrivers();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Import failed');
+    } finally {
+      setPreviewing(false);
+      setImporting(false);
+      previewMode.current = false;
+      if (fileInputRef.current) fileInputRef.current.value = null;
+    }
+  };
+
+  // Start signature upload for a driver (opens file picker)
+  const handleStartSignatureUpload = (driverId) => {
+    setSigningFor(driverId);
+    if (signatureFileRef.current) signatureFileRef.current.click();
+  };
+
+  // Handle selected signature file and upload it as base64 to driver record
+  const handleSignatureFileChange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file || !signingFor) return;
+    try {
+      setUpdatingSignature(true);
+      const reader = new FileReader();
+      reader.onload = async () => {
+        const base64 = reader.result;
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const token = localStorage.getItem('udriver_token');
+        const res = await fetch(`${API_BASE}/api/drivers/${signingFor}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
+          body: JSON.stringify({ signature: base64, signedAt: new Date().toISOString() })
+        });
+        if (!res.ok) {
+          if (res.status === 401 || res.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
+          const b = await res.json().catch(()=>null);
+          throw new Error(b && b.message ? b.message : `Failed to upload signature: ${res.status}`);
+        }
+        const updated = await res.json();
+        setDriversData(prev => prev.map(d => (String(d.id || d._id) === String(updated.id || updated._id) ? updated : d)));
+        toast.success('Signature uploaded');
+      };
+      reader.readAsDataURL(file);
+    } catch(err) {
+      console.error('Signature upload failed:', err);
+      toast.error(err.message || 'Failed to upload signature');
+    } finally {
+      setUpdatingSignature(false);
+      setSigningFor(null);
+      if (signatureFileRef.current) signatureFileRef.current.value = null;
+    }
+  };
 
   const filteredDrivers = driversData.filter(driver => {
     const matchesSearch = (driver.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -725,6 +822,15 @@ export default function DriversList() {
           <p className="text-gray-600">Manage all drivers and their information</p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
+          <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} style={{ display: 'none' }} />
+          <input ref={signatureFileRef} type="file" accept="image/*" onChange={handleSignatureFileChange} style={{ display: 'none' }} />
+
+          <PermissionGuard permission={PERMISSIONS.DRIVERS_CREATE}>
+            <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="btn btn-outline flex items-center" disabled={importing}>
+              <Download className="h-4 w-4 mr-2" />{importing ? 'Importing...' : 'Import'}
+            </button>
+          </PermissionGuard>
+
           <PermissionGuard permission={PERMISSIONS.REPORTS_EXPORT}>
             <button 
               onClick={handleExportToCSV}
@@ -747,8 +853,6 @@ export default function DriversList() {
                   Add Driver
                 </button>
               </PermissionGuard>
-       
-        
         </div>
       </div>
 
@@ -762,7 +866,7 @@ export default function DriversList() {
                       </div>
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Total Drivers</p>
-                        <p className="text-2xl font-bold text-gray-900">{filteredDrivers.length}</p>
+                        <p className="text-2xl font-bold text-gray-900">{driversData.length}</p>
               
                       </div>
                     </div>
@@ -772,7 +876,7 @@ export default function DriversList() {
           <CardContent className="p-6">
             <div className="flex items-center">
               <div className="p-2 bg-green-100 rounded-lg">
-                <Car className="h-6 w-6 text-green-600" />
+                <User className="h-6 w-6 text-green-600" />
               </div>
             <div className="ml-4">
               <p className="text-sm font-medium text-gray-600">Active Drivers</p>
@@ -919,6 +1023,7 @@ export default function DriversList() {
                   <TableHead>Plan</TableHead>
                   <TableHead>KYC Status</TableHead>
                    <TableHead>Car Status</TableHead>
+                   <TableHead>Agreement</TableHead>
                   {/* <TableHead>Status</TableHead> */}
                   {/* <TableHead>Earnings</TableHead> */}
                   {/* <TableHead>Rating</TableHead> */}
@@ -931,7 +1036,17 @@ export default function DriversList() {
                     <TableCell>
                       <div>
                         <div className="font-medium text-gray-900">{driver.name}</div>
-                        <div className="text-sm text-gray-500">ID: {driver.licenseNumber}</div>
+                        <div className="text-sm text-gray-500">ID: {driver.udbId || ' '}</div>
+                        {/* <div className="text-sm text-gray-500">
+                          {driver.driverNo ? (
+                            <>
+                              <span className="mr-2">Driver No: {driver.driverNo}</span>
+                              {driver.udbId && (<span>UDB ID: {driver.udbId}</span>)}
+                            </>
+                          ) : (
+                            driver.udbId ? (<>UDB ID: {driver.udbId}</>) : null
+                          )}
+                        </div> */}
                         <div className="text-sm text-gray-500">Joined: {formatDate(driver.joinDate)}</div>
                       </div>
                     </TableCell>
@@ -943,7 +1058,7 @@ export default function DriversList() {
                         </div>
                         <div className="flex items-center text-sm">
                           <Phone className="h-3 w-3 mr-1 text-gray-400" />
-                          <span className="text-gray-600">{driver.phone}</span>
+                          <span className="text-gray-600">{driver.phone || driver.driverNo || '—'}</span>
                         </div>
                       </div>
                     </TableCell>
@@ -951,24 +1066,104 @@ export default function DriversList() {
                     <TableCell>
                       <div>
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
-                          <select
-                            value={(vehicles.find(v => v.registrationNumber === driver.vehicleAssigned || String(v.vehicleId) === String(driver.vehicleAssigned) || String(v._id) === String(driver.vehicleAssigned) || v.vehicleNumber === driver.vehicleAssigned)?._id) || ''}
-                            onChange={(e) => handleAssignVehicle(driver.id, e.target.value)}
-                            disabled={assigningVehicleFor === driver.id}
-                            className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
-                            style={{ minWidth: '180px' }}
-                          >
-                            <option value="">Select Vehicle</option>
-                            {vehicles.filter(v => v.status === 'inactive' && ((v.kycStatus || '').toString().toLowerCase() === 'verified')).length > 0 && (
-                              <optgroup label="KYC Verified & Inactive">
-                                {vehicles.filter(v => v.status === 'inactive' && ((v.kycStatus || '').toString().toLowerCase() === 'verified')).map(v => (
-                                  <option key={v._id || v.vehicleId || v.registrationNumber} value={v._id || v.vehicleId || v.registrationNumber}>
-                                    {`${v.registrationNumber || v.vehicleNumber || v._id}${v.carName ? ` — ${v.carName}` : (v.model ? ` — ${v.model}` : '')}`}
-                                  </option>
-                                ))}
-                              </optgroup>
-                            )}
-                          </select>
+                         <div className="relative" style={{ minWidth: '180px' }}>
+  <input
+    type="text"
+    className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+    placeholder="Select Vehicle"
+    disabled={assigningVehicleFor === driver.id}
+    value={
+      vehicleSearch ||
+      (() => {
+        const v = vehicles.find(
+          v =>
+            v.registrationNumber === driver.vehicleAssigned ||
+            String(v.vehicleId) === String(driver.vehicleAssigned) ||
+            String(v._id) === String(driver.vehicleAssigned) ||
+            v.vehicleNumber === driver.vehicleAssigned
+        );
+        return v
+          ? `${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`
+          : '';
+      })()
+    }
+    onChange={(e) => {
+      setVehicleSearch(e.target.value);
+      setShowVehicleDropdown(driver.id);
+    }}
+    onFocus={() => setShowVehicleDropdown(driver.id)}
+  />
+
+  {showVehicleDropdown === driver.id && (
+    <>
+      {/* click outside */}
+      <div
+        className="fixed inset-0 z-10"
+        onClick={() => setShowVehicleDropdown(null)}
+      />
+
+      <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto text-sm">
+
+        {/* clear */}
+        <div
+          className="px-2 py-1 text-gray-500 cursor-pointer hover:bg-gray-100"
+          onClick={() => {
+            handleAssignVehicle(driver.id, '');
+            setVehicleSearch('');
+            setShowVehicleDropdown(null);
+          }}
+        >
+          Select Vehicle
+        </div>
+
+        {/* filtered list */}
+        {vehicles
+          .filter(
+            v =>
+              v.status === 'inactive' &&
+              ((v.kycStatus || '').toString().toLowerCase() === 'verified')
+          )
+          .filter(v => {
+            const s = vehicleSearch.toLowerCase();
+            return (
+              v.registrationNumber?.toLowerCase().includes(s) ||
+              v.vehicleNumber?.toLowerCase().includes(s) ||
+              v.carName?.toLowerCase().includes(s) ||
+              v.model?.toLowerCase().includes(s)
+            );
+          })
+          .map(v => {
+            const value = v._id || v.vehicleId || v.registrationNumber;
+            return (
+              <div
+                key={value}
+                className="px-2 py-1 cursor-pointer hover:bg-blue-50"
+                onClick={() => {
+                  handleAssignVehicle(driver.id, value);
+                  setVehicleSearch('');
+                  setShowVehicleDropdown(null);
+                }}
+              >
+                {`${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`}
+              </div>
+            );
+          })}
+
+        {/* empty */}
+        {vehicles.filter(
+          v =>
+            v.status === 'inactive' &&
+            ((v.kycStatus || '').toString().toLowerCase() === 'verified')
+        ).length === 0 && (
+          <div className="px-2 py-1 text-gray-400">
+            No vehicles available
+          </div>
+        )}
+      </div>
+    </>
+  )}
+</div>
+
                         </PermissionGuard>
 
                         {!driver.vehicleAssigned && (
@@ -1030,6 +1225,24 @@ export default function DriversList() {
                           <div className="text-sm text-gray-500 mt-1">{findAssignedVehicle(driver).registrationNumber || findAssignedVehicle(driver).vehicleNumber || ''}</div>
                         </div>
                       ) : <div className="text-sm text-gray-500">No Vehicle</div>}
+                    </TableCell>
+
+                    <TableCell>
+                      <div className="flex items-center space-x-2">
+                        {driver.signature ? (
+                          <>
+                            <Badge variant="success" className="flex items-center"><CheckCircle className="h-3 w-3 mr-1" />Signed</Badge>
+                            <a href={`/agreement?driverId=${driver.id || driver._id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm ml-2">View</a>
+                          </>
+                        ) : (
+                          <>
+                            <span className="text-sm text-gray-500">Unsigned</span>
+                            <button onClick={() => handleStartSignatureUpload(driver.id)} className="text-sm text-blue-600 underline ml-2" disabled={updatingSignature && signingFor === driver.id}>
+                              {updatingSignature && signingFor === driver.id ? 'Uploading...' : 'Sign'}
+                            </button>
+                          </>
+                        )}
+                      </div>
                     </TableCell>
                     {/* <TableCell>
                       {getStatusBadge(driver.status)}

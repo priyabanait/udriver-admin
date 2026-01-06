@@ -207,31 +207,31 @@ export default function CarPlans() {
   };
 
   // Fetch weekly/daily slabs for selected vehicle
-  const fetchVehicleWeeklySlabs = async (vehicleId) => {
-    try {
-      if (!vehicleId) return setVehicleWeeklySlabs([]);
-      const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}/weekly-rent-slabs`);
-      if (!res.ok) throw new Error(`Weekly slabs fetch failed: ${res.status}`);
-      const data = await res.json();
-      setVehicleWeeklySlabs(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('fetchVehicleWeeklySlabs error', err);
-      toast.error('Failed to load weekly rent slabs');
-    }
-  };
+  // const fetchVehicleWeeklySlabs = async (vehicleId) => {
+  //   try {
+  //     if (!vehicleId) return setVehicleWeeklySlabs([]);
+  //     const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}/weekly-rent-slabs`);
+  //     if (!res.ok) throw new Error(`Weekly slabs fetch failed: ${res.status}`);
+  //     const data = await res.json();
+  //     setVehicleWeeklySlabs(Array.isArray(data) ? data : []);
+  //   } catch (err) {
+  //     console.error('fetchVehicleWeeklySlabs error', err);
+  //     toast.error('Failed to load weekly rent slabs');
+  //   }
+  // };
 
-  const fetchVehicleDailySlabs = async (vehicleId) => {
-    try {
-      if (!vehicleId) return setVehicleDailySlabs([]);
-      const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}/daily-rent-slabs`);
-      if (!res.ok) throw new Error(`Daily slabs fetch failed: ${res.status}`);
-      const data = await res.json();
-      setVehicleDailySlabs(Array.isArray(data) ? data : []);
-    } catch (err) {
-      console.error('fetchVehicleDailySlabs error', err);
-      toast.error('Failed to load daily rent slabs');
-    }
-  };
+  // const fetchVehicleDailySlabs = async (vehicleId) => {
+  //   try {
+  //     if (!vehicleId) return setVehicleDailySlabs([]);
+  //     const res = await fetch(`${API_BASE}/api/vehicles/${vehicleId}/daily-rent-slabs`);
+  //     if (!res.ok) throw new Error(`Daily slabs fetch failed: ${res.status}`);
+  //     const data = await res.json();
+  //     setVehicleDailySlabs(Array.isArray(data) ? data : []);
+  //   } catch (err) {
+  //     console.error('fetchVehicleDailySlabs error', err);
+  //     toast.error('Failed to load daily rent slabs');
+  //   }
+  // };
 
   useEffect(() => {
     fetchCarPlans();

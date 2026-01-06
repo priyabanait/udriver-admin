@@ -40,7 +40,8 @@ const Investors = () => {
     paymentAmount: '',
     paymentDate: new Date().toISOString().split('T')[0],
     paymentMode: 'Cash',
-    paymentStatus: 'paid'
+    paymentStatus: 'paid',
+    tdsPercent: 0
   });
   const [paymentSubmitting, setPaymentSubmitting] = useState(false);
   const [formData, setFormData] = useState({
@@ -82,7 +83,8 @@ const Investors = () => {
 
       const result = await response.json();
       const data = result.data || result;
-      setInvestments(Array.isArray(data) ? data : []);
+      const enriched = Array.isArray(data) ? data.map(inv => ({ ...inv, isTdsEdited: false, isTdsSaving: false })) : [];
+      setInvestments(enriched);
     } catch (err) {
       console.error('Failed to load investments:', err);
       toast.error('Failed to load investments');
@@ -305,7 +307,8 @@ const Investors = () => {
       paymentAmount: investment.investmentAmount || '',
       paymentDate: new Date().toISOString().split('T')[0],
       paymentMode: 'Cash',
-      paymentStatus: 'paid'
+      paymentStatus: 'paid',
+      tdsPercent: investment.tdsPercent || 0
     });
     setShowPaymentModal(true);
   };
@@ -339,7 +342,8 @@ const Investors = () => {
       const paymentData = {
         paymentStatus: paymentFormData.paymentStatus,
         paymentDate: paymentFormData.paymentDate,
-        paymentMode: paymentFormData.paymentMode
+        paymentMode: paymentFormData.paymentMode,
+        tdsPercent: Number(paymentFormData.tdsPercent || 0)
       };
 
       console.log('Recording payment:', paymentData);
@@ -362,6 +366,13 @@ const Investors = () => {
       toast.success(`Payment of ${formatCurrency(paymentFormData.paymentAmount)} recorded successfully`);
       handleClosePaymentModal();
       await loadInvestments();
+
+      // Show TDS toast if applied
+      if (paymentFormData.tdsPercent && paymentFormData.tdsPercent > 0) {
+        const interest = paymentInvestment?.maturityAmount && paymentInvestment?.investmentAmount ? (paymentInvestment.maturityAmount - paymentInvestment.investmentAmount) : 0;
+        const tdsAmount = Math.round((interest * (Number(paymentFormData.tdsPercent || 0) / 100) + Number.EPSILON) * 100) / 100;
+        toast(`TDS of ${formatCurrency(tdsAmount)} applied (${paymentFormData.tdsPercent}% on profit)`, { icon: '💸' });
+      }
     } catch (err) {
       console.error('Failed to record payment:', err);
       toast.error(err.message || 'Failed to record payment');
@@ -390,6 +401,56 @@ const Investors = () => {
     }
   };
 
+  const handleSaveTds = async (investment) => {
+    const id = investment._id;
+    const interest = (investment.maturityAmount || 0) - (investment.investmentAmount || 0);
+
+    // If interest is zero, don't allow arbitrary TDS
+    if (!interest || interest <= 0) {
+      toast.error('Cannot apply TDS when interest is 0');
+      return;
+    }
+
+    // Prefer explicit percent if user edited tdsPercent; otherwise compute percent from amount
+    let tdsPercent = investment.tdsPercent !== undefined && investment.tdsPercent !== null
+      ? Number(investment.tdsPercent)
+      : (() => {
+        const tdsAmount = investment.tdsAmount || 0;
+        const computed = Math.round(((tdsAmount / interest) * 100 + Number.EPSILON) * 100) / 100;
+        return isNaN(computed) ? 0 : computed;
+      })();
+
+    if (isNaN(tdsPercent)) tdsPercent = 0;
+    if (tdsPercent < 0 || tdsPercent > 100) {
+      toast.error('TDS percent must be between 0 and 100');
+      return;
+    }
+
+    // Set saving state
+    setInvestments(prev => prev.map(inv => inv._id === id ? { ...inv, isTdsSaving: true } : inv));
+
+    try {
+      const response = await fetch(`${API_BASE}/api/investment-fds/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ tdsPercent })
+      });
+
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.error || 'Failed to save TDS');
+      }
+
+      const updated = await response.json();
+      setInvestments(prev => prev.map(inv => inv._id === id ? { ...updated, isTdsEdited: false, isTdsSaving: false } : inv));
+      toast.success('TDS updated successfully');
+    } catch (err) {
+      console.error('Failed to save TDS:', err);
+      setInvestments(prev => prev.map(inv => inv._id === id ? { ...inv, isTdsSaving: false } : inv));
+      toast.error(err.message || 'Failed to save TDS');
+    }
+  };
+
   const handleExport = () => {
     try {
       const data = filteredInvestments.map(inv => ({
@@ -411,6 +472,8 @@ const Investors = () => {
         'Payment Status': inv.paymentStatus || '',
         'Payment Date': inv.paymentDate ? formatDate(inv.paymentDate) : '',
         'Payment Mode': inv.paymentMode || '',
+        'TDS (%)': inv.tdsPercent || 0,
+        'TDS Amount': inv.tdsAmount || 0,
         'Notes': inv.notes || '',
         'Created At': inv.createdAt ? formatDate(inv.createdAt) : '',
         'Updated At': inv.updatedAt ? formatDate(inv.updatedAt) : ''
@@ -590,6 +653,8 @@ const Investors = () => {
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Rate (%)</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Principal</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Maturity Amount</th>
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">TDS</th>
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Net Payout</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Payment Status</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Payment Date</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Status</th>
@@ -652,6 +717,79 @@ const Investors = () => {
                         </div>
                       </div>
                     </td>
+
+                    {/* TDS column (now percent) */}
+                  <td className="px-6 py-4 whitespace-nowrap">
+  {(() => {
+    // compute interest for percent/amount conversions
+    const interest = investment.maturityAmount && investment.investmentAmount ? (investment.maturityAmount - investment.investmentAmount) : 0;
+    const displayPercent = investment.tdsPercent !== undefined && investment.tdsPercent !== null
+      ? investment.tdsPercent
+      : (investment.tdsAmount && interest ? Math.round(((investment.tdsAmount / interest) * 100 + Number.EPSILON) * 100) / 100 : '');
+    const displayAmount = investment.tdsAmount !== undefined && investment.tdsAmount !== null && investment.tdsAmount !== 0
+      ? investment.tdsAmount
+      : (investment.tdsPercent ? Math.round(((interest * investment.tdsPercent) / 100 + Number.EPSILON) * 100) / 100 : 0);
+
+    return (
+      <div>
+        <div className="flex items-center space-x-2">
+          <input
+            type="number"
+            step="0.01"
+            min="0"
+            max="100"
+            className="w-28 px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
+            value={displayPercent}
+            placeholder="TDS (%)"
+            onChange={(e) => {
+              const value = e.target.value === '' ? null : Number(e.target.value);
+              setInvestments((prev) =>
+                prev.map((inv) =>
+                  inv._id === investment._id
+                    ? { ...inv, tdsPercent: value, isTdsEdited: true }
+                    : inv
+                )
+              );
+            }}
+          />
+          <button
+            disabled={!investment.isTdsEdited || investment.isTdsSaving}
+            onClick={() => handleSaveTds(investment)}
+            className={`px-3 py-1 text-sm rounded-md text-white
+              ${investment.isTdsEdited ? 'bg-teal-600 hover:bg-teal-700' : 'bg-gray-300 cursor-not-allowed'}`}
+          >
+            {investment.isTdsSaving ? (
+              <>
+                <span className="animate-spin inline-block h-3 w-3 border-b-2 border-white mr-2"></span>Saving...
+              </>
+            ) : (
+              'Save'
+            )}
+          </button>
+        </div>
+        <div className="text-xs text-gray-500 mt-1">Amount: {interest ? formatCurrency(displayAmount) : '-'}</div>
+      </div>
+    );
+  })()}
+</td>
+
+
+
+                    {/* Net payout after TDS */}
+                    <td className="px-6 py-4 whitespace-nowrap">
+                      <div className="text-sm font-bold text-gray-900">
+                        {(() => {
+                          const maturity = investment.maturityAmount || 0;
+                          const interest = investment.maturityAmount && investment.investmentAmount ? (investment.maturityAmount - investment.investmentAmount) : 0;
+                          const tds = investment.tdsAmount !== undefined && investment.tdsAmount !== null && investment.tdsAmount !== 0
+                            ? investment.tdsAmount
+                            : (investment.tdsPercent ? Math.round((interest * (investment.tdsPercent / 100) + Number.EPSILON) * 100) / 100 : 0);
+                          const net = maturity - tds;
+                          return maturity ? formatCurrency(net) : '-';
+                        })()}
+                      </div>
+                    </td>
+
                     <td className="px-6 py-4 whitespace-nowrap">
                       <Badge variant={
                         investment.paymentStatus === 'paid' ? 'success' :
@@ -665,6 +803,12 @@ const Investors = () => {
                           via {investment.paymentMode}
                         </div>
                       )}
+
+                      {/* {investment.tdsPercent && investment.tdsPercent > 0 && (
+                        <div className="text-xs text-gray-500 mt-1">
+                          TDS: {investment.tdsPercent}% {investment.tdsAmount ? `(${formatCurrency(investment.tdsAmount)})` : ''}
+                        </div>
+                      )} */}
                     </td>
                     <td className="px-6 py-4 whitespace-nowrap">
                       <div className="text-sm text-gray-900">
@@ -1159,6 +1303,35 @@ const Investors = () => {
                       placeholder="Enter payment amount"
                       required
                     />
+                  </div>
+
+                  {/* TDS on Profit */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">
+                      TDS on Profit (%)
+                    </label>
+                    <input
+                      type="number"
+                      step="0.01"
+                      min="0"
+                      max="100"
+                      value={paymentFormData.tdsPercent}
+                      onChange={(e) => setPaymentFormData(prev => ({ ...prev, tdsPercent: Number(e.target.value) }))}
+                      className="input w-full"
+                    />
+                  </div>
+
+                  {/* TDS summary */}
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700 mb-2">TDS Amount</label>
+                    <div className="text-sm font-medium text-gray-900">
+                      {(() => {
+                        const interest = paymentInvestment?.maturityAmount && paymentInvestment?.investmentAmount ? (paymentInvestment.maturityAmount - paymentInvestment.investmentAmount) : 0;
+                        const tds = Math.round((interest * (Number(paymentFormData.tdsPercent || 0) / 100) + Number.EPSILON) * 100) / 100;
+                        return `${formatCurrency(tds)}`;
+                      })()}
+                    </div>
+                    <div className="text-xs text-gray-500 mt-1">Net interest (after TDS) will be recorded</div>
                   </div>
 
                   {/* Payment Date */}

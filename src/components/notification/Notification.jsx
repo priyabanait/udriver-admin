@@ -159,14 +159,15 @@ export default function SendNotification() {
         return;
       }
     } else {
-      const hasDriverApp = apps.customer;
-      const hasInvestorApp = apps.driver;
-      
-      if (hasDriverApp && !driverData.title && !driverData.message) {
+      // Determine which app(s) we are actually sending to
+      const sendingToDrivers = (sendMode === 'all' && apps.customer) || (sendMode === 'specific' && selectedDrivers.length > 0);
+      const sendingToInvestors = (sendMode === 'all' && apps.driver) || (sendMode === 'specific' && selectedInvestors.length > 0);
+
+      if (sendingToDrivers && !driverData.title && !driverData.message) {
         setError("Please provide title or message for Driver App");
         return;
       }
-      if (hasInvestorApp && !investorData.title && !investorData.message) {
+      if (sendingToInvestors && !investorData.title && !investorData.message) {
         setError("Please provide title or message for Investor App");
         return;
       }
@@ -187,40 +188,73 @@ export default function SendNotification() {
 
       if (sendMode === "specific") {
         // Send to specific users
-        const notificationData = sameMessage ? commonData : {
-          title: selectedDrivers.length > 0 && selectedInvestors.length > 0 
-            ? commonData.title 
-            : (selectedDrivers.length > 0 ? driverData.title : investorData.title),
-          message: selectedDrivers.length > 0 && selectedInvestors.length > 0 
-            ? commonData.message 
-            : (selectedDrivers.length > 0 ? driverData.message : investorData.message),
-          link: selectedDrivers.length > 0 && selectedInvestors.length > 0 
-            ? commonData.link 
-            : (selectedDrivers.length > 0 ? driverData.link : investorData.link)
-        };
+        if (sameMessage) {
+          const payload = {
+            driverIds: selectedDrivers.map(d => d._id),
+            investorIds: selectedInvestors.map(i => i._id),
+            title: commonData.title,
+            message: commonData.message,
+            link: commonData.link,
+            sendType,
+            ...(sendType === "schedule" && { scheduledTime })
+          };
 
-        const payload = {
-          driverIds: selectedDrivers.map(d => d._id),
-          investorIds: selectedInvestors.map(i => i._id),
-          title: notificationData.title,
-          message: notificationData.message,
-          link: notificationData.link,
-          sendType,
-          ...(sendType === "schedule" && { scheduledTime })
-        };
+          console.log("Sending notification to specific users (common):", payload);
 
-        console.log("Sending notification to specific users:", payload);
+          const response = await axios.post(
+            `${API_BASE}/api/notifications/admin/send-specific`,
+            payload,
+            { headers }
+          );
 
-        const response = await axios.post(
-          `${API_BASE}/api/notifications/admin/send-specific`,
-          payload,
-          { headers }
-        );
+          console.log("Notification sent successfully:", response.data);
+          setSuccess(
+            `Notifications sent successfully! ${response.data.results?.length || 0} notification(s) processed.`
+          );
 
-        console.log("Notification sent successfully:", response.data);
-        setSuccess(
-          `Notifications sent successfully! ${response.data.results?.length || 0} notification(s) processed.`
-        );
+        } else {
+          // When different messages for driver/investor are provided, send separate requests
+          const requests = [];
+
+          if (selectedDrivers.length > 0) {
+            const payloadDriver = {
+              driverIds: selectedDrivers.map(d => d._id),
+              title: driverData.title,
+              message: driverData.message,
+              link: driverData.link,
+              sendType,
+              ...(sendType === "schedule" && { scheduledTime })
+            };
+            console.log('Sending driver-specific notification:', payloadDriver);
+            requests.push(axios.post(`${API_BASE}/api/notifications/admin/send-specific`, payloadDriver, { headers }).catch(err => ({ error: err })));
+          }
+
+          if (selectedInvestors.length > 0) {
+            const payloadInvestor = {
+              investorIds: selectedInvestors.map(i => i._id),
+              title: investorData.title,
+              message: investorData.message,
+              link: investorData.link,
+              sendType,
+              ...(sendType === "schedule" && { scheduledTime })
+            };
+            console.log('Sending investor-specific notification:', payloadInvestor);
+            requests.push(axios.post(`${API_BASE}/api/notifications/admin/send-specific`, payloadInvestor, { headers }).catch(err => ({ error: err })));
+          }
+
+          const responses = await Promise.all(requests);
+
+          let processed = 0;
+          const errors = [];
+          responses.forEach(r => {
+            if (r && r.data && r.data.results) processed += (r.data.results.length || 0);
+            if (r && r.error) errors.push(r.error.message || r.error.toString());
+            if (r && r.data && r.data.errors) errors.push(...(r.data.errors.map(e => e.error || JSON.stringify(e))));
+          });
+
+          setSuccess(`Notifications sent successfully! ${processed} notification(s) processed.`);
+          if (errors.length) setError(`Some notifications failed: ${errors[0]}`);
+        }
 
         // Reset form after successful send
         setTimeout(() => {
@@ -230,6 +264,7 @@ export default function SendNotification() {
           setSelectedDrivers([]);
           setSelectedInvestors([]);
           setSuccess("");
+          setError("");
         }, 3000);
       } else {
         // Send to all users of selected apps
@@ -567,17 +602,19 @@ export default function SendNotification() {
         </>
       )}
 
-      {/* SAME MESSAGE TOGGLE */}
-      <div className="bg-white rounded-xl shadow p-5 mb-6">
-        <label className="flex items-center gap-3 font-medium">
-          <input
-            type="checkbox"
-            checked={sameMessage}
-            onChange={() => setSameMessage(!sameMessage)}
-          />
-          Use same message for both apps
-        </label>
-      </div>
+      {/* SAME MESSAGE TOGGLE (shown only when both apps are selected) */}
+      {(apps.customer && apps.driver) && (
+        <div className="bg-white rounded-xl shadow p-5 mb-6">
+          <label className="flex items-center gap-3 font-medium">
+            <input
+              type="checkbox"
+              checked={sameMessage}
+              onChange={() => setSameMessage(!sameMessage)}
+            />
+            {sendMode === 'all' ? 'Use same message for both apps' : 'Use same message for selected apps'}
+          </label>
+        </div>
+      )}
 
       {/* CONTENT */}
       {sameMessage ? (
@@ -588,16 +625,20 @@ export default function SendNotification() {
         />
       ) : (
         <div className="grid md:grid-cols-2 gap-6">
-          <NotificationForm
-            title="Driver App Notification"
-            data={driverData}
-            setData={setDriverData}
-          />
-          <NotificationForm
-            title="Investor App Notification"
-            data={investorData}
-            setData={setInvestorData}
-          />
+          {apps.customer && (
+            <NotificationForm
+              title={`Driver App Notification ${selectedDrivers.length > 0 ? `(${selectedDrivers.length} selected)` : ''}`}
+              data={driverData}
+              setData={setDriverData}
+            />
+          )}
+          {apps.driver && (
+            <NotificationForm
+              title={`Investor App Notification ${selectedInvestors.length > 0 ? `(${selectedInvestors.length} selected)` : ''}`}
+              data={investorData}
+              setData={setInvestorData}
+            />
+          )}
         </div>
       )}
 
@@ -648,8 +689,17 @@ export default function SendNotification() {
         </div>
       )}
 
+      {/* SUMMARY */}
+      <div className="text-sm text-gray-600 mt-3">
+        {sendMode === 'all' ? (
+          `Will send to: ${Object.keys(apps).filter(k => apps[k]).map(k => (k === 'customer' ? 'Driver App' : 'Investor App')).join(', ') || 'None'}`
+        ) : (
+          `Will send to: ${selectedDrivers.length} driver(s)${selectedInvestors.length > 0 ? `, ${selectedInvestors.length} investor(s)` : ''}`
+        )}
+      </div>
+
       {/* ACTION BUTTONS */}
-      <div className="flex justify-end gap-4 mt-8">
+      <div className="flex justify-end gap-4 mt-6">
         <button
           onClick={handleSend}
           disabled={loading}

@@ -92,7 +92,7 @@ export default function NotificationBell() {
                 </div>
               ))}
             </div>
-            <div className="p-2 text-center text-xs text-gray-500">Powered by real-time socket notifications</div>
+           
           </div>
         </div>
       )}

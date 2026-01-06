@@ -205,7 +205,11 @@ export default function VehiclesList() {
         'carLeftPhoto',
         'carRightPhoto',
         'carBackPhoto',
-        'carFullPhoto'
+        'carFullPhoto',
+        'insurancePhoto',
+        'fcPhoto',
+        'interiorPhoto',
+        'speedometerPhoto'
       ];
 
       const readFileAsDataUrl = (file) => new Promise((resolve, reject) => {
@@ -639,30 +643,30 @@ export default function VehiclesList() {
                 <TableRow>
                   <TableHead>Car Category</TableHead>
                   <TableHead>Brand</TableHead>
-                  <TableHead>Vehicle Model</TableHead>
+                  {/* <TableHead>Vehicle Model</TableHead> */}
                   <TableHead>Car Name</TableHead>
                   {/* <TableHead>Color</TableHead> */}
-                  <TableHead>Fuel Type</TableHead>
+                  {/* <TableHead>Fuel Type</TableHead> */}
                   <TableHead>Vehicle No.</TableHead>
                   <TableHead>Owner Name</TableHead>
                   <TableHead>Owner Phone</TableHead>
-                  <TableHead>Manufacture Year</TableHead>
+                  {/* <TableHead>Manufacture Year</TableHead> */}
                   <TableHead>Registration Date</TableHead>
                   {/* <TableHead>RC Expiry</TableHead> */}
-                  <TableHead>Road Tax Date</TableHead>
+                  {/* <TableHead>Road Tax Date</TableHead> */}
                   {/* <TableHead>Road Tax No.</TableHead> */}
-                  <TableHead>Insurance Date</TableHead>
-                  <TableHead>Permit Date</TableHead>
+                  {/* <TableHead>Insurance Date</TableHead>
+                  <TableHead>Permit Date</TableHead> */}
                   <TableHead>Car Submit Date</TableHead>
-                  <TableHead>PUC No.</TableHead>
+                  {/* <TableHead>PUC No.</TableHead> */}
                   {/* <TableHead>Traffic Fine</TableHead>
                   <TableHead>Fine Date</TableHead> */}
                   <TableHead>Assigned Driver</TableHead>
                   <TableHead>Assigned Manager</TableHead>
-                  <TableHead>Driver Rent Days</TableHead>
+                
                   <TableHead>KYC Status</TableHead>
                   <TableHead>Car Status</TableHead>
-                  <TableHead>Remarks</TableHead>
+                  
                   <TableHead>Actions</TableHead>
                 </TableRow>
               </TableHeader>
@@ -671,24 +675,24 @@ export default function VehiclesList() {
                   <TableRow key={index}>
                     <TableCell>{v.category || '-'}</TableCell>
                     <TableCell>{v.brand || v.make || '-'}</TableCell>
-                    <TableCell>{v.model}</TableCell>
+                    {/* <TableCell>{v.model}</TableCell> */}
                     <TableCell>{v.carName || '-'}</TableCell>
                     {/* <TableCell>{v.color || '-'}</TableCell> */}
-                    <TableCell>{v.fuelType || '-'}</TableCell>
+                    {/* <TableCell>{v.fuelType || '-'}</TableCell> */}
                     <TableCell>
                       <div className="font-medium text-gray-900">{v.registrationNumber}</div>
                     </TableCell>
                     <TableCell>{v.ownerName}</TableCell>
                     <TableCell>{v.ownerPhone}</TableCell>
-                    <TableCell>{v.year || '-'}</TableCell>
+                    {/* <TableCell>{v.year || '-'}</TableCell> */}
                     <TableCell>{formatDate(v.registrationDate)}</TableCell>
                     {/* <TableCell>{formatDate(v.rcExpiryDate || v.rcExpiry)}</TableCell> */}
                     {/* <TableCell>{formatDate(v.roadTaxDate)}</TableCell> */}
-                    <TableCell>{v.roadTaxNumber || '-'}</TableCell>
-                    <TableCell>{formatDate(v.insuranceDate || v.insuranceExpiry)}</TableCell>
-                    <TableCell>{formatDate(v.permitDate)}</TableCell>
+                    {/* <TableCell>{v.roadTaxNumber || '-'}</TableCell> */}
+                    {/* <TableCell>{formatDate(v.insuranceDate || v.insuranceExpiry)}</TableCell> */}
+                    {/* <TableCell>{formatDate(v.permitDate)}</TableCell> */}
                     <TableCell>{formatDate(v.emissionDate)}</TableCell>
-                    <TableCell>{v.pucNumber || '-'}</TableCell>
+                    {/* <TableCell>{v.pucNumber || '-'}</TableCell> */}
                     {/* <TableCell>{v.trafficFine ?? '-'}</TableCell>
                     <TableCell>{formatDate(v.trafficFineDate)}</TableCell> */}
                     <TableCell>{
@@ -726,38 +730,10 @@ export default function VehiclesList() {
                         )
                       ) : <Badge variant="warning">Not Assigned</Badge>
                     }</TableCell>
-                    <TableCell>{
-                      v.rentStartDate
-                        ? (() => {
-                            // Calculate total active days
-                            let totalDays = 0;
-                            const start = new Date(v.rentStartDate);
-                            // If paused, use paused date as end for last active period
-                            if (v.rentPausedDate && v.status === 'inactive') {
-                              const paused = new Date(v.rentPausedDate);
-                              totalDays = Math.max(1, Math.floor((paused - start) / (1000 * 60 * 60 * 24)) + 1);
-                              return <span>{totalDays} days <Badge variant="warning">Paused</Badge></span>;
-                            } else if (v.rentPausedDate && v.status === 'active') {
-                              // If resumed, add previous days to current active period
-                              const paused = new Date(v.rentPausedDate);
-                              const beforePause = Math.max(1, Math.floor((paused - start) / (1000 * 60 * 60 * 24)) + 1);
-                              const afterResume = Math.max(0, Math.floor((new Date() - paused) / (1000 * 60 * 60 * 24)));
-                              totalDays = beforePause + afterResume;
-                              return `${totalDays} days`;
-                            } else if (v.status === 'active') {
-                              // First active period, not paused yet
-                              totalDays = Math.max(1, Math.floor((new Date() - start) / (1000 * 60 * 60 * 24)) + 1);
-                              return `${totalDays} days`;
-                            } else {
-                              // Not started or unknown state
-                              return <Badge variant="warning">Not Started</Badge>;
-                            }
-                          })()
-                        : <Badge variant="warning">Not Started</Badge>
-                    }</TableCell>
+                   
                     <TableCell>{getKycBadge(v.kycStatus || v.kyc || v.kyc_status)}</TableCell>
                     <TableCell>{getStatusBadge(v.status)}</TableCell>
-                    <TableCell>{v.remarks || '-'}</TableCell>
+                 
                     <TableCell>
                       <div className="flex items-center space-x-2">
                         <button title="View" className="p-1 text-gray-400 hover:text-blue-600" onClick={()=>handleViewVehicle(v)}><Eye className="h-4 w-4"/></button>

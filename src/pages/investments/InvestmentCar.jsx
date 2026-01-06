@@ -34,6 +34,14 @@ const InvestmentCar = () => {
   const [investors, setInvestors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  const [editModalOpen, setEditModalOpen] = useState(false);
+  const [editEntry, setEditEntry] = useState(null);
+  const [editLoading, setEditLoading] = useState(false);
+
+  // Vehicle edit modal state
+  const [vehicleEditOpen, setVehicleEditOpen] = useState(false);
+  const [vehicleEdit, setVehicleEdit] = useState(null);
+  const [vehicleEditLoading, setVehicleEditLoading] = useState(false);
 
 
   useEffect(() => {
@@ -99,13 +107,173 @@ const InvestmentCar = () => {
     }
   };
 
-  // Update vehicle status in backend
-  const updateVehicleStatus = async (id, newStatus, oldStatus) => {
+  // Edit modal helpers
+  const openEditModal = (entry) => {
+    if (!entry) return;
+    setEditEntry({
+      ...entry,
+      carvalue: entry.carvalue || 0,
+      MonthlyPayout: entry.MonthlyPayout !== undefined ? entry.MonthlyPayout : (entry.finalMonthlyPayout || 0),
+      deductionTDS: entry.deductionTDS || 0,
+      investorId: entry.investorId || '',
+      investorMobile: entry.investorMobile || ''
+    });
+    setEditModalOpen(true);
+  };
+
+  const closeEditModal = () => {
+    setEditModalOpen(false);
+    setEditEntry(null);
+    setEditLoading(false);
+  };
+
+  const handleEditChange = (field, value) => {
+    setEditEntry(prev => ({ ...prev, [field]: value }));
+  };
+
+  const submitEditEntry = async () => {
+    if (!editEntry) return;
     try {
+      setEditLoading(true);
+      const payload = {
+        carname: editEntry.carname,
+        carOwnerName: editEntry.carOwnerName,
+        carvalue: Number(editEntry.carvalue || 0),
+        MonthlyPayout: Number(editEntry.MonthlyPayout || 0),
+        deductionTDS: Number(editEntry.deductionTDS || 0),
+        investorId: editEntry.investorId || '',
+        investorMobile: editEntry.investorMobile || ''
+      };
+      if (payload.investorId === '') delete payload.investorId;
+
+      const response = await fetch(`${API_BASE}/api/car-investment-entries/${editEntry._id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      });
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.error || 'Failed to update entry');
+      }
+      toast.success('Car investment updated');
+      await loadCarInvestments();
+      await loadVehicles();
+      closeEditModal();
+    } catch (err) {
+      console.error('Update failed', err);
+      toast.error(err.message || 'Failed to update car investment');
+      setEditLoading(false);
+    }
+  };
+
+  // Vehicle edit helpers
+  const openVehicleEditModal = (vehicle) => {
+    if (!vehicle) return;
+    setVehicleEdit({
+      ...vehicle,
+      vehicleId: vehicle.vehicleId || vehicle._id,
+      registrationNumber: vehicle.registrationNumber || '',
+      brand: vehicle.brand || vehicle.make || '',
+      model: vehicle.model || '',
+      category: vehicle.category || vehicle.carCategory || '',
+      ownerName: vehicle.ownerName || '',
+      startDate: vehicle.startDate ? new Date(vehicle.startDate).toISOString().slice(0,10) : '',
+      endDate: vehicle.endDate ? new Date(vehicle.endDate).toISOString().slice(0,10) : '',
+      paymentDate: vehicle.paymentDate ? new Date(vehicle.paymentDate).toISOString().slice(0,10) : '',
+      status: vehicle.status || 'inactive',
+      investorId: vehicle.investorId?._id || vehicle.investorId || '',
+      paymentDoc: vehicle.paymentDoc || ''
+    });
+    setVehicleEditOpen(true);
+  };
+
+  const closeVehicleEditModal = () => {
+    setVehicleEditOpen(false);
+    setVehicleEdit(null);
+    setVehicleEditLoading(false);
+  };
+
+  const handleVehicleChange = (field, value) => {
+    setVehicleEdit(prev => ({ ...prev, [field]: value }));
+  };
+
+  const handleVehicleFile = (file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = () => {
+      const base64 = reader.result;
+      setVehicleEdit(prev => ({ ...prev, paymentDocFile: base64 }));
+    };
+    reader.readAsDataURL(file);
+  };
+
+  const submitVehicleEdit = async () => {
+    if (!vehicleEdit) return;
+    try {
+      setVehicleEditLoading(true);
+      const id = vehicleEdit.vehicleId || vehicleEdit._id;
+      const payload = {
+        registrationNumber: vehicleEdit.registrationNumber,
+        brand: vehicleEdit.brand,
+        model: vehicleEdit.model,
+        category: vehicleEdit.category,
+        ownerName: vehicleEdit.ownerName,
+        status: vehicleEdit.status,
+        investorId: vehicleEdit.investorId || ''
+      };
+
+      // Dates
+      if (vehicleEdit.startDate) payload.startDate = new Date(vehicleEdit.startDate).toISOString();
+      else payload.startDate = null;
+      if (vehicleEdit.endDate) payload.endDate = new Date(vehicleEdit.endDate).toISOString();
+      else payload.endDate = null;
+      if (vehicleEdit.paymentDate) payload.paymentDate = new Date(vehicleEdit.paymentDate).toISOString();
+      else payload.paymentDate = null;
+
+      // File
+      if (vehicleEdit.paymentDocFile) payload.paymentDoc = vehicleEdit.paymentDocFile;
+
+      if (payload.investorId === '') delete payload.investorId;
+
       const response = await fetch(`${API_BASE}/api/vehicles/${id}`, {
         method: 'PUT',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ status: newStatus })
+        body: JSON.stringify(payload)
+      });
+
+      if (!response.ok) {
+        const err = await response.json().catch(() => null);
+        throw new Error(err?.message || 'Failed to update vehicle');
+      }
+
+      toast.success('Vehicle updated');
+      await loadVehicles();
+      await loadCarInvestments();
+      closeVehicleEditModal();
+    } catch (err) {
+      console.error('Vehicle update failed', err);
+      toast.error(err.message || 'Failed to update vehicle');
+      setVehicleEditLoading(false);
+    }
+  };
+
+  // Update vehicle status in backend
+  const updateVehicleStatus = async (id, newStatus, oldStatus) => {
+    try {
+      const payload = { status: newStatus };
+      if (newStatus === 'active') {
+        // mark start date and clear endDate when activating
+        payload.startDate = new Date().toISOString();
+        payload.endDate = null;
+      } else if (newStatus === 'inactive' || newStatus === 'suspended') {
+        // mark end date when inactivating
+        payload.endDate = new Date().toISOString();
+      }
+
+      const response = await fetch(`${API_BASE}/api/vehicles/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
       });
       if (!response.ok) throw new Error('Failed to update status');
       
@@ -123,6 +291,45 @@ const InvestmentCar = () => {
     } catch (err) {
       toast.error('Failed to update status');
     }
+  };
+
+  // Mark payment date for a vehicle
+  const markPayment = async (id) => {
+    try {
+      const response = await fetch(`${API_BASE}/api/vehicles/${id}`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ paymentDate: new Date().toISOString() })
+      });
+      if (!response.ok) throw new Error('Failed to set payment date');
+      toast.success('Payment date recorded');
+      await loadVehicles();
+    } catch (err) {
+      toast.error('Failed to record payment date');
+    }
+  };
+
+  // Upload payment proof (file will be uploaded to cloudinary by backend)
+  const uploadPaymentProof = async (id, file) => {
+    if (!file) return;
+    const reader = new FileReader();
+    reader.onload = async () => {
+      const base64 = reader.result; // data:<mime>;base64,...
+      try {
+        const response = await fetch(`${API_BASE}/api/vehicles/${id}`, {
+          method: 'PUT',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ paymentDoc: base64, paymentDate: new Date().toISOString() })
+        });
+        if (!response.ok) throw new Error('Upload failed');
+        toast.success('Payment proof uploaded');
+        await loadVehicles();
+      } catch (err) {
+        console.error('Upload error', err);
+        toast.error('Failed to upload payment proof');
+      }
+    };
+    reader.readAsDataURL(file);
   };
 
   // Match vehicles with car investment entries by car category and investor ID
@@ -425,6 +632,10 @@ const InvestmentCar = () => {
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Car Invest Name</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Car Owner Name</th>
                     <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Car Submit Date</th>
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Start/Payment Date</th>
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">End Date</th>
+                  {/* <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Payment Date</th> */}
+                  <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Agrement Upload</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Car Value</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Monthly Payout</th>
                   <th className="sticky top-0 z-50 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase bg-gray-50">Deduction TDS</th>
@@ -558,6 +769,40 @@ const InvestmentCar = () => {
 </td>
 
                         <td className="px-6 py-4">
+  {vehicles.map((v, idx) => (
+    <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-200' : ''}>
+      {v.startDate ? new Date(v.startDate).toLocaleDateString() : '-'}
+    </div>
+  ))}
+</td>
+
+                        <td className="px-6 py-4">
+  {vehicles.map((v, idx) => (
+    <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-200' : ''}>
+      {v.endDate ? new Date(v.endDate).toLocaleDateString() : '-'}
+    </div>
+  ))}
+</td>
+{/* 
+                        <td className="px-6 py-4">
+  {vehicles.map((v, idx) => (
+    <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-200' : ''}>
+      {v.paymentDate ? new Date(v.paymentDate).toLocaleDateString() : '-'}
+    </div>
+  ))}
+</td> */}
+
+                        <td className="px-6 py-4">
+  {vehicles.map((v, idx) => (
+    <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-200' : ''}>
+      {v.paymentDoc ? (
+        <a href={v.paymentDoc} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm">View Agreement</a>
+      ) : '-'}
+    </div>
+  ))}
+</td>
+
+                        <td className="px-6 py-4">
                           {vehicles.map((v, idx) => (
                             <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-200' : ''}>
                               {formatCurrency(v.matchedInvestment?.carvalue || 0)}
@@ -668,15 +913,61 @@ const InvestmentCar = () => {
                             const status = v.status || 'inactive';
                             return (
                               <div key={idx} className={idx > 0 ? 'mt-2 pt-2 border-t border-gray-200' : ''}>
-                                <select
-                                  value={status}
-                                  onChange={e => updateVehicleStatus(id, e.target.value, status)}
-                                  className="border rounded px-2 py-1 text-sm"
-                                >
-                                  <option value="active">Active</option>
-                                  <option value="inactive">Inactive</option>
-                                  <option value="suspended">Suspended</option>
-                                </select>
+                                <div className="flex items-center space-x-2">
+                                  <select
+                                    value={status}
+                                    onChange={e => updateVehicleStatus(id, e.target.value, status)}
+                                    className="border rounded px-2 py-1 text-sm"
+                                  >
+                                    <option value="active">Active</option>
+                                    <option value="inactive">Inactive</option>
+                                    <option value="suspended">Suspended</option>
+                                  </select>
+
+                                  {/* <button
+                                    type="button"
+                                    onClick={() => markPayment(id)}
+                                    className="px-2 py-1 bg-green-50 text-green-700 text-xs rounded border"
+                                  >
+                                    Mark Paid
+                                  </button> */}
+
+                                  <input
+                                    id={`payment-proof-${id}-${idx}`}
+                                    type="file"
+                                    accept="image/*,application/pdf"
+                                    className="hidden"
+                                    onChange={e => {
+                                      if (e.target.files && e.target.files[0]) {
+                                        uploadPaymentProof(id, e.target.files[0]);
+                                      }
+                                    }}
+                                  />
+                                  <label htmlFor={`payment-proof-${id}-${idx}`} className="px-2 py-1 bg-blue-50 text-blue-700 text-xs rounded border cursor-pointer">Upload Agreement</label>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => openVehicleEditModal(v)}
+                                    className="px-2 py-1 bg-indigo-50 text-indigo-700 text-xs rounded border flex items-center space-x-1"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                    <span>Edit Vehicle</span>
+                                  </button>
+
+                                  <button
+                                    type="button"
+                                    onClick={() => openEditModal(v.matchedInvestment)}
+                                    className="px-2 py-1 bg-yellow-50 text-yellow-700 text-xs rounded border flex items-center space-x-1"
+                                  >
+                                    <Edit className="h-3.5 w-3.5" />
+                                    <span>Edit Plan</span>
+                                  </button>
+                                </div>
+                                {v.paymentDoc && (
+                                  <div className="text-xs text-blue-600 mt-1">
+                                    <a href={v.paymentDoc} target="_blank" rel="noopener noreferrer">View Agreement</a>
+                                  </div>
+                                )}
                               </div>
                             );
                           })}
@@ -695,6 +986,116 @@ const InvestmentCar = () => {
           </div>
         </CardContent>
       </Card>
+
+      {editModalOpen && editEntry && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-md w-full max-w-lg p-6 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Edit Car Investment</h3>
+            <div className="grid grid-cols-1 gap-3">
+              <label htmlFor="edit-carname" className="text-sm font-medium">Car Name</label>
+              <input id="edit-carname" type="text" value={editEntry.carname || ''} onChange={e => handleEditChange('carname', e.target.value)} placeholder="Car Name" className="border rounded p-2" />
+
+              <label htmlFor="edit-carOwnerName" className="text-sm font-medium">Car Owner Name</label>
+              <input id="edit-carOwnerName" type="text" value={editEntry.carOwnerName || ''} onChange={e => handleEditChange('carOwnerName', e.target.value)} placeholder="Car Owner Name" className="border rounded p-2" />
+
+              <label htmlFor="edit-carvalue" className="text-sm font-medium">Car Value</label>
+              <input id="edit-carvalue" type="number" value={editEntry.carvalue || 0} onChange={e => handleEditChange('carvalue', e.target.value)} placeholder="Car Value" className="border rounded p-2" />
+
+              <label htmlFor="edit-MonthlyPayout" className="text-sm font-medium">Monthly Payout</label>
+              <input id="edit-MonthlyPayout" type="number" value={editEntry.MonthlyPayout || 0} onChange={e => handleEditChange('MonthlyPayout', e.target.value)} placeholder="Monthly Payout" className="border rounded p-2" />
+
+              <label htmlFor="edit-deductionTDS" className="text-sm font-medium">Deduction TDS (%)</label>
+              <input id="edit-deductionTDS" type="number" value={editEntry.deductionTDS || 0} onChange={e => handleEditChange('deductionTDS', e.target.value)} placeholder="Deduction TDS (%)" className="border rounded p-2" />
+
+              <label htmlFor="edit-investorId" className="text-sm font-medium">Investor</label>
+              <select id="edit-investorId" value={editEntry.investorId || ''} onChange={e => handleEditChange('investorId', e.target.value)} className="border rounded p-2">
+                <option value="">No investor</option>
+                {investors.map(inv => (
+                  <option key={inv._id || inv.id} value={inv._id || inv.id}>{inv.investorName || inv.name}</option>
+                ))}
+              </select>
+
+              <label htmlFor="edit-investorMobile" className="text-sm font-medium">Investor Mobile</label>
+              <input id="edit-investorMobile" type="text" value={editEntry.investorMobile || ''} onChange={e => handleEditChange('investorMobile', e.target.value)} placeholder="Investor Mobile" className="border rounded p-2" />
+            </div>
+            <div className="mt-4 flex justify-end space-x-2">
+              <button type="button" onClick={closeEditModal} className="px-4 py-2 border rounded">Cancel</button>
+              <button type="button" onClick={submitEditEntry} className="px-4 py-2 bg-blue-600 text-white rounded" disabled={editLoading}>
+                {editLoading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {vehicleEditOpen && vehicleEdit && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-40">
+          <div className="bg-white rounded-md w-full max-w-lg p-6 max-h-[80vh] overflow-y-auto">
+            <h3 className="text-lg font-semibold mb-4">Edit Vehicle</h3>
+            <div className="grid grid-cols-1 gap-3">
+              <label htmlFor="vehicle-registration" className="text-sm font-medium">Registration Number</label>
+              <input id="vehicle-registration" type="text" value={vehicleEdit.registrationNumber || ''} onChange={e => handleVehicleChange('registrationNumber', e.target.value)} placeholder="Registration Number" className="border rounded p-2" />
+
+              <label htmlFor="vehicle-brand" className="text-sm font-medium">Brand</label>
+              <input id="vehicle-brand" type="text" value={vehicleEdit.brand || ''} onChange={e => handleVehicleChange('brand', e.target.value)} placeholder="Brand" className="border rounded p-2" />
+
+              <label htmlFor="vehicle-model" className="text-sm font-medium">Model</label>
+              <input id="vehicle-model" type="text" value={vehicleEdit.model || ''} onChange={e => handleVehicleChange('model', e.target.value)} placeholder="Model" className="border rounded p-2" />
+
+              <label htmlFor="vehicle-category" className="text-sm font-medium">Category</label>
+              <input id="vehicle-category" type="text" value={vehicleEdit.category || ''} onChange={e => handleVehicleChange('category', e.target.value)} placeholder="Category" className="border rounded p-2" />
+
+              <label htmlFor="vehicle-owner" className="text-sm font-medium">Owner Name</label>
+              <input id="vehicle-owner" type="text" value={vehicleEdit.ownerName || ''} onChange={e => handleVehicleChange('ownerName', e.target.value)} placeholder="Owner Name" className="border rounded p-2" />
+
+              <div className="grid grid-cols-3 gap-2">
+                <div>
+                  <label htmlFor="vehicle-startDate" className="text-sm font-medium">Start Date</label>
+                  <input id="vehicle-startDate" type="date" value={vehicleEdit.startDate || ''} onChange={e => handleVehicleChange('startDate', e.target.value)} className="border rounded p-2" />
+                </div>
+                <div>
+                  <label htmlFor="vehicle-endDate" className="text-sm font-medium">End Date</label>
+                  <input id="vehicle-endDate" type="date" value={vehicleEdit.endDate || ''} onChange={e => handleVehicleChange('endDate', e.target.value)} className="border rounded p-2" />
+                </div>
+                <div>
+                  <label htmlFor="vehicle-paymentDate" className="text-sm font-medium">Payment Date</label>
+                  <input id="vehicle-paymentDate" type="date" value={vehicleEdit.paymentDate || ''} onChange={e => handleVehicleChange('paymentDate', e.target.value)} className="border rounded p-2" />
+                </div>
+              </div>
+
+              <label htmlFor="vehicle-status" className="text-sm font-medium">Status</label>
+              <select id="vehicle-status" value={vehicleEdit.status || 'inactive'} onChange={e => handleVehicleChange('status', e.target.value)} className="border rounded p-2">
+                <option value="active">Active</option>
+                <option value="inactive">Inactive</option>
+                <option value="suspended">Suspended</option>
+              </select>
+
+              <label htmlFor="vehicle-investor">Investor</label>
+              <select id="vehicle-investor" value={vehicleEdit.investorId || ''} onChange={e => handleVehicleChange('investorId', e.target.value)} className="border rounded p-2">
+                <option value="">No investor</option>
+                {investors.map(inv => (
+                  <option key={inv._id || inv.id} value={inv._id || inv.id}>{inv.investorName || inv.name}</option>
+                ))}
+              </select>
+
+              <div>
+                <label className="text-sm font-medium">Agreement / Payment Doc</label>
+                <input type="file" accept="image/*,application/pdf" onChange={e => { if (e.target.files && e.target.files[0]) handleVehicleFile(e.target.files[0]); }} />
+                {vehicleEdit.paymentDoc && !vehicleEdit.paymentDocFile && (
+                  <div className="text-xs text-blue-600 mt-1">Current: <a href={vehicleEdit.paymentDoc} target="_blank" rel="noopener noreferrer">View</a></div>
+                )}
+              </div>
+            </div>
+            <div className="mt-4 flex justify-end space-x-2">
+              <button type="button" onClick={closeVehicleEditModal} className="px-4 py-2 border rounded">Cancel</button>
+              <button type="button" onClick={submitVehicleEdit} className="px-4 py-2 bg-blue-600 text-white rounded" disabled={vehicleEditLoading}>
+                {vehicleEditLoading ? 'Saving...' : 'Save Vehicle'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
     </div>
   );
 };

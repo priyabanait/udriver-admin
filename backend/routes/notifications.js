@@ -1,63 +1,256 @@
-import express from 'express';
-import { listNotifications, markAsRead, sendNotificationToAppType, sendNotificationToSpecificUsers } from '../lib/notify.js';
-import Driver from '../models/driver.js';
-import Investor from '../models/investor.js';
+import express from "express";
+import {
+  listNotifications,
+  markAsRead,
+  sendNotificationToAppType,
+  sendNotificationToSpecificUsers,
+} from "../lib/notify.js";
+import Driver from "../models/driver.js";
+import Investor from "../models/investor.js";
+import DeviceToken from "../models/deviceToken.js";
+import Notification from "../models/notification.js";
 
 const router = express.Router();
 
-router.get('/', async (req, res) => {
+/**
+ * DEBUG endpoint - List all notifications in database
+ * GET /api/notifications/debug/all
+ */
+router.get("/debug/all", async (req, res) => {
+  try {
+    const allNotifs = await Notification.find()
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    res.json({
+      total: await Notification.countDocuments(),
+      count: allNotifs.length,
+      notifications: allNotifs.map((n) => ({
+        _id: n._id,
+        type: n.type,
+        title: n.title?.substring(0, 50),
+        recipientType: n.recipientType,
+        recipientId: n.recipientId,
+        createdAt: n.createdAt,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;
     const limit = Math.min(parseInt(req.query.limit) || 20, 100); // Cap at 100
     const { driverId, investorId, recipientType, recipientId } = req.query;
-    const result = await listNotifications({ page, limit, driverId, investorId, recipientType, recipientId });
+    const result = await listNotifications({
+      page,
+      limit,
+      driverId,
+      investorId,
+      recipientType,
+      recipientId,
+    });
     // Ensure consistent response format
     if (result && result.items) {
       res.json(result);
     } else {
-      res.json({ items: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+      res.json({
+        items: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
     }
   } catch (err) {
-    console.error('Error fetching notifications:', err);
-    res.status(500).json({ message: 'Failed to fetch notifications', error: err.message });
+    console.error("Error fetching notifications:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch notifications", error: err.message });
   }
 });
 
-router.post('/', async (req, res) => {
+/**
+ * Get notifications for a specific investor
+ * GET /api/notifications/investor/:investorId
+ */
+router.get("/investor/:investorId", async (req, res) => {
   try {
-    const { type, title, message, data, recipientType, recipientId } = req.body || {};
-    if (!type || (!title && !message)) {
-      return res.status(400).json({ message: 'type and title/message required' });
+    const { investorId } = req.params;
+    if (!investorId) {
+      return res
+        .status(400)
+        .json({ message: "investorId parameter is required" });
     }
-    const { createAndEmitNotification } = await import('../lib/notify.js');
-    const note = await createAndEmitNotification({ type, title, message, data, recipientType, recipientId });
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const result = await listNotifications({
+      page,
+      limit,
+      investorId: String(investorId),
+    });
+
+    // Ensure consistent response format
+    if (result && result.items) {
+      res.json(result);
+    } else {
+      res.json({
+        items: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
+    }
+  } catch (err) {
+    console.error("Error fetching investor notifications:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch notifications", error: err.message });
+  }
+});
+
+/**
+ * Get notifications for a specific driver
+ * GET /api/notifications/driver/:driverId
+ */
+router.get("/driver/:driverId", async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    if (!driverId) {
+      return res
+        .status(400)
+        .json({ message: "driverId parameter is required" });
+    }
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const result = await listNotifications({
+      page,
+      limit,
+      driverId: String(driverId),
+    });
+
+    // Ensure consistent response format
+    if (result && result.items) {
+      res.json(result);
+    } else {
+      res.json({
+        items: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
+    }
+  } catch (err) {
+    console.error("Error fetching driver notifications:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch notifications", error: err.message });
+  }
+});
+
+/**
+ * Mark all notifications as read for a specific investor
+ * POST /api/notifications/investor/:investorId/read-all
+ */
+router.post("/investor/:investorId/read-all", async (req, res) => {
+  try {
+    const { investorId } = req.params;
+    if (!investorId) {
+      return res
+        .status(400)
+        .json({ message: "investorId parameter is required" });
+    }
+
+    const { markAllAsRead } = await import("../lib/notify.js");
+    const result = await markAllAsRead({
+      recipientType: "investor",
+      recipientId: String(investorId),
+    });
+    res.json({ message: "All notifications marked as read", result });
+  } catch (err) {
+    console.error("Error marking investor notifications as read:", err);
+    res.status(500).json({
+      message: "Failed to mark notifications as read",
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * Mark all notifications as read for a specific driver
+ * POST /api/notifications/driver/:driverId/read-all
+ */
+router.post("/driver/:driverId/read-all", async (req, res) => {
+  try {
+    const { driverId } = req.params;
+    if (!driverId) {
+      return res
+        .status(400)
+        .json({ message: "driverId parameter is required" });
+    }
+
+    const { markAllAsRead } = await import("../lib/notify.js");
+    const result = await markAllAsRead({
+      recipientType: "driver",
+      recipientId: String(driverId),
+    });
+    res.json({ message: "All notifications marked as read", result });
+  } catch (err) {
+    console.error("Error marking driver notifications as read:", err);
+    res.status(500).json({
+      message: "Failed to mark notifications as read",
+      error: err.message,
+    });
+  }
+});
+
+router.post("/", async (req, res) => {
+  try {
+    const { type, title, message, data, recipientType, recipientId } =
+      req.body || {};
+    if (!type || (!title && !message)) {
+      return res
+        .status(400)
+        .json({ message: "type and title/message required" });
+    }
+    const { createAndEmitNotification } = await import("../lib/notify.js");
+    const note = await createAndEmitNotification({
+      type,
+      title,
+      message,
+      data,
+      recipientType,
+      recipientId,
+    });
     res.status(201).json(note);
   } catch (err) {
-    res.status(500).json({ message: 'Failed to create notification', error: err.message });
+    res
+      .status(500)
+      .json({ message: "Failed to create notification", error: err.message });
   }
 });
 
-router.post('/:id/read', async (req, res) => {
+router.post("/:id/read", async (req, res) => {
   try {
     const { id } = req.params;
     if (!id) {
-      return res.status(400).json({ message: 'Notification ID is required' });
+      return res.status(400).json({ message: "Notification ID is required" });
     }
     const updated = await markAsRead(id);
     if (!updated) {
-      return res.status(404).json({ message: 'Notification not found' });
+      return res.status(404).json({ message: "Notification not found" });
     }
     res.json(updated);
   } catch (err) {
-    console.error('Error marking notification as read:', err);
-    res.status(500).json({ message: 'Failed to mark notification as read', error: err.message });
+    console.error("Error marking notification as read:", err);
+    res.status(500).json({
+      message: "Failed to mark notification as read",
+      error: err.message,
+    });
   }
 });
 
 /**
  * Admin endpoint to send notifications to driver app or investor app
  * POST /api/notifications/admin/send
- * 
+ *
  * Body:
  * {
  *   apps: ['customer', 'driver'], // 'customer' = driver app, 'driver' = investor app
@@ -71,33 +264,41 @@ router.post('/:id/read', async (req, res) => {
  *   }
  * }
  */
-router.post('/admin/send', async (req, res) => {
+router.post("/admin/send", async (req, res) => {
   try {
     const { apps, sendType, scheduledTime, data } = req.body || {};
 
     // Validate required fields
     if (!apps || !Array.isArray(apps) || apps.length === 0) {
-      return res.status(400).json({ message: 'apps array is required and must not be empty' });
+      return res
+        .status(400)
+        .json({ message: "apps array is required and must not be empty" });
     }
 
-    if (!sendType || !['now', 'schedule'].includes(sendType)) {
-      return res.status(400).json({ message: 'sendType must be "now" or "schedule"' });
+    if (!sendType || !["now", "schedule"].includes(sendType)) {
+      return res
+        .status(400)
+        .json({ message: 'sendType must be "now" or "schedule"' });
     }
 
-    if (sendType === 'schedule' && !scheduledTime) {
-      return res.status(400).json({ message: 'scheduledTime is required when sendType is "schedule"' });
+    if (sendType === "schedule" && !scheduledTime) {
+      return res.status(400).json({
+        message: 'scheduledTime is required when sendType is "schedule"',
+      });
     }
 
     if (!data || (!data.common && !data.driver && !data.investor)) {
-      return res.status(400).json({ message: 'data.common or data.driver/investor is required' });
+      return res
+        .status(400)
+        .json({ message: "data.common or data.driver/investor is required" });
     }
 
     // Map frontend app names to backend app types
     // Frontend: 'customer' = Driver App, 'driver' = Investor App
     // Backend: 'driver' = driver app, 'investor' = investor app
     const appTypeMap = {
-      'customer': 'driver',  // Frontend 'customer' maps to backend 'driver' app
-      'driver': 'investor'    // Frontend 'driver' maps to backend 'investor' app
+      customer: "driver", // Frontend 'customer' maps to backend 'driver' app
+      driver: "investor", // Frontend 'driver' maps to backend 'investor' app
     };
 
     const results = [];
@@ -105,17 +306,17 @@ router.post('/admin/send', async (req, res) => {
 
     // Handle scheduling (for now, we'll just store it in the notification data)
     // In a production system, you'd want a job queue (like Bull, Agenda, etc.)
-    if (sendType === 'schedule') {
+    if (sendType === "schedule") {
       // Store scheduled notification - in a real system, you'd queue this
       // For now, we'll create it but note it's scheduled
-      console.log('Scheduled notification requested for:', scheduledTime);
+      console.log("Scheduled notification requested for:", scheduledTime);
       // TODO: Implement proper scheduling with a job queue
     }
 
     // Process each selected app
     for (const app of apps) {
       const backendAppType = appTypeMap[app];
-      
+
       if (!backendAppType) {
         errors.push({ app, error: `Unknown app type: ${app}` });
         continue;
@@ -127,12 +328,13 @@ router.post('/admin/send', async (req, res) => {
         if (data.common) {
           // Same message for all apps
           notificationData = {
-            title: data.common.title || '',
-            message: data.common.message || '',
+            title: data.common.title || "",
+            message: data.common.message || "",
             data: {
-              link: data.common.link || '',
-              scheduledTime: sendType === 'schedule' ? scheduledTime : undefined
-            }
+              link: data.common.link || "",
+              scheduledTime:
+                sendType === "schedule" ? scheduledTime : undefined,
+            },
           };
         } else {
           // Different message per app
@@ -142,60 +344,66 @@ router.post('/admin/send', async (req, res) => {
             continue;
           }
           notificationData = {
-            title: appData.title || '',
-            message: appData.message || '',
+            title: appData.title || "",
+            message: appData.message || "",
             data: {
-              link: appData.link || '',
-              scheduledTime: sendType === 'schedule' ? scheduledTime : undefined
-            }
+              link: appData.link || "",
+              scheduledTime:
+                sendType === "schedule" ? scheduledTime : undefined,
+            },
           };
         }
 
         // Send notification to all users of this app type
-        if (sendType === 'now') {
+        if (sendType === "now") {
           const note = await sendNotificationToAppType({
             appType: backendAppType,
             title: notificationData.title,
             message: notificationData.message,
             data: notificationData.data,
-            type: 'admin_broadcast'
+            type: "admin_broadcast",
           });
           results.push({
             app,
             appType: backendAppType,
             notificationId: note._id,
-            status: 'sent'
+            status: "sent",
           });
         } else {
           // For scheduled notifications, we'd typically queue them
           // For now, create the notification but mark it as scheduled
-          const { createAndEmitNotification } = await import('../lib/notify.js');
+          const { createAndEmitNotification } = await import(
+            "../lib/notify.js"
+          );
           const note = await createAndEmitNotification({
-            type: 'admin_broadcast_scheduled',
+            type: "admin_broadcast_scheduled",
             title: notificationData.title,
             message: notificationData.message,
             data: {
               ...notificationData.data,
               scheduledFor: scheduledTime,
-              appType: backendAppType
+              appType: backendAppType,
             },
             recipientType: backendAppType,
-            recipientId: null
+            recipientId: null,
           });
           results.push({
             app,
             appType: backendAppType,
             notificationId: note._id,
-            status: 'scheduled',
-            scheduledTime
+            status: "scheduled",
+            scheduledTime,
           });
         }
       } catch (err) {
-        console.error(`Error sending notification to ${app} (${backendAppType}):`, err);
+        console.error(
+          `Error sending notification to ${app} (${backendAppType}):`,
+          err
+        );
         errors.push({
           app,
           appType: backendAppType,
-          error: err.message
+          error: err.message,
         });
       }
     }
@@ -203,19 +411,21 @@ router.post('/admin/send', async (req, res) => {
     // Return results
     if (errors.length > 0 && results.length === 0) {
       return res.status(500).json({
-        message: 'Failed to send notifications',
-        errors
+        message: "Failed to send notifications",
+        errors,
       });
     }
 
     res.status(200).json({
-      message: 'Notifications processed',
+      message: "Notifications processed",
       results,
-      errors: errors.length > 0 ? errors : undefined
+      errors: errors.length > 0 ? errors : undefined,
     });
   } catch (err) {
-    console.error('Error in admin send notification:', err);
-    res.status(500).json({ message: 'Failed to send notifications', error: err.message });
+    console.error("Error in admin send notification:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to send notifications", error: err.message });
   }
 });
 
@@ -223,25 +433,25 @@ router.post('/admin/send', async (req, res) => {
  * Get list of drivers for notification selection
  * GET /api/notifications/admin/drivers
  */
-router.get('/admin/drivers', async (req, res) => {
+router.get("/admin/drivers", async (req, res) => {
   try {
-    const { search = '', limit = 100 } = req.query;
+    const { search = "", limit = 100 } = req.query;
     let query = {};
-    
+
     // If search is provided, search across name, phone, email, and mobile fields
     if (search && search.trim()) {
       query = {
         $or: [
-          { name: { $regex: search.trim(), $options: 'i' } },
-          { phone: { $regex: search.trim(), $options: 'i' } },
-          { mobile: { $regex: search.trim(), $options: 'i' } },
-          { email: { $regex: search.trim(), $options: 'i' } }
-        ]
+          { name: { $regex: search.trim(), $options: "i" } },
+          { phone: { $regex: search.trim(), $options: "i" } },
+          { mobile: { $regex: search.trim(), $options: "i" } },
+          { email: { $regex: search.trim(), $options: "i" } },
+        ],
       };
     }
 
     const drivers = await Driver.find(query)
-      .select('_id name phone mobile email')
+      .select("_id name phone mobile email")
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .lean();
@@ -249,8 +459,10 @@ router.get('/admin/drivers', async (req, res) => {
     console.log(`Fetched ${drivers.length} drivers (search: "${search}")`);
     res.json({ drivers: drivers || [] });
   } catch (err) {
-    console.error('Error fetching drivers:', err);
-    res.status(500).json({ message: 'Failed to fetch drivers', error: err.message });
+    console.error("Error fetching drivers:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch drivers", error: err.message });
   }
 });
 
@@ -258,24 +470,24 @@ router.get('/admin/drivers', async (req, res) => {
  * Get list of investors for notification selection
  * GET /api/notifications/admin/investors
  */
-router.get('/admin/investors', async (req, res) => {
+router.get("/admin/investors", async (req, res) => {
   try {
-    const { search = '', limit = 100 } = req.query;
+    const { search = "", limit = 100 } = req.query;
     let query = {};
-    
+
     // If search is provided, search across investorName, phone, and email fields
     if (search && search.trim()) {
       query = {
         $or: [
-          { investorName: { $regex: search.trim(), $options: 'i' } },
-          { phone: { $regex: search.trim(), $options: 'i' } },
-          { email: { $regex: search.trim(), $options: 'i' } }
-        ]
+          { investorName: { $regex: search.trim(), $options: "i" } },
+          { phone: { $regex: search.trim(), $options: "i" } },
+          { email: { $regex: search.trim(), $options: "i" } },
+        ],
       };
     }
 
     const investors = await Investor.find(query)
-      .select('_id investorName phone email')
+      .select("_id investorName phone email")
       .sort({ createdAt: -1 })
       .limit(parseInt(limit))
       .lean();
@@ -283,15 +495,17 @@ router.get('/admin/investors', async (req, res) => {
     console.log(`Fetched ${investors.length} investors (search: "${search}")`);
     res.json({ investors: investors || [] });
   } catch (err) {
-    console.error('Error fetching investors:', err);
-    res.status(500).json({ message: 'Failed to fetch investors', error: err.message });
+    console.error("Error fetching investors:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch investors", error: err.message });
   }
 });
 
 /**
  * Admin endpoint to send notifications to specific drivers and/or investors
  * POST /api/notifications/admin/send-specific
- * 
+ *
  * Body:
  * {
  *   driverIds: ['id1', 'id2'], // Array of driver IDs
@@ -303,93 +517,367 @@ router.get('/admin/investors', async (req, res) => {
  *   scheduledTime?: Date
  * }
  */
-router.post('/admin/send-specific', async (req, res) => {
+router.post("/admin/send-specific", async (req, res) => {
   try {
-    const { driverIds, investorIds, title, message, link, sendType, scheduledTime } = req.body || {};
+    const {
+      driverIds,
+      investorIds,
+      title,
+      message,
+      link,
+      sendType,
+      scheduledTime,
+    } = req.body || {};
 
     // Validate required fields
-    if ((!driverIds || driverIds.length === 0) && (!investorIds || investorIds.length === 0)) {
-      return res.status(400).json({ message: 'At least one driverId or investorId is required' });
+    if (
+      (!driverIds || driverIds.length === 0) &&
+      (!investorIds || investorIds.length === 0)
+    ) {
+      return res
+        .status(400)
+        .json({ message: "At least one driverId or investorId is required" });
     }
 
     if (!title && !message) {
-      return res.status(400).json({ message: 'title or message is required' });
+      return res.status(400).json({ message: "title or message is required" });
     }
 
-    if (sendType === 'schedule' && !scheduledTime) {
-      return res.status(400).json({ message: 'scheduledTime is required when sendType is "schedule"' });
+    if (sendType === "schedule" && !scheduledTime) {
+      return res.status(400).json({
+        message: 'scheduledTime is required when sendType is "schedule"',
+      });
     }
 
     const notificationData = {
-      title: title || '',
-      message: message || '',
+      title: title || "",
+      message: message || "",
       data: {
-        link: link || '',
-        scheduledTime: sendType === 'schedule' ? scheduledTime : undefined
-      }
+        link: link || "",
+        scheduledTime: sendType === "schedule" ? scheduledTime : undefined,
+      },
     };
 
-    if (sendType === 'now') {
+    if (sendType === "now") {
       const { results, errors } = await sendNotificationToSpecificUsers({
         driverIds: driverIds || [],
         investorIds: investorIds || [],
         ...notificationData,
-        type: 'admin_message'
+        type: "admin_message",
       });
 
       res.status(200).json({
-        message: 'Notifications sent',
+        message: "Notifications sent",
         results,
-        errors: errors.length > 0 ? errors : undefined
+        errors: errors.length > 0 ? errors : undefined,
       });
     } else {
       // For scheduled notifications, create them but mark as scheduled
       // TODO: Implement proper scheduling with a job queue
-      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const { createAndEmitNotification } = await import("../lib/notify.js");
       const notes = [];
 
       for (const driverId of driverIds || []) {
         const note = await createAndEmitNotification({
-          type: 'admin_message_scheduled',
+          type: "admin_message_scheduled",
           title: notificationData.title,
           message: notificationData.message,
           data: {
             ...notificationData.data,
-            scheduledFor: scheduledTime
+            scheduledFor: scheduledTime,
           },
-          recipientType: 'driver',
-          recipientId: driverId
+          recipientType: "driver",
+          recipientId: driverId,
         });
         notes.push(note);
       }
 
       for (const investorId of investorIds || []) {
         const note = await createAndEmitNotification({
-          type: 'admin_message_scheduled',
+          type: "admin_message_scheduled",
           title: notificationData.title,
           message: notificationData.message,
           data: {
             ...notificationData.data,
-            scheduledFor: scheduledTime
+            scheduledFor: scheduledTime,
           },
-          recipientType: 'investor',
-          recipientId: investorId
+          recipientType: "investor",
+          recipientId: investorId,
         });
         notes.push(note);
       }
 
       res.status(200).json({
-        message: 'Notifications scheduled',
-        results: notes.map(note => ({
+        message: "Notifications scheduled",
+        results: notes.map((note) => ({
           notificationId: note._id,
-          status: 'scheduled',
-          scheduledTime
-        }))
+          status: "scheduled",
+          scheduledTime,
+        })),
       });
     }
   } catch (err) {
-    console.error('Error in admin send-specific notification:', err);
-    res.status(500).json({ message: 'Failed to send notifications', error: err.message });
+    console.error("Error in admin send-specific notification:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to send notifications", error: err.message });
+  }
+});
+
+/**
+ * Send notification-only push to a driver by mobile number
+ * POST /api/notifications/send-driver-by-mobile
+ * Body:
+ * {
+ *   mobile: '9999999999',
+ *   title: 'Title',
+ *   message: 'Message',
+ *   save: boolean (optional, default false)
+ * }
+ */
+router.post("/send-driver-by-mobile", async (req, res) => {
+  try {
+    const { mobile, title, message, save = false } = req.body || {};
+    if (!mobile) return res.status(400).json({ message: "mobile is required" });
+    if (!title && !message)
+      return res.status(400).json({ message: "title or message is required" });
+
+    const normalized = String(mobile).trim();
+    const driver = await Driver.findOne({ mobile: normalized }).lean();
+    if (!driver)
+      return res
+        .status(404)
+        .json({ message: "Driver not found for given mobile" });
+
+    const tokens = await DeviceToken.find({
+      userType: "driver",
+      userId: String(driver._id),
+    }).distinct("token");
+    if (!tokens || tokens.length === 0) {
+      if (save) {
+        const { createAndEmitNotification } = await import("../lib/notify.js");
+        await createAndEmitNotification({
+          type: "mobile_only",
+          title: title || "",
+          message: message || "",
+          data: {},
+          recipientType: "driver",
+          recipientId: String(driver._id),
+        });
+      }
+      return res
+        .status(200)
+        .json({ message: "No device tokens found for driver", tokensFound: 0 });
+    }
+
+    const payloadTitle = String(title || "").trim();
+    const payloadBody = String(message || "").trim();
+
+    const { sendPushToTokens } = await import("../lib/firebaseAdmin.js");
+    const result = await sendPushToTokens(tokens, {
+      title: payloadTitle,
+      body: payloadBody,
+      data: undefined,
+    });
+
+    let savedNote = null;
+    if (save) {
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      savedNote = await createAndEmitNotification({
+        type: "mobile_only",
+        title: payloadTitle,
+        message: payloadBody,
+        data: {},
+        recipientType: "driver",
+        recipientId: String(driver._id),
+      });
+    }
+
+    return res.status(200).json({
+      message: "Notification sent",
+      recipientType: "driver",
+      recipientId: String(driver._id),
+      tokensTried: tokens.length,
+      sendResult: result,
+      notification: savedNote,
+    });
+  } catch (err) {
+    console.error("Error in send-driver-by-mobile:", err);
+    return res
+      .status(500)
+      .json({ message: "Failed to send notification", error: err.message });
+  }
+});
+
+/**
+ * Send notification-only push to an investor by mobile number
+ * POST /api/notifications/send-investor-by-mobile
+ * Body:
+ * {
+ *   mobile: '9999999999',
+ *   title: 'Title',
+ *   message: 'Message',
+ *   save: boolean (optional, default false)
+ * }
+ */
+router.post("/send-investor-by-mobile", async (req, res) => {
+  try {
+    const { mobile, title, message, save = false } = req.body || {};
+    if (!mobile) return res.status(400).json({ message: "mobile is required" });
+    if (!title && !message)
+      return res.status(400).json({ message: "title or message is required" });
+
+    const normalized = String(mobile).trim();
+    const investor = await Investor.findOne({ phone: normalized }).lean();
+    if (!investor)
+      return res
+        .status(404)
+        .json({ message: "Investor not found for given mobile" });
+
+    const tokens = await DeviceToken.find({
+      userType: "investor",
+      userId: String(investor._id),
+    }).distinct("token");
+    if (!tokens || tokens.length === 0) {
+      if (save) {
+        const { createAndEmitNotification } = await import("../lib/notify.js");
+        await createAndEmitNotification({
+          type: "mobile_only",
+          title: title || "",
+          message: message || "",
+          data: {},
+          recipientType: "investor",
+          recipientId: String(investor._id),
+        });
+      }
+      return res.status(200).json({
+        message: "No device tokens found for investor",
+        tokensFound: 0,
+      });
+    }
+
+    const payloadTitle = String(title || "").trim();
+    const payloadBody = String(message || "").trim();
+
+    const { sendPushToTokens } = await import("../lib/firebaseAdmin.js");
+    const result = await sendPushToTokens(tokens, {
+      title: payloadTitle,
+      body: payloadBody,
+      data: undefined,
+    });
+
+    let savedNote = null;
+    if (save) {
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      savedNote = await createAndEmitNotification({
+        type: "mobile_only",
+        title: payloadTitle,
+        message: payloadBody,
+        data: {},
+        recipientType: "investor",
+        recipientId: String(investor._id),
+      });
+    }
+
+    return res.status(200).json({
+      message: "Notification sent",
+      recipientType: "investor",
+      recipientId: String(investor._id),
+      tokensTried: tokens.length,
+      sendResult: result,
+      notification: savedNote,
+    });
+  } catch (err) {
+    console.error("Error in send-investor-by-mobile:", err);
+    return res
+      .status(500)
+      .json({ message: "Failed to send notification", error: err.message });
+  }
+});
+
+/**
+ * Get notifications for a driver by mobile number
+ * GET /api/notifications/by-driver-mobile?mobile=9999999999
+ */
+router.get("/by-driver-mobile", async (req, res) => {
+  try {
+    const { mobile } = req.query;
+    if (!mobile)
+      return res
+        .status(400)
+        .json({ message: "mobile query parameter is required" });
+
+    const normalized = String(mobile).trim();
+    const driver = await Driver.findOne({ mobile: normalized }).lean();
+    if (!driver)
+      return res
+        .status(404)
+        .json({ message: "Driver not found for given mobile" });
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const result = await listNotifications({
+      page,
+      limit,
+      driverId: String(driver._id),
+    });
+
+    if (result && result.items) {
+      res.json(result);
+    } else {
+      res.json({
+        items: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
+    }
+  } catch (err) {
+    console.error("Error in by-driver-mobile:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch notifications", error: err.message });
+  }
+});
+
+/**
+ * Get notifications for an investor by mobile number
+ * GET /api/notifications/by-investor-mobile?mobile=9999999999
+ */
+router.get("/by-investor-mobile", async (req, res) => {
+  try {
+    const { mobile } = req.query;
+    if (!mobile)
+      return res
+        .status(400)
+        .json({ message: "mobile query parameter is required" });
+
+    const normalized = String(mobile).trim();
+    const investor = await Investor.findOne({ phone: normalized }).lean();
+    if (!investor)
+      return res
+        .status(404)
+        .json({ message: "Investor not found for given mobile" });
+
+    const page = parseInt(req.query.page) || 1;
+    const limit = Math.min(parseInt(req.query.limit) || 20, 100);
+    const result = await listNotifications({
+      page,
+      limit,
+      investorId: String(investor._id),
+    });
+
+    if (result && result.items) {
+      res.json(result);
+    } else {
+      res.json({
+        items: [],
+        pagination: { total: 0, page, limit, totalPages: 0 },
+      });
+    }
+  } catch (err) {
+    console.error("Error in by-investor-mobile:", err);
+    res
+      .status(500)
+      .json({ message: "Failed to fetch notifications", error: err.message });
   }
 });
 

@@ -37,7 +37,7 @@ export function TableRow({ children, className, ...props }) {
 
 export function TableHead({ children, className, ...props }) {
   return (
-    <th className={cn('sticky top-0 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider table-header-cell bg-white z-50', className)} {...props}>
+    <th className={cn('sticky top-0 px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider table-header-cell bg-white z-10', className)} {...props}>
       {children}
     </th>
   );

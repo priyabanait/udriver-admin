@@ -39,6 +39,7 @@ import paymentsRouter from './payments.js';
 import carInvestmentEntriesRouter from './carInvestmentEntries.js';
 import managersRouter from './managers.js';
 import rolesRouter from './roles.js';
+import slidersRouter from './sliders.js';
 // import debugRouter from './debug.js';
 
 const router = express.Router();
@@ -86,6 +87,8 @@ router.use('/car-investment-entries', carInvestmentEntriesRouter);
 router.use('/managers', managersRouter);
 // Role routes
 router.use('/roles', rolesRouter);
+// Sliders (carousel) routes
+router.use('/sliders', slidersRouter);
 // Development/debug helpers (guarded)
 // router.use('/debug', debugRouter);
 

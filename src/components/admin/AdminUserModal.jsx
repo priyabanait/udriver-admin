@@ -81,7 +81,7 @@ export default function AdminUserModal({ isOpen, onClose, user = null, onSave })
       const userData = {
         ...formData,
         id: user?.id || Date.now(),
-        joinDate: user?.joinDate || new Date().toISOString(),
+        joinDate: user?.joinDate || new Date().toISOString().split('T')[0],
         lastLogin: user?.lastLogin || new Date().toISOString(),
         permissions: ROLES[formData.role.toUpperCase()]?.permissions || []
       };

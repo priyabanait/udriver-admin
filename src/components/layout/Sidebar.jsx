@@ -19,6 +19,8 @@ import {
   Wallet,
   MapPin,
   Clock,
+  Sliders,
+ Database,
   ClipboardList,
   ChevronDown,
   CheckCircle,
@@ -26,7 +28,8 @@ import {
   Receipt,
   Building,
   Target,
-  Bell 
+  Bell,
+  IndianRupee 
 } from 'lucide-react';
 import { cn } from '../../utils';
 
@@ -36,63 +39,6 @@ const navigation = [
     href: '/dashboard',
     icon: LayoutDashboard,
     permission: PERMISSIONS.DASHBOARD_VIEW
-  },
-  {
-    name: 'Attendence Management',
-    href: '/attendence',
-    icon: Clock,
-    permission: PERMISSIONS.ATTENDANCE_VIEW
-  },
-  
-  {
-    name: 'Manage Staff',
-    href: '/staff',
-    icon: ClipboardList,
-    permission: PERMISSIONS.HR_VIEW
-  },
-  // {
-  //   name: 'Staff Permissions',
-  //   href: '/admin/roles',
-  //   icon: Shield,
-  //   permission: PERMISSIONS.ADMIN_ROLES
-  // },
-  {
-    name: 'Driver Management',
-    icon: Users,
-    permission: PERMISSIONS.DRIVERS_VIEW,
-    children: [
-      { 
-        name: 'All Drivers', 
-        href: '/drivers',
-        permission: PERMISSIONS.DRIVERS_VIEW
-      },
-      // { 
-      //   name: 'Driver login', 
-      //   href: '/drivers/login',
-      //   permission: PERMISSIONS.DRIVERS_VIEW
-      // },
-       { 
-        name: 'Driver Wallet', 
-        href: '/drivers/wallet',
-        permission: PERMISSIONS.INVESTMENTS_VIEW
-      },
-       { 
-        name: 'Driver Wallet Messages', 
-        href: '/drivers/wallet-messages',
-        permission: PERMISSIONS.INVESTMENTS_VIEW
-      },
-      // { 
-      //   name: 'Driver Status', 
-      //   href: '/drivers/status',
-      //   permission: PERMISSIONS.DRIVERS_VIEW
-      // },
-      // { 
-      //   name: 'Performance', 
-      //   href: '/drivers/performance',
-      //   permission: PERMISSIONS.DRIVERS_PERFORMANCE
-      // },
-     
-    ]
   },
   {
     name: 'Vehicle Management',
@@ -122,35 +68,83 @@ const navigation = [
     ]
   },
   {
-    name: 'Car Plans',
-    icon: Target,
-    permission: PERMISSIONS.PLANS_VIEW,
+    name: 'Driver Management',
+    icon: Users,
+    permission: PERMISSIONS.DRIVERS_VIEW,
     children: [
       { 
-        name: 'All Plans', 
-        href: '/plans',
-        permission: PERMISSIONS.PLANS_VIEW
+        name: 'All Drivers', 
+        href: '/drivers',
+        permission: PERMISSIONS.DRIVERS_VIEW
       },
       // { 
-      //   name: 'Create Plan', 
-      //   href: '/plans/create',
-      //   permission: PERMISSIONS.PLANS_CREATE
+      //   name: 'Driver login', 
+      //   href: '/drivers/login',
+      //   permission: PERMISSIONS.DRIVERS_VIEW
+      // },
+       { 
+        name: 'Driver Wallet', 
+        href: '/drivers/wallet',
+        permission: PERMISSIONS.DRIVERS_VIEW
+      },
+       { 
+        name: 'Driver Wallet Messages', 
+        href: '/drivers/wallet-messages',
+        permission: PERMISSIONS.DRIVERS_VIEW
+      },
+      // { 
+      //   name: 'Driver Status', 
+      //   href: '/drivers/status',
+      //   permission: PERMISSIONS.DRIVERS_VIEW
       // },
       // { 
-      //   name: 'Driver Enrollments', 
-      //   href: '/plans/enrollments',
-      //   permission: PERMISSIONS.PLANS_VIEW
+      //   name: 'Performance', 
+      //   href: '/drivers/performance',
+      //   permission: PERMISSIONS.DRIVERS_PERFORMANCE
       // },
-      // { 
-      //   name: 'Driver Plan Selections', 
-      //   href: '/plans/selections',
-      //   permission: PERMISSIONS.PLANS_VIEW
-      // }
+     
     ]
   },
   {
+    name: 'Payment Management',
+    icon: CreditCard,
+    permission: PERMISSIONS.PAYMENTS_VIEW,
+    children: [
+      // { 
+      //   name: 'Payment Dashboard', 
+      //   href: '/payments',
+      //   permission: PERMISSIONS.PAYMENTS_VIEW
+      // },
+      // { 
+      //   name: 'Driver Payments', 
+      //   href: '/payments/drivers',
+      //   permission: PERMISSIONS.PAYMENTS_VIEW
+      // },
+      //  { 
+      //   name: 'Driver Payments', 
+      //   href: '/drivers/payments',
+      //   permission: PERMISSIONS.PAYMENTS_VIEW
+      // }
+      // { 
+      //   name: 'Invester FD Payments', 
+      //   href: '/payments/process',
+      //   permission: PERMISSIONS.PAYMENTS_PROCESS
+      // },
+        { 
+        name: 'Driver Payments', 
+        href: '/payments/driverpayments',
+        permission: PERMISSIONS.PAYMENTS_VIEW
+      },
+      // { 
+      //   name: 'Analytics', 
+      //   href: '/payments/analytics',
+      //   permission: PERMISSIONS.PAYMENTS_ANALYTICS
+      // }
+    ]
+  },
+   {
     name: 'Investment Management',
-    icon: TrendingUp,
+    icon: Wallet,
     permission: PERMISSIONS.INVESTMENTS_VIEW,
     children: [
       // { 
@@ -201,51 +195,66 @@ const navigation = [
     ]
   },
   {
-    name: 'Payment Management',
-    icon: CreditCard,
-    permission: PERMISSIONS.PAYMENTS_VIEW,
+    name: 'Car Plans',
+    icon: Database,
+    permission: PERMISSIONS.PLANS_VIEW,
     children: [
-      // { 
-      //   name: 'Payment Dashboard', 
-      //   href: '/payments',
-      //   permission: PERMISSIONS.PAYMENTS_VIEW
-      // },
-      // { 
-      //   name: 'Driver Payments', 
-      //   href: '/payments/drivers',
-      //   permission: PERMISSIONS.PAYMENTS_VIEW
-      // },
-      //  { 
-      //   name: 'Driver Payments', 
-      //   href: '/drivers/payments',
-      //   permission: PERMISSIONS.PAYMENTS_VIEW
-      // }
-      // { 
-      //   name: 'Invester FD Payments', 
-      //   href: '/payments/process',
-      //   permission: PERMISSIONS.PAYMENTS_PROCESS
-      // },
-        { 
-        name: 'Driver Payments', 
-        href: '/payments/driverpayments',
-        permission: PERMISSIONS.PAYMENTS_PROCESS
+      { 
+        name: 'All Plans', 
+        href: '/plans',
+        permission: PERMISSIONS.PLANS_VIEW
       },
       // { 
-      //   name: 'Analytics', 
-      //   href: '/payments/analytics',
-      //   permission: PERMISSIONS.PAYMENTS_ANALYTICS
+      //   name: 'Create Plan', 
+      //   href: '/plans/create',
+      //   permission: PERMISSIONS.PLANS_CREATE
+      // },
+      // { 
+      //   name: 'Driver Enrollments', 
+      //   href: '/plans/enrollments',
+      //   permission: PERMISSIONS.PLANS_VIEW
+      // },
+      // { 
+      //   name: 'Driver Plan Selections', 
+      //   href: '/plans/selections',
+      //   permission: PERMISSIONS.PLANS_VIEW
       // }
     ]
   },
   {
+    name: 'Manage Staff',
+    href: '/staff',
+    icon: ClipboardList,
+    permission: PERMISSIONS.HR_VIEW
+  },
+  {
+    name: 'Attendence Management',
+    href: '/attendence',
+    icon: Clock,
+    permission: PERMISSIONS.ATTENDANCE_VIEW
+  },
+  
+  
+  // {
+  //   name: 'Staff Permissions',
+  //   href: '/admin/roles',
+  //   icon: Shield,
+  //   permission: PERMISSIONS.ADMIN_ROLES
+// },
+  
+  
+  
+ 
+  
+  {
     name: 'Notification Management',
     href: '/notification',
-    icon: Bell ,
-    permission: PERMISSIONS.DASHBOARD_VIEW
+    icon: Bell,
+    permission: PERMISSIONS.NOTIFICATIONS_VIEW
   },
   {
     name: 'Expense Management',
-    icon: Receipt,
+    icon: IndianRupee ,
     permission: PERMISSIONS.EXPENSES_VIEW,
     children: [
       { 
@@ -314,6 +323,13 @@ const navigation = [
       }
     ]
   },
+  {
+    name: 'Manage Sliders',
+    href: '/sliders',
+    icon: Sliders,
+    permission: PERMISSIONS.NOTIFICATIONS_VIEW
+  },
+
   // {
   //   name: 'Ticket System',
   //   icon: MessageSquare,

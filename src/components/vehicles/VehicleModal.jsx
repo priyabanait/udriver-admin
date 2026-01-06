@@ -40,8 +40,9 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
     fuelType: '',
     color: '',
     assignedDriver: '',
-    status: 'active',
+    status: 'inactive',
     remarks: '',
+    driverAgreementType: '',
     // Document & Photo uploads (File objects)
     registrationCardPhoto: null,
     roadTaxPhoto: null,
@@ -52,7 +53,12 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
     carLeftPhoto: null,
     carRightPhoto: null,
     carBackPhoto: null,
-    carFullPhoto: null
+    carFullPhoto: null,
+    // New fields
+    insurancePhoto: null,
+    interiorPhoto: null,
+    speedometerPhoto: null
+    ,fcPhoto: null
   });
 
   const [loading, setLoading] = useState(false);
@@ -161,7 +167,7 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
         fuelType: vehicle.fuelType || '',
         color: vehicle.color || '',
         assignedDriver: vehicle.assignedDriver || '',
-        status: vehicle.status || 'active',
+        status: vehicle.status || 'inactive',
         remarks: vehicle.remarks || '',
         // Files are user-provided during edit; keep null by default
         registrationCardPhoto: null,
@@ -173,15 +179,24 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
         carLeftPhoto: null,
         carRightPhoto: null,
         carBackPhoto: null,
-        carFullPhoto: null
+        carFullPhoto: null,
+        // New fields
+        insurancePhoto: null,
+        interiorPhoto: null,
+        speedometerPhoto: null,
+        fcPhoto: null,
+        driverAgreementType: vehicle.driverAgreementType || ''
       });
     } else {
       setForm({
   registrationNumber: '', model: '', carName: '', brand: '', category: '', investorId: '', ownerName: '', ownerPhone: '', kycStatus: '', manufactureYear: '',
         registrationDate: '', rcExpiryDate: '', roadTaxDate: '', roadTaxNumber: '', insuranceDate: '', permitDate: '', emissionDate: '',
-        trafficFine: '', trafficFineDate: '', fuelType: '', color: '', assignedDriver: '', status: 'active', remarks: '',
-        registrationCardPhoto: null, roadTaxPhoto: null, pucNumber: '', pucPhoto: null, permitPhoto: null,
-        carFrontPhoto: null, carLeftPhoto: null, carRightPhoto: null, carBackPhoto: null, carFullPhoto: null
+        trafficFine: '', trafficFineDate: '', fuelType: '', color: '', assignedDriver: '', status: 'inactive', remarks: '',
+        registrationCardPhoto: null, roadTaxPhoto: null, pucNumber: '', pucPhoto: null, permitPhoto: null, 
+        carFrontPhoto: null, carLeftPhoto: null, carRightPhoto: null, carBackPhoto: null, carFullPhoto: null,
+        insurancePhoto: null, interiorPhoto: null, speedometerPhoto: null,
+        fcPhoto: null,
+        driverAgreementType: ''
       });
     }
   }, [vehicle, isOpen]);
@@ -328,13 +343,13 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
   };
 
   const handleSubmit = async () => {
-    // final validation before submit
+    // final validation before submit — allow submission even if incomplete
     const isValid = validateForm();
     if (!isValid) {
-      toast.error('Please fix form errors before saving');
-      return;
+      toast('Form incomplete — submitting anyway');
+      // continue to submit despite validation errors
     }
-  setLoading(true);
+    setLoading(true);
     try {
       const payload = {
         registrationNumber: form.registrationNumber,
@@ -373,9 +388,14 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
         carLeftPhoto: form.carLeftPhoto || undefined,
         carRightPhoto: form.carRightPhoto || undefined,
         carBackPhoto: form.carBackPhoto || undefined,
-        carFullPhoto: form.carFullPhoto || undefined
-      };
-
+        carFullPhoto: form.carFullPhoto || undefined,
+        // New photo fields
+        insurancePhoto: form.insurancePhoto || undefined,
+        interiorPhoto: form.interiorPhoto || undefined,
+        fcPhoto: form.fcPhoto || undefined,
+        speedometerPhoto: form.speedometerPhoto || undefined,
+        driverAgreementType: form.driverAgreementType || undefined
+      }; 
       // Delegate saving to parent; expect it to throw on error
       await onSave(payload);
       toast.success('Vehicle saved');
@@ -481,7 +501,7 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
               </div>
 
               {/* Next: Model Name, Car Name */}
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium">Model Name</label>
                 <div className="flex gap-2">
                   <select className={`input flex-1 ${errors.model ? 'border-red-500' : ''}`} value={form.model} onChange={async (e)=>{
@@ -499,7 +519,7 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
                   </select>
                 </div>
                 {errors.model && <p className="text-xs text-red-600 mt-1">{errors.model}</p>}
-              </div>
+              </div> */}
               <div>
                 <label className="block text-sm font-medium">Car Name</label>
                 <div className="flex gap-2">
@@ -548,7 +568,7 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
                 <input className={`input ${errors.registrationNumber ? 'border-red-500' : ''}`} value={form.registrationNumber} onChange={(e)=>handleChange('registrationNumber', e.target.value)} />
                 {errors.registrationNumber && <p className="text-xs text-red-600 mt-1">{errors.registrationNumber}</p>}
               </div>
-              <div className="relative">
+              {/* <div className="relative">
   <label className="block text-sm font-medium">Select Investor</label>
 
   <div className="relative">
@@ -641,7 +661,7 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
       </div>
     </>
   )}
-</div>
+</div> */}
 
             
 
@@ -668,22 +688,22 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
               </div>
 
               <div>
-                <label className="block text-sm font-medium">RC Expiry Date</label>
+                <label className="block text-sm font-medium">FC Expiry Date</label>
                 <input type="date" className="input" value={form.rcExpiryDate} onChange={(e)=>handleChange('rcExpiryDate', e.target.value)} />
               </div>
 
               <div>
                 <label className="block text-sm font-medium">Road Tax Date</label>
-                <input type="date" className="input" value={form.roadTaxDate} onChange={(e)=>handleChange('roadTaxDate', e.target.value)} />
+                <input type="input" className="input" value={form.roadTaxDate} onChange={(e)=>handleChange('roadTaxDate', e.target.value)} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium">Insurance Date</label>
+                <label className="block text-sm font-medium">Insurance Expiry Date</label>
                 <input type="date" className="input" value={form.insuranceDate} onChange={(e)=>handleChange('insuranceDate', e.target.value)} />
               </div>
 
               <div>
-                <label className="block text-sm font-medium">Permit Date</label>
+                <label className="block text-sm font-medium">Permit Expiry Date</label>
                 <input type="date" className="input" value={form.permitDate} onChange={(e)=>handleChange('permitDate', e.target.value)} />
               </div>
 
@@ -692,16 +712,16 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
                 <input type="date" className="input" value={form.emissionDate} onChange={(e)=>handleChange('emissionDate', e.target.value)} />
               </div>
 
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium">Traffic Fine</label>
                 <input type="number" className={`input ${errors.trafficFine ? 'border-red-500' : ''}`} value={form.trafficFine} onChange={(e)=>handleChange('trafficFine', e.target.value)} />
                 {errors.trafficFine && <p className="text-xs text-red-600 mt-1">{errors.trafficFine}</p>}
-              </div>
+              </div> */}
 
-              <div>
+              {/* <div>
                 <label className="block text-sm font-medium">Traffic Fine Date</label>
                 <input type="date" className="input" value={form.trafficFineDate} onChange={(e)=>handleChange('trafficFineDate', e.target.value)} />
-              </div>
+              </div> */}
 
              
 
@@ -847,6 +867,15 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
               
 
               <div>
+                <label className="block text-sm font-medium">Driver Agreement Type</label>
+                <select className={`input`} value={form.driverAgreementType} onChange={(e)=>handleChange('driverAgreementType', e.target.value)}>
+                  <option value="">Select</option>
+                  <option value="leasing">Leasing</option>
+                  <option value="funding">Funding</option>
+                </select>
+              </div>
+
+              <div>
                 <label className="block text-sm font-medium">Status</label>
                 <select className={`input ${errors.status ? 'border-red-500' : ''}`} value={form.status} onChange={(e)=>handleChange('status', e.target.value)}>
                   <option value="active">Active</option>
@@ -895,12 +924,30 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
 
             <div className="pt-2">
               <h4 className="text-sm font-semibold mb-2">Registration & Permit</h4>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   {renderUpload('Registration Card Photo', 'registrationCardPhoto')}
                 </div>
                 <div>
                   {renderUpload('Permit Photo', 'permitPhoto')}
+                </div>
+                <div>
+                  {renderUpload('FC Photo', 'fcPhoto')}
+                </div>
+              </div>
+            </div>
+
+            <div className="pt-2">
+              <h4 className="text-sm font-semibold mb-2">Insurance & Interior</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div>
+                  {renderUpload('Insurance Photo', 'insurancePhoto')}
+                </div>
+                <div>
+                  {renderUpload('Interior Photo', 'interiorPhoto')}
+                </div>
+                <div>
+                  {renderUpload('Speedometer Photo', 'speedometerPhoto')}
                 </div>
               </div>
             </div>
@@ -929,7 +976,7 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
 
           <div className="flex items-center justify-end p-4 border-t">
             <button className="btn btn-secondary mr-3" onClick={onClose} disabled={loading}>Cancel</button>
-            <button className="btn btn-primary" onClick={handleSubmit} disabled={loading || Object.keys(errors).length > 0}>{loading ? 'Saving...' : 'Save Vehicle'}</button>
+            <button className="btn btn-primary" onClick={handleSubmit} disabled={loading}>{loading ? 'Saving...' : 'Save Vehicle'}</button>
           </div>
         </div>
       </div>

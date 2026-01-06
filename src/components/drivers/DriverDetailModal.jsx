@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { X, Mail, Phone, FileText, User, MapPin, Car, CreditCard, ZoomIn, Download } from 'lucide-react';
-import { formatDate } from '../../utils';
+import { formatDate, formatCurrency } from '../../utils';
 
 const docUrl = (doc) => {
   if (!doc) return null;
@@ -135,6 +135,7 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{driver.name}</h2>
                 <p className="text-sm text-gray-600">License: {driver.licenseNumber || '—'}</p>
+                <p className="text-sm text-gray-500 mt-1">Driver No: {driver.driverNo || '—'}{driver.udbId ? (<span className="ml-3">• UDB ID: <span className="font-medium">{driver.udbId}</span></span>) : null}</p>
               </div>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -169,7 +170,18 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         <label className="block text-sm font-medium text-gray-700">Phone</label>
                         <div className="mt-1 flex items-center">
                           <Phone className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-sm text-gray-900">{driver.phone}</span>
+                          <span className="text-sm text-gray-900">
+  {driver.phone || driver.driverNo || '—'}
+</span>
+
+                        </div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Alternate No</label>
+                        <div className="mt-1 flex items-center">
+                          <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-sm text-gray-900">{driver.alternateNo || '—'}</span>
                         </div>
                       </div>
                       <div>
@@ -177,12 +189,22 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         <div className="mt-1 text-sm text-gray-900">{driver.dateOfBirth ? formatDate(driver.dateOfBirth) : '—'}</div>
                       </div>
                       <div className="md:col-span-2">
+  <label className="block text-sm font-medium text-gray-700">UDB ID</label>
+  <div className="mt-1 flex items-start">
+    <span className="text-sm text-gray-900">
+      {driver.udbId || driver.employeeId || '—'}
+    </span>
+  </div>
+</div>
+
+                      <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700">Address</label>
                         <div className="mt-1 flex items-start">
                           <MapPin className="h-4 w-4 text-gray-400 mr-2 mt-0.5" />
                           <span className="text-sm text-gray-900 whitespace-pre-line">{driver.address}</span>
                         </div>
                       </div>
+                      
                       <div>
                         <label className="block text-sm font-medium text-gray-700">City</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.city || '—'}</div>
@@ -217,6 +239,11 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Join Date</label>
                         <div className="mt-1 text-sm text-gray-900">{formatDate(driver.joinDate)}</div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Deposit</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.deposit !== undefined && driver.deposit !== null ? formatCurrency(driver.deposit) : '—'}</div>
                       </div>
                     </div>
                   </div>

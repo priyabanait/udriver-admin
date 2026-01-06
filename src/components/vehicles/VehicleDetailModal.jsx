@@ -40,10 +40,10 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
                 <p className="font-medium">{v.brand || v.make || '-'}</p>
               </div>
 
-              <div>
+              {/* <div>
                 <p className="text-sm text-gray-500">Model Name</p>
                 <p className="font-medium">{v.model || '-'}</p>
-              </div>
+              </div> */}
               <div>
                 <p className="text-sm text-gray-500">Car Name</p>
                 <p className="font-medium">{v.carName || v.name || '-'}</p>
@@ -83,11 +83,11 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
               </div>
 
               <div>
-                <p className="text-sm text-gray-500">Insurance Expiry</p>
+                <p className="text-sm text-gray-500">Insurance Expiry Date</p>
                 <p className="font-medium">{formatDate(v.insuranceExpiryDate || v.insuranceExpiry || v.insuranceDate)}</p>
               </div>
               <div>
-                <p className="text-sm text-gray-500">RC Expiry</p>
+                <p className="text-sm text-gray-500">FC Expiry Date</p>
                 <p className="font-medium">{formatDate(v.rcExpiryDate || v.rcExpiry)}</p>
               </div>
 
@@ -110,7 +110,7 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
               </div>
 
               <div>
-                <p className="text-sm text-gray-500">Permit Date</p>
+                <p className="text-sm text-gray-500">Permit Expiry Date</p>
                 <p className="font-medium">{formatDate(v.permitDate)}</p>
               </div>
               <div>
@@ -118,10 +118,7 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
                 <p className="font-medium">{formatDate(v.emissionDate)}</p>
               </div>
 
-              <div>
-                <p className="text-sm text-gray-500">Traffic Fine</p>
-                <p className="font-medium">{v.trafficFine != null ? formatCurrency(v.trafficFine) : '-'}</p>
-              </div>
+             
               <div>
                 <p className="text-sm text-gray-500">Assigned Driver</p>
                 <p className="font-medium">{getDriverName()}</p>
@@ -141,6 +138,11 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
                 <p className="font-medium">{v.status || 'inactive'}</p>
               </div>
 
+              <div>
+                <p className="text-sm text-gray-500">Driver Agreement</p>
+                <p className="font-medium">{v.driverAgreementType ? (v.driverAgreementType.charAt(0).toUpperCase()+v.driverAgreementType.slice(1)) : '-'}</p>
+              </div>
+
               <div className="md:col-span-2">
                 <p className="text-sm text-gray-500">Remarks</p>
                 <p className="font-medium">{v.remarks || '-'}</p>
@@ -157,6 +159,7 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
                   { label: 'PUC', url: v.pucPhoto || v.pollutionDoc },
                   { label: 'Road Tax', url: v.roadTaxPhoto },
                   { label: 'Insurance', url: v.insuranceDoc },
+                  { label: 'FC Photo', url: v.fcPhoto },
                   { label: 'Fitness', url: v.fitnessDoc }
                 ].map((d, i) => (
                   <div key={i} className="border rounded p-2">
@@ -184,6 +187,29 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
                   { label: 'Right', url: v.carRightPhoto },
                   { label: 'Back', url: v.carBackPhoto },
                   { label: 'Full', url: v.carFullPhoto }
+                ].map((d, i) => (
+                  <div key={i} className="border rounded p-2">
+                    <p className="text-xs text-gray-500 mb-1">{d.label}</p>
+                    {d.url ? (
+                      <a href={d.url} target="_blank" rel="noreferrer">
+                        <img src={d.url} alt={d.label} className="h-28 w-full object-cover rounded" onError={(e)=>{ e.currentTarget.style.display='none'; }} />
+                        <span className="text-xs text-blue-600 underline mt-1 inline-block">Open</span>
+                      </a>
+                    ) : (
+                      <span className="text-xs text-gray-400">Not provided</span>
+                    )}
+                  </div>
+                ))}
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-sm font-semibold mb-2">Additional Photos</h4>
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                {[
+                  { label: 'Insurance Photo', url: v.insurancePhoto },
+                  { label: 'Interior Photo', url: v.interiorPhoto },
+                  { label: 'Speedometer Photo', url: v.speedometerPhoto }
                 ].map((d, i) => (
                   <div key={i} className="border rounded p-2">
                     <p className="text-xs text-gray-500 mb-1">{d.label}</p>

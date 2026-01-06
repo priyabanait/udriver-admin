@@ -1,30 +1,30 @@
-import express from 'express';
-import InvestmentFD from '../models/investmentFD.js';
-import InvestmentPlan from '../models/investmentPlan.js';
+import express from "express";
+import InvestmentFD from "../models/investmentFD.js";
+import InvestmentPlan from "../models/investmentPlan.js";
 
 const router = express.Router();
 
 // GET all investment FDs
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     const { investorId } = req.query;
-    
+
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const sortBy = req.query.sortBy || 'investmentDate';
-    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
-    
+    const sortBy = req.query.sortBy || "investmentDate";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
     // If investorId is provided, filter by it
     const filter = investorId ? { investorId } : {};
-    
+
     const total = await InvestmentFD.countDocuments(filter);
     const investments = await InvestmentFD.find(filter)
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(limit);
-    
+
     res.json({
       data: investments,
       pagination: {
@@ -32,31 +32,36 @@ router.get('/', async (req, res) => {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
+        hasMore: page * limit < total,
+      },
     });
   } catch (error) {
-    console.error('Error fetching investment FDs:', error);
-    res.status(500).json({ error: 'Failed to fetch investment FDs', message: error.message });
+    console.error("Error fetching investment FDs:", error);
+    res.status(500).json({
+      error: "Failed to fetch investment FDs",
+      message: error.message,
+    });
   }
 });
 
 // GET single investment FD by ID
-router.get('/:id', async (req, res) => {
+router.get("/:id", async (req, res) => {
   try {
     const investment = await InvestmentFD.findById(req.params.id);
     if (!investment) {
-      return res.status(404).json({ error: 'Investment FD not found' });
+      return res.status(404).json({ error: "Investment FD not found" });
     }
     res.json(investment);
   } catch (error) {
-    console.error('Error fetching investment FD:', error);
-    res.status(500).json({ error: 'Failed to fetch investment FD', message: error.message });
+    console.error("Error fetching investment FD:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch investment FD", message: error.message });
   }
 });
 
 // POST - Create new investment FD
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     const {
       investorId,
@@ -76,148 +81,253 @@ router.post('/', async (req, res) => {
       maturityDate,
       notes,
       paymentMode,
-      paymentStatus
+      paymentStatus,
     } = req.body;
 
     // Validation
-    if (!investorName || !phone || !address || !investmentDate || !paymentMethod || !investmentRate || !investmentAmount || !fdType) {
-      return res.status(400).json({ error: 'Missing required fields' });
+    if (
+      !investorName ||
+      !phone ||
+      !address ||
+      !investmentDate ||
+      !paymentMethod ||
+      !investmentRate ||
+      !investmentAmount ||
+      !fdType
+    ) {
+      return res.status(400).json({ error: "Missing required fields" });
     }
 
+    // Normalize investorId - ensure it's either a valid ObjectId or null
+    let normalizedInvestorId = null;
+    if (investorId && String(investorId).trim() !== "") {
+      try {
+        // Try to validate as MongoDB ObjectId
+        const mongooseModule = await import("mongoose");
+        const isValidId =
+          mongooseModule.default.Types.ObjectId.isValid(investorId);
+        if (isValidId) {
+          normalizedInvestorId = investorId;
+        } else {
+          console.warn(
+            `[FD] Invalid investorId format provided: ${investorId}`
+          );
+        }
+      } catch (e) {
+        console.warn(`[FD] Error validating investorId: ${e.message}`);
+      }
+    }
+
+    console.log("[FD] Normalized investorId:", normalizedInvestorId);
+
     // Validate FD type
-    if (!['monthly', 'yearly'].includes(fdType)) {
-      return res.status(400).json({ error: 'Invalid FD type. Must be monthly or yearly' });
+    if (!["monthly", "yearly"].includes(fdType)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid FD type. Must be monthly or yearly" });
     }
 
     // Validate term based on FD type
-    if (fdType === 'monthly' && (!termMonths || termMonths < 1 || termMonths > 12)) {
-      return res.status(400).json({ error: 'For monthly FD, term must be between 1-12 months' });
+    if (
+      fdType === "monthly" &&
+      (!termMonths || termMonths < 1 || termMonths > 12)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "For monthly FD, term must be between 1-12 months" });
     }
-    if (fdType === 'yearly' && (!termYears || termYears < 1 || termYears > 10)) {
-      return res.status(400).json({ error: 'For yearly FD, term must be between 1-10 years' });
+    if (
+      fdType === "yearly" &&
+      (!termYears || termYears < 1 || termYears > 10)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "For yearly FD, term must be between 1-10 years" });
     }
 
     // Validate payment method
-    const validPaymentMethods = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
+    const validPaymentMethods = [
+      "Cash",
+      "Bank Transfer",
+      "Cheque",
+      "Online",
+      "UPI",
+    ];
     if (!validPaymentMethods.includes(paymentMethod)) {
-      return res.status(400).json({ error: 'Invalid payment method' });
+      return res.status(400).json({ error: "Invalid payment method" });
     }
 
     // Validate numbers
     if (isNaN(investmentRate) || parseFloat(investmentRate) < 0) {
-      return res.status(400).json({ error: 'Invalid investment rate' });
+      return res.status(400).json({ error: "Invalid investment rate" });
     }
     if (isNaN(investmentAmount) || parseFloat(investmentAmount) <= 0) {
-      return res.status(400).json({ error: 'Invalid investment amount' });
+      return res.status(400).json({ error: "Invalid investment amount" });
     }
 
     // Calculate maturity date if not provided
     let calculatedMaturityDate = maturityDate ? new Date(maturityDate) : null;
     if (!calculatedMaturityDate) {
       const invDate = new Date(investmentDate);
-      if (fdType === 'monthly') {
-        calculatedMaturityDate = new Date(invDate.setMonth(invDate.getMonth() + parseInt(termMonths)));
-      } else if (fdType === 'yearly') {
-        calculatedMaturityDate = new Date(invDate.setFullYear(invDate.getFullYear() + parseInt(termYears)));
+      if (fdType === "monthly") {
+        calculatedMaturityDate = new Date(
+          invDate.setMonth(invDate.getMonth() + parseInt(termMonths))
+        );
+      } else if (fdType === "yearly") {
+        calculatedMaturityDate = new Date(
+          invDate.setFullYear(invDate.getFullYear() + parseInt(termYears))
+        );
       }
     }
 
     // Resolve plan name if planId provided
     let resolvedPlanId = null;
-    let resolvedPlanName = '';
+    let resolvedPlanName = "";
     if (planId) {
       try {
-        const plan = await InvestmentPlan.findById(planId).select('name');
+        const plan = await InvestmentPlan.findById(planId).select("name");
         if (!plan) {
-          return res.status(400).json({ error: 'Invalid planId: plan not found' });
+          return res
+            .status(400)
+            .json({ error: "Invalid planId: plan not found" });
         }
         resolvedPlanId = plan._id;
-        resolvedPlanName = plan.name || '';
+        resolvedPlanName = plan.name || "";
       } catch (e) {
-        return res.status(400).json({ error: 'Invalid planId format' });
+        return res.status(400).json({ error: "Invalid planId format" });
       }
     }
 
     // Normalize paymentMode input (if provided) to match schema enum
     let normalizedPaymentMode = undefined;
-    if (paymentMode !== undefined && paymentMode !== null && String(paymentMode).trim() !== '') {
-      const allowedPM = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
-      const pmMatch = allowedPM.find(a => a.toLowerCase() === String(paymentMode).trim().toLowerCase());
+    if (
+      paymentMode !== undefined &&
+      paymentMode !== null &&
+      String(paymentMode).trim() !== ""
+    ) {
+      const allowedPM = ["Cash", "Bank Transfer", "Cheque", "Online", "UPI"];
+      const pmMatch = allowedPM.find(
+        (a) => a.toLowerCase() === String(paymentMode).trim().toLowerCase()
+      );
       if (!pmMatch) {
-        return res.status(400).json({ error: 'Invalid paymentMode' });
+        return res.status(400).json({ error: "Invalid paymentMode" });
       }
       normalizedPaymentMode = pmMatch;
     }
 
     // Normalize paymentStatus input (accept 'completed' as synonym for 'paid')
     let normalizedPaymentStatus = undefined;
-    if (paymentStatus !== undefined && paymentStatus !== null && String(paymentStatus).trim() !== '') {
+    if (
+      paymentStatus !== undefined &&
+      paymentStatus !== null &&
+      String(paymentStatus).trim() !== ""
+    ) {
       let _ps = String(paymentStatus).trim().toLowerCase();
-      if (_ps === 'completed') _ps = 'paid';
-      const allowedPS = ['pending', 'partial', 'paid'];
+      if (_ps === "completed") _ps = "paid";
+      const allowedPS = ["pending", "partial", "paid"];
       if (!_ps || !allowedPS.includes(_ps)) {
-        return res.status(400).json({ error: 'Invalid paymentStatus' });
+        return res.status(400).json({ error: "Invalid paymentStatus" });
       }
       normalizedPaymentStatus = _ps;
     }
 
     // Create new investment FD
-      // Calculate maturity amount using helper
-      const { computeFdMaturity } = await import('../lib/fdCalc.js');
-      const { maturityAmount } = computeFdMaturity({
-        principal: parseFloat(investmentAmount),
-        ratePercent: parseFloat(investmentRate),
-        fdType,
-        termMonths: parseInt(termMonths),
-        termYears: parseInt(termYears)
-      });
+    // Calculate maturity amount using helper
+    const { computeFdMaturity } = await import("../lib/fdCalc.js");
+    const { maturityAmount } = computeFdMaturity({
+      principal: parseFloat(investmentAmount),
+      ratePercent: parseFloat(investmentRate),
+      fdType,
+      termMonths: parseInt(termMonths),
+      termYears: parseInt(termYears),
+    });
 
-      const newInvestment = new InvestmentFD({
-        investorId: investorId || null,
-        investorName: investorName.trim(),
-        email: email ? email.trim() : '',
-        phone: phone.trim(),
-        address: address.trim(),
-        investmentDate: new Date(investmentDate),
-        paymentMethod,
-        investmentRate: parseFloat(investmentRate),
-        investmentAmount: parseFloat(investmentAmount),
-        planId: resolvedPlanId,
-        planName: resolvedPlanName,
-        fdType,
-        termMonths: fdType === 'monthly' ? parseInt(termMonths) : undefined,
-        termYears: fdType === 'yearly' ? parseInt(termYears) : undefined,
-        status: status || 'active',
-        maturityDate: calculatedMaturityDate,
-        notes: notes || '',
-        maturityAmount,
-        ...(normalizedPaymentMode && { paymentMode: normalizedPaymentMode }),
-        paymentStatus: normalizedPaymentStatus || 'pending',
-        ...(normalizedPaymentStatus === 'paid' && { paymentDate: new Date() })
-      });
+    const newInvestment = new InvestmentFD({
+      investorId: normalizedInvestorId,
+      investorName: investorName.trim(),
+      email: email ? email.trim() : "",
+      phone: phone.trim(),
+      address: address.trim(),
+      investmentDate: new Date(investmentDate),
+      paymentMethod,
+      investmentRate: parseFloat(investmentRate),
+      investmentAmount: parseFloat(investmentAmount),
+      planId: resolvedPlanId,
+      planName: resolvedPlanName,
+      fdType,
+      termMonths: fdType === "monthly" ? parseInt(termMonths) : undefined,
+      termYears: fdType === "yearly" ? parseInt(termYears) : undefined,
+      status: status || "active",
+      maturityDate: calculatedMaturityDate,
+      notes: notes || "",
+      maturityAmount,
+      ...(normalizedPaymentMode && { paymentMode: normalizedPaymentMode }),
+      paymentStatus: normalizedPaymentStatus || "pending",
+      ...(normalizedPaymentStatus === "paid" && { paymentDate: new Date() }),
+    });
 
     const savedInvestment = await newInvestment.save();
+    console.log(
+      "[FD-INVESTMENTFDS] FD saved with investorId:",
+      savedInvestment.investorId,
+      "Type:",
+      typeof savedInvestment.investorId
+    );
     // Emit dashboard notification for new investment FD
     try {
-      const { createAndEmitNotification } = await import('../lib/notify.js');
-      await createAndEmitNotification({
-        type: 'new_fd',
-        title: `New FD created - ${savedInvestment.investorName || savedInvestment.phone}`,
-        message: `FD of ₹${savedInvestment.investmentAmount} created.`,
-        data: { id: savedInvestment._id, investorId: savedInvestment.investorId }
-      });
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      console.log(
+        "[FD-INVESTMENTFDS] About to send notification with recipientId:",
+        savedInvestment.investorId
+      );
+
+      // Ensure notification is sent with proper investorId
+      if (savedInvestment.investorId) {
+        console.log(
+          "[FD-INVESTMENTFDS] Calling createAndEmitNotification with:"
+        );
+        console.log({
+          type: "new_fd",
+          recipientType: "investor",
+          recipientId: savedInvestment.investorId,
+          recipientIdType: typeof savedInvestment.investorId,
+        });
+        await createAndEmitNotification({
+          type: "new_fd",
+          title: `New FD created - ${
+            savedInvestment.investorName || savedInvestment.phone
+          }`,
+          message: `FD of ₹${savedInvestment.investmentAmount} created.`,
+          data: {
+            id: savedInvestment._id,
+            investorId: savedInvestment.investorId,
+          },
+          recipientType: "investor",
+          recipientId: savedInvestment.investorId
+            ? String(savedInvestment.investorId)
+            : null,
+        });
+        console.log("[FD-INVESTMENTFDS] Notification sent successfully");
+      } else {
+        console.warn(
+          "[FD-INVESTMENTFDS] No investorId - skipping targeted notification"
+        );
+      }
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn("Notify failed:", err.message);
     }
     res.status(201).json(savedInvestment);
   } catch (error) {
-    console.error('Error creating investment FD:', error);
-    res.status(500).json({ error: 'Failed to create investment FD', message: error.message });
+    console.error("Error creating investment FD:", error);
+    res.status(500).json({
+      error: "Failed to create investment FD",
+      message: error.message,
+    });
   }
 });
 
 // PUT - Update investment FD
-router.put('/:id', async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const {
       investorName,
@@ -237,87 +347,141 @@ router.put('/:id', async (req, res) => {
       notes,
       paymentStatus,
       paymentDate,
-      paymentMode
+      paymentMode,
     } = req.body;
 
     // Find investment
     const investment = await InvestmentFD.findById(req.params.id);
     if (!investment) {
-      return res.status(404).json({ error: 'Investment FD not found' });
+      return res.status(404).json({ error: "Investment FD not found" });
     }
 
     // Validate FD type if provided
-    if (fdType && !['monthly', 'yearly'].includes(fdType)) {
-      return res.status(400).json({ error: 'Invalid FD type. Must be monthly or yearly' });
+    if (fdType && !["monthly", "yearly"].includes(fdType)) {
+      return res
+        .status(400)
+        .json({ error: "Invalid FD type. Must be monthly or yearly" });
     }
 
     // Validate term based on FD type
-    if (fdType === 'monthly' && termMonths !== undefined && (termMonths < 1 || termMonths > 12)) {
-      return res.status(400).json({ error: 'For monthly FD, term must be between 1-12 months' });
+    if (
+      fdType === "monthly" &&
+      termMonths !== undefined &&
+      (termMonths < 1 || termMonths > 12)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "For monthly FD, term must be between 1-12 months" });
     }
-    if (fdType === 'yearly' && termYears !== undefined && (termYears < 1 || termYears > 10)) {
-      return res.status(400).json({ error: 'For yearly FD, term must be between 1-10 years' });
+    if (
+      fdType === "yearly" &&
+      termYears !== undefined &&
+      (termYears < 1 || termYears > 10)
+    ) {
+      return res
+        .status(400)
+        .json({ error: "For yearly FD, term must be between 1-10 years" });
     }
 
     // Validate payment method if provided
     if (paymentMethod) {
-      const validPaymentMethods = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
+      const validPaymentMethods = [
+        "Cash",
+        "Bank Transfer",
+        "Cheque",
+        "Online",
+        "UPI",
+      ];
       if (!validPaymentMethods.includes(paymentMethod)) {
-        return res.status(400).json({ error: 'Invalid payment method' });
+        return res.status(400).json({ error: "Invalid payment method" });
       }
     }
 
     // Validate payment mode if provided (case-insensitive)
-    if (paymentMode !== undefined && paymentMode !== null && String(paymentMode).trim() !== '') {
-      const validPaymentModes = ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'];
-      const pmMatch = validPaymentModes.find(a => a.toLowerCase() === String(paymentMode).trim().toLowerCase());
+    if (
+      paymentMode !== undefined &&
+      paymentMode !== null &&
+      String(paymentMode).trim() !== ""
+    ) {
+      const validPaymentModes = [
+        "Cash",
+        "Bank Transfer",
+        "Cheque",
+        "Online",
+        "UPI",
+      ];
+      const pmMatch = validPaymentModes.find(
+        (a) => a.toLowerCase() === String(paymentMode).trim().toLowerCase()
+      );
       if (!pmMatch) {
-        return res.status(400).json({ error: 'Invalid payment mode' });
+        return res.status(400).json({ error: "Invalid payment mode" });
       }
     }
 
     // Validate payment status if provided (accept 'completed' synonym)
-    if (paymentStatus !== undefined && paymentStatus !== null && String(paymentStatus).trim() !== '') {
+    if (
+      paymentStatus !== undefined &&
+      paymentStatus !== null &&
+      String(paymentStatus).trim() !== ""
+    ) {
       let _ps = String(paymentStatus).trim().toLowerCase();
-      if (_ps === 'completed') _ps = 'paid';
-      const validPaymentStatuses = ['pending', 'partial', 'paid'];
+      if (_ps === "completed") _ps = "paid";
+      const validPaymentStatuses = ["pending", "partial", "paid"];
       if (!validPaymentStatuses.includes(_ps)) {
-        return res.status(400).json({ error: 'Invalid payment status' });
+        return res.status(400).json({ error: "Invalid payment status" });
       }
     }
 
     // Validate numbers if provided
-    if (investmentRate !== undefined && (isNaN(investmentRate) || parseFloat(investmentRate) < 0)) {
-      return res.status(400).json({ error: 'Invalid investment rate' });
+    if (
+      investmentRate !== undefined &&
+      (isNaN(investmentRate) || parseFloat(investmentRate) < 0)
+    ) {
+      return res.status(400).json({ error: "Invalid investment rate" });
     }
-    if (investmentAmount !== undefined && (isNaN(investmentAmount) || parseFloat(investmentAmount) <= 0)) {
-      return res.status(400).json({ error: 'Invalid investment amount' });
+    if (
+      investmentAmount !== undefined &&
+      (isNaN(investmentAmount) || parseFloat(investmentAmount) <= 0)
+    ) {
+      return res.status(400).json({ error: "Invalid investment amount" });
     }
 
     // Update fields
-    if (investorName !== undefined) investment.investorName = investorName.trim();
+    if (investorName !== undefined)
+      investment.investorName = investorName.trim();
     if (email !== undefined) investment.email = email.trim();
     if (phone !== undefined) investment.phone = phone.trim();
     if (address !== undefined) investment.address = address.trim();
-    if (investmentDate !== undefined) investment.investmentDate = new Date(investmentDate);
+    if (investmentDate !== undefined)
+      investment.investmentDate = new Date(investmentDate);
     if (paymentMethod !== undefined) investment.paymentMethod = paymentMethod;
-    if (investmentRate !== undefined) investment.investmentRate = parseFloat(investmentRate);
-    if (investmentAmount !== undefined) investment.investmentAmount = parseFloat(investmentAmount);
+    if (investmentRate !== undefined)
+      investment.investmentRate = parseFloat(investmentRate);
+    if (investmentAmount !== undefined)
+      investment.investmentAmount = parseFloat(investmentAmount);
     if (fdType !== undefined) investment.fdType = fdType;
-    if (termMonths !== undefined) investment.termMonths = investment.fdType === 'monthly' ? parseInt(termMonths) : undefined;
-    if (termYears !== undefined) investment.termYears = investment.fdType === 'yearly' ? parseInt(termYears) : undefined;
+    if (termMonths !== undefined)
+      investment.termMonths =
+        investment.fdType === "monthly" ? parseInt(termMonths) : undefined;
+    if (termYears !== undefined)
+      investment.termYears =
+        investment.fdType === "yearly" ? parseInt(termYears) : undefined;
 
     // Recalculate maturityAmount if relevant fields changed
     if (
-      investmentAmount !== undefined || investmentRate !== undefined || fdType !== undefined || termMonths !== undefined || termYears !== undefined
+      investmentAmount !== undefined ||
+      investmentRate !== undefined ||
+      fdType !== undefined ||
+      termMonths !== undefined ||
+      termYears !== undefined
     ) {
-      const { computeFdMaturity } = await import('../lib/fdCalc.js');
+      const { computeFdMaturity } = await import("../lib/fdCalc.js");
       const { maturityAmount } = computeFdMaturity({
         principal: investment.investmentAmount,
         ratePercent: investment.investmentRate,
         fdType: investment.fdType,
         termMonths: investment.termMonths,
-        termYears: investment.termYears
+        termYears: investment.termYears,
       });
       investment.maturityAmount = maturityAmount;
     }
@@ -326,143 +490,204 @@ router.put('/:id', async (req, res) => {
     if (planId !== undefined) {
       if (!planId) {
         investment.planId = null;
-        investment.planName = '';
+        investment.planName = "";
       } else {
         try {
-          const plan = await InvestmentPlan.findById(planId).select('name');
+          const plan = await InvestmentPlan.findById(planId).select("name");
           if (!plan) {
-            return res.status(400).json({ error: 'Invalid planId: plan not found' });
+            return res
+              .status(400)
+              .json({ error: "Invalid planId: plan not found" });
           }
           investment.planId = plan._id;
-          investment.planName = plan.name || '';
+          investment.planName = plan.name || "";
         } catch (e) {
-          return res.status(400).json({ error: 'Invalid planId format' });
+          return res.status(400).json({ error: "Invalid planId format" });
         }
       }
     }
     if (status !== undefined) investment.status = status;
     if (paymentStatus !== undefined) investment.paymentStatus = paymentStatus;
-    if (paymentDate !== undefined) investment.paymentDate = paymentDate ? new Date(paymentDate) : null;
+    if (paymentDate !== undefined)
+      investment.paymentDate = paymentDate ? new Date(paymentDate) : null;
     if (paymentMode !== undefined) investment.paymentMode = paymentMode;
-    
+
+    // Handle TDS percent if provided (calculate tdsAmount server-side to avoid tampering)
+    if (req.body.tdsPercent !== undefined) {
+      const tdsPercent = Number(req.body.tdsPercent) || 0;
+      if (tdsPercent < 0 || tdsPercent > 100) {
+        return res.status(400).json({ error: 'Invalid tdsPercent value' });
+      }
+      investment.tdsPercent = tdsPercent;
+
+      // Compute tdsAmount from maturity interest (maturityAmount - investmentAmount)
+      const interest = (investment.maturityAmount || 0) - (investment.investmentAmount || 0);
+      const tdsAmount = Math.round(((interest * tdsPercent) / 100 + Number.EPSILON) * 100) / 100;
+      investment.tdsAmount = tdsAmount;
+    }
+
+    // If payment status changed to paid and tdsPercent exists but tdsAmount is not set, compute it
+    if (investment.paymentStatus === 'paid' && (investment.tdsPercent || 0) > 0 && (!investment.tdsAmount || investment.tdsAmount === 0)) {
+      const interest = (investment.maturityAmount || 0) - (investment.investmentAmount || 0);
+      investment.tdsAmount = Math.round(((interest * investment.tdsPercent) / 100 + Number.EPSILON) * 100) / 100;
+    }
+
     // Recalculate maturity date if investment date or term changed
-    if ((investmentDate !== undefined || fdType !== undefined || termMonths !== undefined || termYears !== undefined) && maturityDate === undefined) {
+    if (
+      (investmentDate !== undefined ||
+        fdType !== undefined ||
+        termMonths !== undefined ||
+        termYears !== undefined) &&
+      maturityDate === undefined
+    ) {
       const invDate = new Date(investment.investmentDate);
-      if (investment.fdType === 'monthly' && investment.termMonths) {
-        investment.maturityDate = new Date(invDate.setMonth(invDate.getMonth() + investment.termMonths));
-      } else if (investment.fdType === 'yearly' && investment.termYears) {
-        investment.maturityDate = new Date(invDate.setFullYear(invDate.getFullYear() + investment.termYears));
+      if (investment.fdType === "monthly" && investment.termMonths) {
+        investment.maturityDate = new Date(
+          invDate.setMonth(invDate.getMonth() + investment.termMonths)
+        );
+      } else if (investment.fdType === "yearly" && investment.termYears) {
+        investment.maturityDate = new Date(
+          invDate.setFullYear(invDate.getFullYear() + investment.termYears)
+        );
       }
     } else if (maturityDate !== undefined) {
       investment.maturityDate = maturityDate ? new Date(maturityDate) : null;
     }
-    
+
     if (notes !== undefined) investment.notes = notes;
 
     const updatedInvestment = await investment.save();
     res.json(updatedInvestment);
   } catch (error) {
-    console.error('Error updating investment FD:', error);
-    res.status(500).json({ error: 'Failed to update investment FD', message: error.message });
+    console.error("Error updating investment FD:", error);
+    res.status(500).json({
+      error: "Failed to update investment FD",
+      message: error.message,
+    });
   }
 });
 
 // DELETE - Remove investment FD
-router.delete('/:id', async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const investment = await InvestmentFD.findByIdAndDelete(req.params.id);
     if (!investment) {
-      return res.status(404).json({ error: 'Investment FD not found' });
+      return res.status(404).json({ error: "Investment FD not found" });
     }
-    res.json({ message: 'Investment FD deleted successfully', investment });
+    res.json({ message: "Investment FD deleted successfully", investment });
   } catch (error) {
-    console.error('Error deleting investment FD:', error);
-    res.status(500).json({ error: 'Failed to delete investment FD', message: error.message });
+    console.error("Error deleting investment FD:", error);
+    res.status(500).json({
+      error: "Failed to delete investment FD",
+      message: error.message,
+    });
   }
 });
 
 // POST - Confirm payment for FD
-router.post('/:id/confirm-payment', async (req, res) => {
+router.post("/:id/confirm-payment", async (req, res) => {
   try {
-    console.log('Confirm payment request received:', {
+    console.log("Confirm payment request received:", {
       id: req.params.id,
-      body: req.body
+      body: req.body,
     });
 
     const { paymentMode } = req.body;
 
     if (!paymentMode) {
-      console.log('Invalid payment mode:', paymentMode);
-      return res.status(400).json({ error: 'Invalid payment mode. Must be online or cash' });
+      console.log("Invalid payment mode:", paymentMode);
+      return res
+        .status(400)
+        .json({ error: "Invalid payment mode. Must be online or cash" });
     }
 
     const investment = await InvestmentFD.findById(req.params.id);
     if (!investment) {
-      console.log('Investment FD not found:', req.params.id);
-      return res.status(404).json({ error: 'Investment FD not found' });
+      console.log("Investment FD not found:", req.params.id);
+      return res.status(404).json({ error: "Investment FD not found" });
     }
 
-    console.log('Current investment payment status:', investment.paymentStatus);
+    console.log("Current investment payment status:", investment.paymentStatus);
 
-    if (investment.paymentStatus === 'paid') {
-      return res.status(400).json({ error: 'Payment already completed' });
+    if (investment.paymentStatus === "paid") {
+      return res.status(400).json({ error: "Payment already completed" });
     }
 
     // Map incoming short values (online/cash) to schema enum values
-    const mapping = { online: 'Online', cash: 'Cash' };
+    const mapping = { online: "Online", cash: "Cash" };
     const normalized = String(paymentMode).trim().toLowerCase();
     if (!mapping[normalized]) {
-      console.log('Invalid payment mode value (expected online or cash):', paymentMode);
-      return res.status(400).json({ error: 'Invalid payment mode. Must be online or cash' });
+      console.log(
+        "Invalid payment mode value (expected online or cash):",
+        paymentMode
+      );
+      return res
+        .status(400)
+        .json({ error: "Invalid payment mode. Must be online or cash" });
     }
 
     investment.paymentMode = mapping[normalized];
-    investment.paymentStatus = 'paid';
+    investment.paymentStatus = "paid";
     investment.paymentDate = new Date();
 
+    // Support optional tdsPercent in confirm-payment (server calculates tdsAmount)
+    if (req.body.tdsPercent !== undefined) {
+      const tdsPercent = Number(req.body.tdsPercent) || 0;
+      if (tdsPercent < 0 || tdsPercent > 100) {
+        return res.status(400).json({ error: 'Invalid tdsPercent value' });
+      }
+      investment.tdsPercent = tdsPercent;
+      const interest = (investment.maturityAmount || 0) - (investment.investmentAmount || 0);
+      investment.tdsAmount = Math.round(((interest * tdsPercent) / 100 + Number.EPSILON) * 100) / 100;
+    }
+
     const updatedInvestment = await investment.save();
-    console.log('Payment confirmed successfully:', {
+    console.log("Payment confirmed successfully:", {
       id: updatedInvestment._id,
       paymentMode: updatedInvestment.paymentMode,
-      paymentStatus: updatedInvestment.paymentStatus
+      paymentStatus: updatedInvestment.paymentStatus,
     });
 
-    res.json({ 
-      message: 'Payment confirmed successfully', 
-      investment: updatedInvestment 
+    res.json({
+      message: "Payment confirmed successfully",
+      investment: updatedInvestment,
     });
   } catch (error) {
-    console.error('Error confirming payment:', error);
-    res.status(500).json({ error: 'Failed to confirm payment', message: error.message });
+    console.error("Error confirming payment:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to confirm payment", message: error.message });
   }
 });
 
 // GET statistics
-router.get('/stats/summary', async (req, res) => {
+router.get("/stats/summary", async (req, res) => {
   try {
     const [totalInvestments, activeInvestments, stats] = await Promise.all([
       InvestmentFD.countDocuments(),
-      InvestmentFD.countDocuments({ status: 'active' }),
+      InvestmentFD.countDocuments({ status: "active" }),
       InvestmentFD.aggregate([
         {
           $group: {
             _id: null,
-            totalAmount: { $sum: '$investmentAmount' },
-            avgRate: { $avg: '$investmentRate' }
-          }
-        }
-      ])
+            totalAmount: { $sum: "$investmentAmount" },
+            avgRate: { $avg: "$investmentRate" },
+          },
+        },
+      ]),
     ]);
 
     res.json({
       totalInvestments,
       activeInvestments,
       totalAmount: stats[0]?.totalAmount || 0,
-      avgRate: stats[0]?.avgRate || 0
+      avgRate: stats[0]?.avgRate || 0,
     });
   } catch (error) {
-    console.error('Error fetching investment FD stats:', error);
-    res.status(500).json({ error: 'Failed to fetch statistics', message: error.message });
+    console.error("Error fetching investment FD stats:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch statistics", message: error.message });
   }
 });
 

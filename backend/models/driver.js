@@ -1,4 +1,5 @@
 import mongoose from 'mongoose';
+import { normalizeToDateOnly } from '../lib/dateUtils.js';
 
 const DriverSchema = new mongoose.Schema({
   id: Number,
@@ -17,9 +18,15 @@ const DriverSchema = new mongoose.Schema({
   longitude: String,
   emergencyContact: String,
   emergencyRelation: String,
+  emergencyRelationSecondary: String,
   emergencyPhone: String,
   emergencyPhoneSecondary: String,
   employeeId: String,
+  // External IDs from fleet spreadsheets
+  udbId: String,
+  driverNo: String,
+  alternateNo: String,
+  deposit: Number,
   licenseNumber: String,
   licenseExpiryDate: String,
   licenseClass: String,
@@ -46,7 +53,7 @@ const DriverSchema = new mongoose.Schema({
   status: { type: String, default: 'inactive' },
   kycStatus: String,
   registrationCompleted: { type: Boolean, default: false }, // Track if registration form was filled
-  joinDate: String,
+  joinDate: { type: String, default: () => new Date().toISOString().split('T')[0], set: v => normalizeToDateOnly(v) },
   lastActive: String,
   vehicleAssigned: String,
   totalEarnings: Number,

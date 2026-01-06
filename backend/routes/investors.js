@@ -1,285 +1,320 @@
-
-import express from 'express';
-import Investor from '../models/investor.js';
-import InvestorSignup from '../models/investorSignup.js';
-import InvestmentFD from '../models/investmentFD.js';
-import { uploadToCloudinary } from '../lib/cloudinary.js';
-import jwt from 'jsonwebtoken';
-import dotenv from 'dotenv';
-import { authenticateToken } from './middleware.js';
+import express from "express";
+import Investor from "../models/investor.js";
+import InvestorSignup from "../models/investorSignup.js";
+import InvestmentFD from "../models/investmentFD.js";
+import { uploadToCloudinary } from "../lib/cloudinary.js";
+import jwt from "jsonwebtoken";
+import dotenv from "dotenv";
+import { authenticateToken } from "./middleware.js";
 
 dotenv.config();
-const SECRET = process.env.JWT_SECRET || 'dev_secret';
+const SECRET = process.env.JWT_SECRET || "dev_secret";
 
 const router = express.Router();
 // GET investor form data by mobile number
-router.get('/form/mobile/:phone', async (req, res) => {
+router.get("/form/mobile/:phone", async (req, res) => {
   try {
     const { phone } = req.params;
     const investor = await Investor.findOne({ phone }).lean();
     if (!investor) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
     res.json({ investor });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch investor', message: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch investor", message: error.message });
   }
 });
 // Update an investor signup credential
-router.put('/signup/credentials/:id', async (req, res) => {
+router.put("/signup/credentials/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const updated = await InvestorSignup.findByIdAndUpdate(
-      id,
-      req.body,
-      { new: true, runValidators: true }
-    );
+    const updated = await InvestorSignup.findByIdAndUpdate(id, req.body, {
+      new: true,
+      runValidators: true,
+    });
     if (!updated) {
-      return res.status(404).json({ message: 'Investor signup not found' });
+      return res.status(404).json({ message: "Investor signup not found" });
     }
     res.json(updated);
   } catch (err) {
-    console.error('Error updating investor signup:', err);
-    res.status(400).json({ message: 'Failed to update investor signup', error: err.message });
+    console.error("Error updating investor signup:", err);
+    res
+      .status(400)
+      .json({
+        message: "Failed to update investor signup",
+        error: err.message,
+      });
   }
 });
 
 // Delete an investor signup credential
-router.delete('/signup/credentials/:id', async (req, res) => {
+router.delete("/signup/credentials/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await InvestorSignup.findByIdAndDelete(id);
     if (!deleted) {
-      return res.status(404).json({ message: 'Investor signup not found' });
+      return res.status(404).json({ message: "Investor signup not found" });
     }
-    res.json({ message: 'Investor signup deleted', investor: deleted });
+    res.json({ message: "Investor signup deleted", investor: deleted });
   } catch (err) {
-    console.error('Error deleting investor signup:', err);
-    res.status(400).json({ message: 'Failed to delete investor signup', error: err.message });
+    console.error("Error deleting investor signup:", err);
+    res
+      .status(400)
+      .json({
+        message: "Failed to delete investor signup",
+        error: err.message,
+      });
   }
 });
 // GET investor form data by investor ID
-router.get('/form/:id', async (req, res) => {
+router.get("/form/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const investor = await Investor.findById(id).lean();
     if (!investor) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
     res.json({ investor });
   } catch (error) {
-    res.status(500).json({ error: 'Failed to fetch investor', message: error.message });
+    res
+      .status(500)
+      .json({ error: "Failed to fetch investor", message: error.message });
   }
 });
 
 // INVESTOR SIGNUP (plain text password) - Stored in separate collection
-router.post('/signup', async (req, res) => {
+router.post("/signup", async (req, res) => {
   try {
     const { investorName, email, phone, password } = req.body;
     if (!investorName || !phone || !password) {
-      return res.status(400).json({ error: 'Name, phone, and password required' });
+      return res
+        .status(400)
+        .json({ error: "Name, phone, and password required" });
     }
     // Check if investor already exists in signup collection
     const existing = await InvestorSignup.findOne({ phone });
     if (existing) {
-      return res.status(409).json({ error: 'Investor already exists' });
+      return res.status(409).json({ error: "Investor already exists" });
     }
-    const newInvestorSignup = new InvestorSignup({ investorName, email, phone, password });
+    const newInvestorSignup = new InvestorSignup({
+      investorName,
+      email,
+      phone,
+      password,
+    });
     await newInvestorSignup.save();
 
     // Emit a welcome notification (no pending approval message yet - that comes after registration completion)
     try {
-      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      // Use a distinct recipientType for signup records so we don't accidentally push to investor app tokens
       await createAndEmitNotification({
-        type: 'investor_signup',
-        title: `Welcome, ${newInvestorSignup.investorName || newInvestorSignup.phone}`,
-        message: 'Your investor account has been created. Please complete your registration.',
-        recipientType: 'investor',
-        recipientId: newInvestorSignup._id,
-        data: { id: newInvestorSignup._id, phone: newInvestorSignup.phone }
+        type: "investor_signup",
+        title: `Welcome, ${
+          newInvestorSignup.investorName || newInvestorSignup.phone
+        }`,
+        message:
+          "Your investor account has been created. Please complete your registration.",
+        recipientType: "investor_signup",
+        recipientId: String(newInvestorSignup._id),
+        data: { id: newInvestorSignup._id, phone: newInvestorSignup.phone },
       });
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn("Notify failed:", err.message);
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: newInvestorSignup._id, phone: newInvestorSignup.phone, type: 'investor' },
+      {
+        id: newInvestorSignup._id,
+        phone: newInvestorSignup.phone,
+        type: "investor",
+      },
       SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: "30d" }
     );
 
     // Create wallet entry for this phone number
     try {
-      const InvestorWallet = (await import('../models/investorWallet.js')).default;
+      const InvestorWallet = (await import("../models/investorWallet.js"))
+        .default;
       const walletExists = await InvestorWallet.findOne({ phone });
       if (!walletExists) {
         await InvestorWallet.create({ phone, balance: 0, transactions: [] });
       }
     } catch (walletErr) {
-      console.error('Failed to create wallet for investor:', walletErr);
+      console.error("Failed to create wallet for investor:", walletErr);
     }
 
-    res.status(201).json({ 
-      message: 'Signup successful', 
+    res.status(201).json({
+      message: "Signup successful",
       token,
       investor: {
         id: newInvestorSignup._id,
         investorName: newInvestorSignup.investorName,
         email: newInvestorSignup.email,
         phone: newInvestorSignup.phone,
-        registrationCompleted: newInvestorSignup.registrationCompleted || false
-      }
+        registrationCompleted: newInvestorSignup.registrationCompleted || false,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Signup failed', message: error.message });
+    res.status(500).json({ error: "Signup failed", message: error.message });
   }
 });
 
 // INVESTOR LOGIN (plain text password) - Check in signup collection
-router.post('/login', async (req, res) => {
+router.post("/login", async (req, res) => {
   try {
     const { phone, password } = req.body;
     if (!phone || !password) {
-      return res.status(400).json({ error: 'Phone and password required' });
+      return res.status(400).json({ error: "Phone and password required" });
     }
     const investorSignup = await InvestorSignup.findOne({ phone });
     if (!investorSignup) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
     if (investorSignup.password !== password) {
-      return res.status(401).json({ error: 'Invalid password' });
+      return res.status(401).json({ error: "Invalid password" });
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: investorSignup._id, phone: investorSignup.phone, type: 'investor' },
+      { id: investorSignup._id, phone: investorSignup.phone, type: "investor" },
       SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: "30d" }
     );
 
-    res.json({ 
-      message: 'Login successful', 
+    res.json({
+      message: "Login successful",
       token,
       investor: {
         id: investorSignup._id,
         investorName: investorSignup.investorName,
         email: investorSignup.email,
         phone: investorSignup.phone,
-        registrationCompleted: investorSignup.registrationCompleted || false
-      }
+        registrationCompleted: investorSignup.registrationCompleted || false,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Login failed', message: error.message });
+    res.status(500).json({ error: "Login failed", message: error.message });
   }
 });
 
 // INVESTOR SIGNUP WITH OTP - Stored in separate collection
-router.post('/signup-otp', async (req, res) => {
+router.post("/signup-otp", async (req, res) => {
   try {
     const { investorName, email, phone, otp } = req.body;
     if (!phone || !otp) {
-      return res.status(400).json({ error: 'Phone and OTP required' });
+      return res.status(400).json({ error: "Phone and OTP required" });
     }
     // Check if investor already exists in signup collection
     const existing = await InvestorSignup.findOne({ phone });
     if (existing) {
-      return res.status(409).json({ error: 'Investor already exists' });
+      return res.status(409).json({ error: "Investor already exists" });
     }
     // Create investor signup with OTP as password
-    const newInvestorSignup = new InvestorSignup({ 
-      investorName: investorName || 'Investor',
-      email: email || '',
-      phone, 
-      password: otp 
+    const newInvestorSignup = new InvestorSignup({
+      investorName: investorName || "Investor",
+      email: email || "",
+      phone,
+      password: otp,
     });
     await newInvestorSignup.save();
 
     // Emit notification for new investor signup (no pending approval message yet - that comes after registration completion)
     try {
-      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      // Use a distinct recipientType for signup records so we don't accidentally push to investor app tokens
       await createAndEmitNotification({
-        type: 'investor_signup',
+        type: "investor_signup",
         title: `New investor signed up: ${investorName || phone}`,
-        message: `Investor ${investorName || phone} has signed up via OTP. Please complete registration to proceed.`,
+        message: `Investor ${
+          investorName || phone
+        } has signed up via OTP. Please complete registration to proceed.`,
         data: { id: newInvestorSignup._id, phone: newInvestorSignup.phone },
-        recipientType: 'investor',
-        recipientId: newInvestorSignup._id
+        recipientType: "investor_signup",
+        recipientId: String(newInvestorSignup._id),
       });
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn("Notify failed:", err.message);
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: newInvestorSignup._id, phone: newInvestorSignup.phone, type: 'investor' },
+      {
+        id: newInvestorSignup._id,
+        phone: newInvestorSignup.phone,
+        type: "investor",
+      },
       SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: "30d" }
     );
 
-    res.status(201).json({ 
-      message: 'Signup successful', 
+    res.status(201).json({
+      message: "Signup successful",
       token,
       investor: {
         id: newInvestorSignup._id,
         investorName: newInvestorSignup.investorName,
         email: newInvestorSignup.email,
         phone: newInvestorSignup.phone,
-        registrationCompleted: newInvestorSignup.registrationCompleted || false
-      }
+        registrationCompleted: newInvestorSignup.registrationCompleted || false,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Signup failed', message: error.message });
+    res.status(500).json({ error: "Signup failed", message: error.message });
   }
 });
 
 // INVESTOR LOGIN WITH OTP - Check in signup collection
-router.post('/login-otp', async (req, res) => {
+router.post("/login-otp", async (req, res) => {
   try {
     const { phone, otp } = req.body;
     if (!phone || !otp) {
-      return res.status(400).json({ error: 'Phone and OTP required' });
+      return res.status(400).json({ error: "Phone and OTP required" });
     }
     const investorSignup = await InvestorSignup.findOne({ phone });
     if (!investorSignup) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
     if (investorSignup.password !== otp) {
-      return res.status(401).json({ error: 'Invalid OTP' });
+      return res.status(401).json({ error: "Invalid OTP" });
     }
 
     // Generate JWT token
     const token = jwt.sign(
-      { id: investorSignup._id, phone: investorSignup.phone, type: 'investor' },
+      { id: investorSignup._id, phone: investorSignup.phone, type: "investor" },
       SECRET,
-      { expiresIn: '30d' }
+      { expiresIn: "30d" }
     );
 
-    res.json({ 
-      message: 'Login successful', 
+    res.json({
+      message: "Login successful",
       token,
       investor: {
         id: investorSignup._id,
         investorName: investorSignup.investorName,
         email: investorSignup.email,
         phone: investorSignup.phone,
-        registrationCompleted: investorSignup.registrationCompleted || false
-      }
+        registrationCompleted: investorSignup.registrationCompleted || false,
+      },
     });
   } catch (error) {
-    res.status(500).json({ error: 'Login failed', message: error.message });
+    res.status(500).json({ error: "Login failed", message: error.message });
   }
 });
 
 // GET all investors (only manual entries for admin panel)
-router.get('/', async (req, res) => {
+router.get("/", async (req, res) => {
   try {
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const sortBy = req.query.sortBy || 'createdAt';
-    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const total = await Investor.countDocuments();
     const list = await Investor.find()
@@ -287,13 +322,13 @@ router.get('/', async (req, res) => {
       .skip(skip)
       .limit(limit)
       .lean();
-    
+
     // Transform _id to id for frontend compatibility
-    const transformedList = list.map(investor => ({
+    const transformedList = list.map((investor) => ({
       ...investor,
-      id: investor._id.toString()
+      id: investor._id.toString(),
     }));
-    
+
     res.json({
       data: transformedList,
       pagination: {
@@ -301,33 +336,35 @@ router.get('/', async (req, res) => {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
+        hasMore: page * limit < total,
+      },
     });
   } catch (error) {
-    console.error('Error fetching investors:', error);
-    res.status(500).json({ error: 'Failed to fetch investors', message: error.message });
+    console.error("Error fetching investors:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch investors", message: error.message });
   }
 });
 
 // GET investor signup credentials (self-registered)
-router.get('/signup/credentials', async (req, res) => {
+router.get("/signup/credentials", async (req, res) => {
   try {
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    const sortBy = req.query.sortBy || 'signupDate';
-    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+    const sortBy = req.query.sortBy || "signupDate";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const total = await InvestorSignup.countDocuments();
     const list = await InvestorSignup.find()
-      .select('investorName email phone password status kycStatus signupDate')
+      .select("investorName email phone password status kycStatus signupDate")
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(limit)
       .lean();
-    
+
     res.json({
       data: list,
       pagination: {
@@ -335,43 +372,57 @@ router.get('/signup/credentials', async (req, res) => {
         page,
         limit,
         totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
+        hasMore: page * limit < total,
+      },
     });
   } catch (error) {
-    console.error('Error fetching investor signup credentials:', error);
-    res.status(500).json({ error: 'Failed to fetch signup credentials', message: error.message });
+    console.error("Error fetching investor signup credentials:", error);
+    res
+      .status(500)
+      .json({
+        error: "Failed to fetch signup credentials",
+        message: error.message,
+      });
   }
 });
 
 // POST - Create new investor OR complete investor registration
-router.post('/', async (req, res) => {
+router.post("/", async (req, res) => {
   try {
     // Check if this is a registration completion for an existing signup
     const { investorId, phone } = req.body;
-    
+
     if (investorId || phone) {
       // This is a registration completion
       let investorSignup;
-      
+
       if (investorId) {
         investorSignup = await InvestorSignup.findById(investorId);
       } else if (phone) {
         investorSignup = await InvestorSignup.findOne({ phone });
       }
-      
+
       if (!investorSignup) {
-        return res.status(404).json({ error: 'Investor not found' });
+        return res.status(404).json({ error: "Investor not found" });
       }
 
       // Handle document uploads to Cloudinary
-      const documentFields = ['profilePhoto', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument'];
+      const documentFields = [
+        "profilePhoto",
+        "aadharDocument",
+        "aadharDocumentBack",
+        "panDocument",
+        "bankDocument",
+      ];
       const uploadedDocs = {};
 
       for (const field of documentFields) {
-        if (req.body[field] && req.body[field].startsWith('data:')) {
+        if (req.body[field] && req.body[field].startsWith("data:")) {
           try {
-            const result = await uploadToCloudinary(req.body[field], `investors/${investorSignup._id}/${field}`);
+            const result = await uploadToCloudinary(
+              req.body[field],
+              `investors/${investorSignup._id}/${field}`
+            );
             uploadedDocs[field] = result.secure_url;
           } catch (uploadErr) {
             console.error(`Failed to upload ${field}:`, uploadErr);
@@ -397,12 +448,12 @@ router.post('/', async (req, res) => {
         accountBranchName: req.body.accountBranchName,
         ...uploadedDocs,
         registrationCompleted: true,
-        status: 'active'
+        status: "active",
       };
 
       // Remove base64 data to prevent large document size
-      documentFields.forEach(field => {
-        if (updateData[field]?.startsWith('data:')) {
+      documentFields.forEach((field) => {
+        if (updateData[field]?.startsWith("data:")) {
           delete updateData[field];
         }
       });
@@ -438,7 +489,7 @@ router.post('/', async (req, res) => {
         bankDocument: updated.bankDocument,
         status: updated.status,
         kycStatus: updated.kycStatus,
-        isManualEntry: false // Mark as self-registered
+        isManualEntry: false, // Mark as self-registered
       };
       // Upsert investor record
       const savedInvestor = await Investor.findOneAndUpdate(
@@ -449,40 +500,50 @@ router.post('/', async (req, res) => {
 
       // Notify the investor that their registration is pending approval
       try {
-        const { createAndEmitNotification } = await import('../lib/notify.js');
+        const { createAndEmitNotification } = await import("../lib/notify.js");
         await createAndEmitNotification({
-          type: 'investor_registration_completed',
+          type: "investor_registration_completed",
           title: `Registration Submitted`,
           message: `Your registration is pending approval. We'll notify you once it's reviewed.`,
           data: { id: savedInvestor._id, phone: updated.phone },
-          recipientType: 'investor',
-          recipientId: investorSignup._id
+          recipientType: "investor",
+          // Use the actual saved Investor _id so FCM can target device tokens correctly
+          recipientId: String(savedInvestor._id),
         });
       } catch (err) {
-        console.warn('Notify failed:', err.message);
+        console.warn("Notify failed:", err.message);
       }
 
       return res.json({
-        message: 'Registration completed successfully',
+        message: "Registration completed successfully",
         investor: {
           id: savedInvestor._id,
-          ...investorData
-        }
+          ...investorData,
+        },
       });
     }
 
     // Otherwise, this is a manual admin entry
     // Handle document uploads to Cloudinary
-    const documentFields = ['profilePhoto', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument'];
+    const documentFields = [
+      "profilePhoto",
+      "aadharDocument",
+      "aadharDocumentBack",
+      "panDocument",
+      "bankDocument",
+    ];
     const uploadedDocs = {};
-    
+
     // Generate a temporary ID for folder structure
     const tempId = Date.now();
 
     for (const field of documentFields) {
-      if (req.body[field] && req.body[field].startsWith('data:')) {
+      if (req.body[field] && req.body[field].startsWith("data:")) {
         try {
-          const result = await uploadToCloudinary(req.body[field], `investors/${tempId}/${field}`);
+          const result = await uploadToCloudinary(
+            req.body[field],
+            `investors/${tempId}/${field}`
+          );
           uploadedDocs[field] = result.secure_url;
         } catch (uploadErr) {
           console.error(`Failed to upload ${field}:`, uploadErr);
@@ -495,12 +556,12 @@ router.post('/', async (req, res) => {
       ...req.body,
       ...uploadedDocs,
       isManualEntry: true, // Mark as manually added by admin
-      registrationCompleted: true // Mark registration as completed when admin fills the form
+      registrationCompleted: true, // Mark registration as completed when admin fills the form
     };
 
     // Remove base64 data to prevent large document size
-    documentFields.forEach(field => {
-      if (investorData[field]?.startsWith('data:')) {
+    documentFields.forEach((field) => {
+      if (investorData[field]?.startsWith("data:")) {
         delete investorData[field];
       }
     });
@@ -509,40 +570,53 @@ router.post('/', async (req, res) => {
     const saved = await newInvestor.save();
     // Emit dashboard notification for new manual investor creation
     try {
-      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const { createAndEmitNotification } = await import("../lib/notify.js");
       await createAndEmitNotification({
-        type: 'new_investor',
+        type: "new_investor",
         title: `New investor added - ${saved.investorName || saved.phone}`,
-        message: `${saved.investorName || saved.phone} was added to the system.`,
-        data: { id: saved._id, phone: saved.phone }
+        message: `${
+          saved.investorName || saved.phone
+        } was added to the system.`,
+        data: { id: saved._id, phone: saved.phone },
       });
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn("Notify failed:", err.message);
     }
     const result = {
       ...saved.toObject(),
-      id: saved._id.toString()
+      id: saved._id.toString(),
     };
     res.status(201).json(result);
   } catch (error) {
-    console.error('Error creating investor:', error);
-    res.status(400).json({ error: 'Failed to create investor', message: error.message });
+    console.error("Error creating investor:", error);
+    res
+      .status(400)
+      .json({ error: "Failed to create investor", message: error.message });
   }
 });
 
 // PUT - Update investor
-router.put('/:id', async (req, res) => {
+router.put("/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    
+
     // Handle document uploads to Cloudinary
-    const documentFields = ['profilePhoto', 'aadharDocument', 'aadharDocumentBack', 'panDocument', 'bankDocument'];
+    const documentFields = [
+      "profilePhoto",
+      "aadharDocument",
+      "aadharDocumentBack",
+      "panDocument",
+      "bankDocument",
+    ];
     const uploadedDocs = {};
 
     for (const field of documentFields) {
-      if (req.body[field] && req.body[field].startsWith('data:')) {
+      if (req.body[field] && req.body[field].startsWith("data:")) {
         try {
-          const result = await uploadToCloudinary(req.body[field], `investors/${id}/${field}`);
+          const result = await uploadToCloudinary(
+            req.body[field],
+            `investors/${id}/${field}`
+          );
           uploadedDocs[field] = result.secure_url;
         } catch (uploadErr) {
           console.error(`Failed to upload ${field}:`, uploadErr);
@@ -553,63 +627,66 @@ router.put('/:id', async (req, res) => {
     // Update investor data with uploaded document URLs
     const updateData = {
       ...req.body,
-      ...uploadedDocs
+      ...uploadedDocs,
     };
 
     // Remove base64 data to prevent large document size
-    documentFields.forEach(field => {
-      if (updateData[field]?.startsWith('data:')) {
+    documentFields.forEach((field) => {
+      if (updateData[field]?.startsWith("data:")) {
         delete updateData[field];
       }
     });
 
-    const updated = await Investor.findByIdAndUpdate(
-      id,
-      updateData,
-      { new: true, runValidators: true }
-    );
-    
+    const updated = await Investor.findByIdAndUpdate(id, updateData, {
+      new: true,
+      runValidators: true,
+    });
+
     if (!updated) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
-    
+
     const result = {
       ...updated.toObject(),
-      id: updated._id.toString()
+      id: updated._id.toString(),
     };
     res.json(result);
   } catch (error) {
-    console.error('Error updating investor:', error);
-    res.status(400).json({ error: 'Failed to update investor', message: error.message });
+    console.error("Error updating investor:", error);
+    res
+      .status(400)
+      .json({ error: "Failed to update investor", message: error.message });
   }
 });
 
 // DELETE - Remove investor
-router.delete('/:id', async (req, res) => {
+router.delete("/:id", async (req, res) => {
   try {
     const { id } = req.params;
     const deleted = await Investor.findByIdAndDelete(id);
-    
+
     if (!deleted) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
-    
-    res.json({ message: 'Investor deleted successfully', investor: deleted });
+
+    res.json({ message: "Investor deleted successfully", investor: deleted });
   } catch (error) {
-    console.error('Error deleting investor:', error);
-    res.status(400).json({ error: 'Failed to delete investor', message: error.message });
+    console.error("Error deleting investor:", error);
+    res
+      .status(400)
+      .json({ error: "Failed to delete investor", message: error.message });
   }
 });
 
 // POST - Create FD record for investor
-router.post('/fd-records/:id', async (req, res) => {
+router.post("/fd-records/:id", async (req, res) => {
   try {
     const investorId = req.params.id;
-    
+
     // Find investor signup
     const investorSignup = await InvestorSignup.findById(investorId);
     if (!investorSignup) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
 
     const {
@@ -624,163 +701,203 @@ router.post('/fd-records/:id', async (req, res) => {
       status,
       notes,
       paymentMode,
-      address
+      address,
     } = req.body;
 
     // Calculate maturity date and amount
     let maturityDate = new Date(investmentDate);
-    if (fdType === 'monthly' && termMonths) {
+    if (fdType === "monthly" && termMonths) {
       maturityDate.setMonth(maturityDate.getMonth() + termMonths);
-    } else if (fdType === 'yearly' && termYears) {
+    } else if (fdType === "yearly" && termYears) {
       maturityDate.setFullYear(maturityDate.getFullYear() + termYears);
     }
 
     // Use centralized FD maturity helper
-    const { computeFdMaturity } = await import('../lib/fdCalc.js');
+    const { computeFdMaturity } = await import("../lib/fdCalc.js");
     const { maturityAmount } = computeFdMaturity({
       principal: Number(investmentAmount),
       ratePercent: Number(investmentRate),
       fdType,
       termMonths: Number(termMonths),
-      termYears: Number(termYears)
+      termYears: Number(termYears),
     });
 
     // Create new FD record
     const newFD = new InvestmentFD({
       investorId: investorId,
       investorName: investorSignup.investorName,
-      email: investorSignup.email || '',
+      email: investorSignup.email || "",
       phone: investorSignup.phone,
-      address: address || investorSignup.address || '',
+      address: address || investorSignup.address || "",
       investmentDate,
       paymentMethod,
       investmentRate,
       investmentAmount,
       planId: planId || null,
       fdType,
-      termMonths: fdType === 'monthly' ? termMonths : undefined,
-      termYears: fdType === 'yearly' ? termYears : undefined,
-      status: status || 'active',
+      termMonths: fdType === "monthly" ? termMonths : undefined,
+      termYears: fdType === "yearly" ? termYears : undefined,
+      status: status || "active",
       maturityDate,
       maturityAmount,
-      notes: notes || '',
-      paymentMode: paymentMode || 'online',
-      paymentStatus: 'completed',
-      paymentDate: new Date()
+      notes: notes || "",
+      paymentMode: paymentMode || "online",
+      paymentStatus: "completed",
+      paymentDate: new Date(),
     });
 
     const savedFD = await newFD.save();
     // Emit dashboard notification for new FD creation
     try {
-      const { createAndEmitNotification } = await import('../lib/notify.js');
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      // Dashboard/admin notification (no recipientType) so admins see all FDs
       await createAndEmitNotification({
-        type: 'new_fd',
+        type: "new_fd",
         title: `New FD created - ${savedFD.investorName || savedFD.phone}`,
         message: `An FD of ₹${savedFD.investmentAmount} was created.`,
-        data: { id: savedFD._id, investorId: savedFD.investorId }
+        data: { id: savedFD._id, investorId: savedFD.investorId },
       });
+
+      // If this FD maps to a registered Investor app user, notify them directly via FCM
+      try {
+        const InvestorModel = (await import("../models/investor.js")).default;
+        const targetInvestor = await InvestorModel.findOne({ phone: String(savedFD.phone) }).lean();
+        if (targetInvestor && targetInvestor._id) {
+          await createAndEmitNotification({
+            type: "new_fd",
+            title: `Your FD is confirmed`,
+            message: `Your FD of ₹${savedFD.investmentAmount} has been created.`,
+            data: { id: savedFD._id, investorId: String(targetInvestor._id) },
+            recipientType: "investor",
+            recipientId: String(targetInvestor._id),
+          });
+        } else {
+          console.log("[FD] No registered Investor found by phone - skipping per-user FCM push");
+        }
+      } catch (innerErr) {
+        console.warn("Notify (per-investor) failed:", innerErr.message);
+      }
     } catch (err) {
-      console.warn('Notify failed:', err.message);
+      console.warn("Notify failed:", err.message);
     }
-    
+
     res.status(201).json({
-      message: 'FD record created successfully',
-      fd: savedFD
+      message: "FD record created successfully",
+      fd: savedFD,
     });
   } catch (error) {
-    console.error('Error creating FD record:', error);
-    res.status(500).json({ error: 'Failed to create FD record', message: error.message });
+    console.error("Error creating FD record:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to create FD record", message: error.message });
   }
 });
 
 // GET investor FD records by investor ID
-router.get('/fd-records/:id', async (req, res) => {
+router.get("/fd-records/:id", async (req, res) => {
   try {
     const investorId = req.params.id;
-    
+
     // Find investor signup to get phone number
     const investorSignup = await InvestorSignup.findById(investorId);
     if (!investorSignup) {
-      return res.status(404).json({ error: 'Investor not found' });
+      return res.status(404).json({ error: "Investor not found" });
     }
 
     // Find all FD records matching the investor ID or phone number (for backward compatibility)
-    const fdRecords = await InvestmentFD.find({ 
-      $or: [
-        { investorId: investorId },
-        { phone: investorSignup.phone }
-      ]
+    const fdRecords = await InvestmentFD.find({
+      $or: [{ investorId: investorId }, { phone: investorSignup.phone }],
     }).sort({ investmentDate: -1 });
-    
+
     res.json({
       investor: {
         id: investorSignup._id,
         investorName: investorSignup.investorName,
         email: investorSignup.email,
-        phone: investorSignup.phone
+        phone: investorSignup.phone,
       },
       fdRecords: fdRecords,
       totalRecords: fdRecords.length,
-      totalInvestment: fdRecords.reduce((sum, fd) => sum + (fd.investmentAmount || 0), 0),
-      totalMaturityAmount: fdRecords.reduce((sum, fd) => sum + (fd.maturityAmount || 0), 0)
+      totalInvestment: fdRecords.reduce(
+        (sum, fd) => sum + (fd.investmentAmount || 0),
+        0
+      ),
+      totalMaturityAmount: fdRecords.reduce(
+        (sum, fd) => sum + (fd.maturityAmount || 0),
+        0
+      ),
     });
   } catch (error) {
-    console.error('Error fetching investor FD records:', error);
-    res.status(500).json({ error: 'Failed to fetch FD records', message: error.message });
+    console.error("Error fetching investor FD records:", error);
+    res
+      .status(500)
+      .json({ error: "Failed to fetch FD records", message: error.message });
   }
 });
 
 // Forgot Password - Update password using phone number
-router.post('/forgot-password', async (req, res) => {
+router.post("/forgot-password", async (req, res) => {
   try {
     const { phone, newPassword } = req.body;
-    
+
     // Validate input
     if (!phone || !newPassword) {
-      return res.status(400).json({ error: 'Phone number and new password required' });
+      return res
+        .status(400)
+        .json({ error: "Phone number and new password required" });
     }
 
     // Find investor by phone number
     const investorSignup = await InvestorSignup.findOne({ phone });
     if (!investorSignup) {
-      return res.status(404).json({ error: 'Investor not found with this phone number' });
+      return res
+        .status(404)
+        .json({ error: "Investor not found with this phone number" });
     }
 
     // Update password (plain text)
     investorSignup.password = newPassword;
     await investorSignup.save();
 
-    res.json({ 
-      message: 'Password updated successfully',
+    res.json({
+      message: "Password updated successfully",
       investor: {
         id: investorSignup._id,
         investorName: investorSignup.investorName,
         email: investorSignup.email,
-        phone: investorSignup.phone
-      }
+        phone: investorSignup.phone,
+      },
     });
   } catch (error) {
-    console.error('Forgot password error:', error);
-    res.status(500).json({ error: 'Password reset failed', message: error.message });
+    console.error("Forgot password error:", error);
+    res
+      .status(500)
+      .json({ error: "Password reset failed", message: error.message });
   }
 });
 
 // Delete own account (investor) — authenticated route
-router.delete('/delete-account', authenticateToken, async (req, res) => {
+router.delete("/delete-account", authenticateToken, async (req, res) => {
   try {
     const user = req.user;
     const id = user && user.id;
-    if (!id) return res.status(401).json({ message: 'Authentication required.' });
+    if (!id)
+      return res.status(401).json({ message: "Authentication required." });
 
     const deleted = await InvestorSignup.findByIdAndDelete(id);
     if (!deleted) {
-      return res.status(404).json({ message: 'Investor account not found.' });
+      return res.status(404).json({ message: "Investor account not found." });
     }
 
-    return res.json({ message: 'Account deleted. You will need to sign up again to use the app.' });
+    return res.json({
+      message:
+        "Account deleted. You will need to sign up again to use the app.",
+    });
   } catch (error) {
-    console.error('Delete account error:', error);
-    return res.status(500).json({ error: 'Server error during account deletion.' });
+    console.error("Delete account error:", error);
+    return res
+      .status(500)
+      .json({ error: "Server error during account deletion." });
   }
 });
 

@@ -25,6 +25,10 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
   const [loading, setLoading] = useState(false);
   const [scriptLoaded, setScriptLoaded] = useState(false);
 
+  // Inputs for paying specific parts (driver payments)
+  const [depositAmount, setDepositAmount] = useState('');
+  const [rentAmount, setRentAmount] = useState('');
+
   useEffect(() => {
     if (isOpen) {
       loadLayerScript()
@@ -36,15 +40,52 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
     }
   }, [isOpen]);
 
+  // Initialize deposit/rent inputs when a selection opens
+  useEffect(() => {
+    if (!isOpen) return;
+    const depositDue = selection?.paymentDetails?.depositDue || 0;
+    const rentDue = selection?.paymentDetails?.rentDue || 0;
+    // Prefill with due amounts so user can change as needed
+    setDepositAmount(depositDue || '');
+    setRentAmount(rentDue || '');
+  }, [selection, isOpen]);
+
   const handleCreateToken = async () => {
-    if (!selection || !selection.totalPayable || selection.totalPayable <= 0) {
-      toast.error('Invalid payment amount');
+    // For investor payments keep existing behaviour
+    if (paymentFor === 'investor') {
+      if (!selection || !selection.totalPayable || selection.totalPayable <= 0) {
+        toast.error('Invalid payment amount');
+        return;
+      }
+    }
+
+    // For driver payments compute the total from inputs
+    const payDeposit = parseFloat(depositAmount || 0) || 0;
+    const payRent = parseFloat(rentAmount || 0) || 0;
+    const computedTotal = payDeposit + payRent;
+
+    if (paymentFor === 'driver' && computedTotal <= 0) {
+      toast.error('Enter an amount to pay (deposit and/or rent)');
       return;
     }
 
     if (!scriptLoaded) {
       toast.error('Payment gateway not loaded. Please try again.');
       return;
+    }
+
+    // Basic validation: don't allow paying more than due
+    if (paymentFor === 'driver') {
+      const depositDue = selection?.paymentDetails?.depositDue || 0;
+      const rentDue = selection?.paymentDetails?.rentDue || 0;
+      if (payDeposit > depositDue) {
+        toast.error(`Deposit amount cannot exceed due: ₹${depositDue}`);
+        return;
+      }
+      if (payRent > rentDue) {
+        toast.error(`Rent amount cannot exceed due: ₹${rentDue}`);
+        return;
+      }
     }
 
     setLoading(true);
@@ -67,14 +108,23 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
             investmentId: selection.investmentId || selection._id,
             paymentType: 'investment'
           }
-        : {
-            driverMobile: selection.driverMobile || selection.driver?.mobile,
-            amount: selection.totalPayable,
-            driverName: selection.driverName || selection.driver?.name,
-            driverEmail: selection.driver?.email,
-            planSelectionId: selection._id,
-            paymentType: 'rent'
-          };
+        : (() => {
+            // For drivers include deposit/rent breakdown and set a sensible paymentType
+            let paymentTypeLocal = 'rent';
+            if (payDeposit > 0 && payRent > 0) paymentTypeLocal = 'mixed';
+            else if (payDeposit > 0) paymentTypeLocal = 'security';
+
+            return {
+              driverMobile: selection.driverMobile || selection.driver?.mobile,
+              amount: computedTotal,
+              driverName: selection.driverName || selection.driver?.name,
+              driverEmail: selection.driver?.email,
+              planSelectionId: selection._id,
+              paymentType: paymentTypeLocal,
+              depositAmount: payDeposit,
+              rentAmount: payRent
+            };
+          })();
 
       const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
@@ -131,6 +181,8 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
         
         if (response.status === 'captured') {
           toast.success('Payment successful!');
+          // Ensure loading is cleared and propagate success
+          setLoading(false);
           onSuccess({ transactionId, payment_id: response.payment_id, status: 'completed' });
           onClose();
         } else if (response.status === 'failed') {
@@ -141,6 +193,8 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
           setLoading(false);
         } else if (response.status === 'pending') {
           toast.info('Payment is pending...');
+          // Clear the spinner so user can interact while payment completes
+          setLoading(false);
         }
       },
       function(err) {
@@ -149,6 +203,9 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
         setLoading(false);
       }
     );
+
+    // The checkout opens asynchronously; clear the loading state immediately so the UI is usable
+    setLoading(false);
   };
 
   if (!isOpen) return null;
@@ -185,18 +242,75 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
                 <span className="font-medium text-gray-900">
                   {paymentFor === 'investor' 
                     ? (selection?.investorName || selection?.investor?.investorName || 'N/A')
-                    : (selection?.driverName || 'N/A')
+                    : (selection?.driverUsername || 'N/A')
                   }
                 </span>
               </div>
-              {paymentFor === 'driver' && (
+ {paymentFor === 'investor' ? (
                 <div className="flex justify-between text-sm">
-                  <span className="text-gray-600">Vehicle</span>
-                  <span className="font-medium text-gray-900">
-                    {selection?.carRegistrationNumber || 'N/A'}
-                  </span>
+                  <span className="text-gray-600">Phone</span>
+                  <span className="font-medium text-gray-900">{selection?.investorPhone || selection?.phone || selection?.investor?.phone || 'N/A'}</span>
+                </div>
+              ) : (
+                <div className="flex justify-between text-sm">
+                  <span className="text-gray-600">Mobile</span>
+                  <span className="font-medium text-gray-900">{selection?.driverMobile || selection?.driver?.mobile || 'N/A'}</span>
                 </div>
               )}
+              {paymentFor === 'driver' && (
+                <>
+                  {/* <div className="flex justify-between text-sm">
+                    <span className="text-gray-600">Vehicle</span>
+                    <span className="font-medium text-gray-900">
+                      {selection?.carRegistrationNumber || 'N/A'}
+                    </span>
+                  </div> */}
+
+                  <div className="mt-2 grid gap-2">
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Deposit Due</span>
+                      <span className="font-medium text-gray-900">₹{(selection?.paymentDetails?.depositDue || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Deposit amount"
+                        value={depositAmount}
+                        onChange={e => setDepositAmount(e.target.value)}
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+                      />
+                      <span className="text-xs text-gray-500">Due: ₹{(selection?.paymentDetails?.depositDue || 0).toLocaleString('en-IN')}</span>
+                    </div>
+
+                    <div className="flex items-center justify-between text-sm">
+                      <span className="text-gray-600">Rent Due</span>
+                      <span className="font-medium text-gray-900">₹{(selection?.paymentDetails?.rentDue || 0).toLocaleString('en-IN')}</span>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <input
+                        type="number"
+                        min="0"
+                        step="0.01"
+                        placeholder="Rent amount"
+                        value={rentAmount}
+                        onChange={e => setRentAmount(e.target.value)}
+                        className="border border-gray-300 rounded-md px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 w-40"
+                      />
+                      <span className="text-xs text-gray-500">Due: ₹{(selection?.paymentDetails?.rentDue || 0).toLocaleString('en-IN')}</span>
+                    </div>
+
+                    <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between">
+                      <span className="text-gray-900 font-semibold">Amount to Pay</span>
+                      <span className="text-xl font-bold text-blue-600">
+                        ₹{( (parseFloat(depositAmount || 0) || 0) + (parseFloat(rentAmount || 0) || 0) ).toFixed(2)}
+                      </span>
+                    </div>
+                  </div>
+                </>
+              )}
+
               {paymentFor === 'investor' && selection?.carname && (
                 <div className="flex justify-between text-sm">
                   <span className="text-gray-600">Investment</span>
@@ -205,21 +319,16 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
                   </span>
                 </div>
               )}
-              <div className="flex justify-between text-sm">
-                <span className="text-gray-600">{paymentFor === 'investor' ? 'Phone' : 'Mobile'}</span>
-                <span className="font-medium text-gray-900">
-                  {paymentFor === 'investor'
-                    ? (selection?.investorPhone || selection?.phone || selection?.investor?.phone || 'N/A')
-                    : (selection?.driverMobile || selection?.driver?.mobile || 'N/A')
-                  }
-                </span>
-              </div>
-              <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between">
-                <span className="text-gray-900 font-semibold">Amount to Pay</span>
-                <span className="text-xl font-bold text-blue-600">
-                  ₹{selection?.totalPayable?.toFixed(2) || '0.00'}
-                </span>
-              </div>
+
+             
+
+              {/* If not driver (investor) show original amount */}
+              {paymentFor === 'investor' && (
+                <div className="border-t border-gray-200 pt-2 mt-2 flex justify-between">
+                  <span className="text-gray-900 font-semibold">Amount to Pay</span>
+                  <span className="text-xl font-bold text-blue-600">₹{selection?.totalPayable?.toFixed(2) || '0.00'}</span>
+                </div>
+              )}
             </div>
           </div>
 

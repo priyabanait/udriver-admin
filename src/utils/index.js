@@ -18,6 +18,8 @@ export function formatDate(date) {
   if (!date) return '-';
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return '-';
+  const y = d.getUTCFullYear();
+  if (y < 1900 || y > 2100) return '-';
   return new Intl.DateTimeFormat('en-IN', {
     year: 'numeric',
     month: 'short',
@@ -29,6 +31,8 @@ export function formatDateTime(date) {
   if (!date) return '-';
   const d = new Date(date);
   if (Number.isNaN(d.getTime())) return '-';
+  const y = d.getUTCFullYear();
+  if (y < 1900 || y > 2100) return '-';
   return new Intl.DateTimeFormat('en-IN', {
     year: 'numeric',
     month: 'short',

@@ -9,6 +9,8 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
   const [currentStep, setCurrentStep] = useState(1);
   const [formData, setFormData] = useState({
     // Personal Information
+    username: '',
+    password: '',
     name: '',
     email: '',
     phone: '',
@@ -21,10 +23,12 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     longitude: '',
     emergencyContact: '',
     emergencyRelation: '',
+    emergencyRelationSecondary: '',
     emergencyPhone: '',
     emergencyPhoneSecondary: '',
     
     employeeId: '',
+    joinDate: new Date().toISOString().split('T')[0],
     // License & Documents
     licenseNumber: '',
     licenseExpiryDate: '',
@@ -39,6 +43,10 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     // Plan & Vehicle
     planType: '',
     vehiclePreference: '',
+    udbId: '',
+    driverNo: '',
+    alternateNo: '',
+    deposit: '',
     
     // Bank Details
     bankName: '',
@@ -67,6 +75,9 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
   const [locationLoading, setLocationLoading] = useState(false);
   const [geocodingLoading, setGeocodingLoading] = useState(false);
   const [documentPreviews, setDocumentPreviews] = useState({});
+  const [udbCounter, setUdbCounter] = useState(30);
+  const [showPassword, setShowPassword] = useState(false);
+  const [passwordIsHashed, setPasswordIsHashed] = useState(false);
 
   const steps = [
     { id: 1, title: 'Personal Info', icon: User },
@@ -76,29 +87,32 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     { id: 5, title: 'Review', icon: FileText }
   ];
 
+  // Helper to format date-like values into yyyy-mm-dd for inputs
+  const formatDateForInput = (dateString) => {
+    if (!dateString) return '';
+    try {
+      const date = new Date(dateString);
+      if (isNaN(date.getTime())) return '';
+      return date.toISOString().split('T')[0];
+    } catch {
+      return '';
+    }
+  };
+
   useEffect(() => {
     if (driver) {
-      // Format dates for date inputs (YYYY-MM-DD)
-      const formatDateForInput = (dateString) => {
-        if (!dateString) return '';
-        try {
-          const date = new Date(dateString);
-          if (isNaN(date.getTime())) return '';
-          return date.toISOString().split('T')[0];
-        } catch {
-          return '';
-        }
-      };
-
       setFormData({ 
         ...driver,
         planType: driver.currentPlan || driver.planType || '', // Map currentPlan back to planType
         dateOfBirth: formatDateForInput(driver.dateOfBirth),
+        joinDate: formatDateForInput(driver.joinDate),
         licenseExpiryDate: formatDateForInput(driver.licenseExpiryDate),
         // Ensure all required fields have values (prevent undefined)
+        username: driver.username || '',
+        password: driver.password || '', // prefill if backend returns plaintext (see security note)
         name: driver.name || '',
         email: driver.email || '',
-        phone: driver.phone || '',
+        phone: driver.phone || driver.mobile || '',
         address: driver.address || '',
         city: driver.city || '',
         state: driver.state || '',
@@ -107,6 +121,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         longitude: driver.longitude || '',
         emergencyContact: driver.emergencyContact || '',
         emergencyRelation: driver.emergencyRelation || '',
+        emergencyRelationSecondary: driver.emergencyRelationSecondary || '',
         emergencyPhone: driver.emergencyPhone || '',
         emergencyPhoneSecondary: driver.emergencyPhoneSecondary || '',
         employeeId: driver.employeeId || '',
@@ -117,6 +132,10 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         experience: driver.experience || '',
         previousEmployment: driver.previousEmployment || '',
         vehiclePreference: driver.vehiclePreference || driver.vehicleAssigned || '',
+        udbId: driver.udbId || '',
+        driverNo: driver.driverNo || '',
+        alternateNo: driver.alternateNo || '',
+        deposit: driver.deposit || '',
         bankName: driver.bankName || '',
         accountNumber: driver.accountNumber || '',
         ifscCode: driver.ifscCode || '',
@@ -135,12 +154,20 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
       });
       setDocumentPreviews(previews);
       setCurrentStep(1); // Start from the first step but with filled data
+
+      // Detect hashed password (bcrypt/argon prefixes) and avoid showing it
+      const pwd = driver.password || '';
+      const isHashed = typeof pwd === 'string' && (pwd.startsWith('$2') || pwd.startsWith('$argon'));
+      setPasswordIsHashed(!!isHashed);
     } else {
       // Reset form for new driver
       setFormData({
+        username: '',
+        password: '',
         name: '',
         email: '',
         phone: '',
+        joinDate: new Date().toISOString().split('T')[0],
         dateOfBirth: '',
         address: '',
         city: '',
@@ -150,6 +177,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         longitude: '',
         emergencyContact: '',
         emergencyRelation: '',
+        emergencyRelationSecondary: '',
         emergencyPhone: '',
         emergencyPhoneSecondary: '',
         employeeId: '',
@@ -180,12 +208,38 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
       });
       setCurrentStep(1);
       setDocumentPreviews({});
+      setPasswordIsHashed(false);
     }
     setErrors({});
   }, [driver, isOpen]);
 
+  // When opening the modal for creating a new driver, fetch the latest driver
+  // and set the udbCounter so generated IDs continue from the last saved UDB.
+  useEffect(() => {
+    const initUdbCounter = async () => {
+      if (!isOpen) return;
+      try {
+        // Fetch computed next UDB from backend
+        const res = await fetch('/api/drivers/udb/next');
+        if (!res.ok) return;
+        const data = await res.json();
+        if (data && typeof data.next === 'number') {
+          setUdbCounter(data.next);
+        }
+      } catch (err) {
+        // ignore failures; keep default counter
+        console.warn('Failed to initialize UDB counter', err);
+      }
+    };
+    initUdbCounter();
+  }, [isOpen]);
+
+  // UDB generation is handled by explicit generate button now
+
   const handleInputChange = async (field, value) => {
+    // Simple update for all fields; UDB is generated explicitly via button
     setFormData(prev => ({ ...prev, [field]: value }));
+
     // Real-time per-field validation (async for IFSC)
     let fieldError = '';
     if (field === 'ifscCode') {
@@ -198,6 +252,12 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     } else if (errors[field]) {
       setErrors(prev => ({ ...prev, [field]: '' }));
     }
+  };
+
+  const handleGenerateUdb = () => {
+    const id = `UDB${String(udbCounter).padStart(4, '0')}`;
+    setFormData(prev => ({ ...prev, udbId: id }));
+    setUdbCounter(prev => prev + 1);
   };
 
   const calculateAge = (dateString) => {
@@ -326,6 +386,87 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     }
   };
 
+  // Fetch driver data by phone/mobile and merge into form for autofill (only fill empty fields)
+  const handlePhoneBlur = async (phoneValue) => {
+    const digits = String(phoneValue || '').replace(/\D/g, '');
+    if (!digits || digits.length < 6) return; // not enough info to search
+
+    try {
+      const res = await fetch(`/api/drivers/form/search/${encodeURIComponent(digits)}`);
+      if (!res.ok) {
+        // Not found is fine; do not disturb the form
+        return;
+      }
+      const data = await res.json();
+      const d = data.driver;
+      if (!d) return;
+
+      // Map server driver to form fields safely (only fill missing fields)
+      setFormData(prev => {
+        const merged = { ...prev };
+        const safeSet = (key, value) => {
+          if (value === undefined || value === null) return;
+          if (merged[key] === undefined || merged[key] === null || merged[key] === '') {
+            merged[key] = value;
+          }
+        };
+
+        safeSet('name', d.name || '');
+        safeSet('email', d.email || '');
+        // prefer server phone or mobile
+        safeSet('phone', d.phone || d.mobile || '');
+        safeSet('dateOfBirth', formatDateForInput(d.dateOfBirth));
+        safeSet('licenseExpiryDate', formatDateForInput(d.licenseExpiryDate));
+        safeSet('licenseNumber', d.licenseNumber || '');
+        safeSet('licenseClass', d.licenseClass || 'LMV');
+        safeSet('aadharNumber', d.aadharNumber || '');
+        safeSet('panNumber', d.panNumber || '');
+        safeSet('address', d.address || '');
+        safeSet('city', d.city || '');
+        safeSet('state', d.state || '');
+        safeSet('pincode', d.pincode || '');
+        safeSet('latitude', d.latitude || '');
+        safeSet('longitude', d.longitude || '');
+        safeSet('emergencyContact', d.emergencyContact || '');
+        safeSet('emergencyRelation', d.emergencyRelation || '');
+        safeSet('emergencyPhone', d.emergencyPhone || '');
+        safeSet('emergencyRelationSecondary', d.emergencyRelationSecondary || '');
+        safeSet('emergencyPhoneSecondary', d.emergencyPhoneSecondary || '');
+        safeSet('employeeId', d.employeeId || '');
+        safeSet('experience', d.experience || '');
+        safeSet('planType', d.currentPlan || d.planType || '');
+        safeSet('vehiclePreference', d.vehiclePreference || d.vehicleAssigned || '');
+        safeSet('bankName', d.bankName || '');
+        safeSet('accountNumber', d.accountNumber || '');
+        safeSet('ifscCode', d.ifscCode || '');
+        safeSet('accountHolderName', d.accountHolderName || '');
+        safeSet('accountBranchName', d.accountBranchName || '');
+        safeSet('udbId', d.udbId || '');
+        safeSet('driverNo', d.driverNo || '');
+        safeSet('alternateNo', d.alternateNo || '');
+        safeSet('deposit', d.deposit !== undefined && d.deposit !== null ? String(d.deposit) : '');
+
+        // Prefer server udbId if available (overwrite any generated suggestion)
+        if (d.udbId) merged.udbId = d.udbId;
+
+        // Document previews
+        const docKeys = ['profilePhoto','licenseDocument','aadharDocument','aadharDocumentBack','panDocument','bankDocument','electricBillDocument'];
+        setDocumentPreviews(prevDocs => {
+          const next = { ...prevDocs };
+          for (const k of docKeys) {
+            if ((d[k]) && !next[k]) next[k] = d[k];
+          }
+          return next;
+        });
+
+        toast.success('Auto-filled available data from database');
+        return merged;
+      });
+    } catch (err) {
+      console.error('Auto-fill fetch failed:', err);
+    }
+  };
+
   const validateField = async (field, value) => {
     // return error message string or empty/null if valid
     if (field === 'name') {
@@ -333,6 +474,24 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
       if (!/^[a-zA-Z\s]{2,50}$/.test(value.trim())) return 'Name should only contain letters and spaces (2-50 characters)';
       return '';
     }
+
+    if (field === 'username') {
+      if (!value || !value.trim()) return 'Username is required';
+      if (!/^[a-zA-Z0-9._-]{3,30}$/.test(value.trim())) return 'Username must be 3-30 characters and may contain letters, numbers, . _ -';
+      return '';
+    }
+
+    if (field === 'password') {
+      // Password required when creating a new driver; optional when editing (leave blank to keep existing)
+      if (!driver) {
+        if (!value || !value.trim()) return 'Password is required';
+      } else {
+        if (!value) return '';
+      }
+      if (value && value.length < 6) return 'Password must be at least 6 characters';
+      return '';
+    }
+
     // if (field === 'email') {
     //   if (!value || !value.trim()) return 'Email is required';
     //   if (!/^[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}$/.test(value)) return 'Please enter a valid email address';
@@ -346,12 +505,21 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
       return '';
     }
     if (field === 'dateOfBirth') {
-  if (!value) return ''; // skip validation if no date is entered
-  const age = calculateAge(value);
-  if (age < 18) return 'Driver must be at least 18 years old';
-  if (age > 65) return 'Driver age cannot exceed 65 years';
-  return '';
-}
+      if (!value) return ''; // skip validation if no date is entered
+      const age = calculateAge(value);
+      if (age < 18) return 'Driver must be at least 18 years old';
+      if (age > 65) return 'Driver age cannot exceed 65 years';
+      return '';
+    }
+
+    if (field === 'joinDate') {
+      if (!value) return ''; // optional
+      const d = new Date(value);
+      if (isNaN(d.getTime())) return 'Please enter a valid join date';
+      const now = new Date();
+      if (d > now) return 'Join date cannot be in the future';
+      return '';
+    }
 
 
     if (field === 'address') {
@@ -455,7 +623,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     const newErrors = {};
     switch (step) {
       case 1: // Personal Information
-        await Promise.all(['name', 'email', 'phone', 'dateOfBirth', 'address', 'pincode'].map(async (f) => {
+        await Promise.all([ 'username','password','name', 'email', 'phone', 'dateOfBirth', 'joinDate', 'address', 'pincode'].map(async (f) => {
           const err = await validateField(f, formData[f]);
           if (err) newErrors[f] = err;
         }));
@@ -516,7 +684,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
       const driverData = {
         ...formData,
         id: driver?.id || Date.now(),
-        joinDate: driver?.joinDate || new Date().toISOString(),
+        joinDate: formData.joinDate || driver?.joinDate || new Date().toISOString().split('T')[0],
         lastActive: new Date().toISOString(),
         totalTrips: driver?.totalTrips || 0,
         totalEarnings: driver?.totalEarnings || 0,
@@ -563,6 +731,57 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Username *
+                </label>
+                <input
+                  type="text"
+                  value={formData.username || ''}
+                  onChange={(e) => handleInputChange('username', e.target.value)}
+                  className={`input ${errors.username ? 'border-red-300' : ''}`}
+                  placeholder="Choose a username"
+                />
+                {errors.username && <p className="mt-1 text-sm text-red-600">{errors.username}</p>}
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Password {driver ? <span className="text-sm font-normal"></span> : '*'}
+                </label>
+
+                <div className="flex items-center space-x-2">
+                  <input
+                    type={showPassword ? 'text' : 'password'}
+                    value={formData.password || ''}
+                    onChange={(e) => handleInputChange('password', e.target.value)}
+                    className={`input ${errors.password ? 'border-red-300' : ''}`}
+                    placeholder={driver ? 'Leave blank to keep existing' : 'Create a password'}
+                  />
+
+                  {/* If password is hashed, we cannot reveal it */}
+                  {!passwordIsHashed ? (
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword((s) => !s)}
+                      className="text-sm text-blue-600 hover:underline"
+                      aria-label={showPassword ? 'Hide password' : 'Show password'}
+                    >
+                      {showPassword ? 'Hide' : 'Show'}
+                    </button>
+                  ) : (
+                    <span className="text-sm text-gray-500">Hashed — cannot display</span>
+                  )}
+                </div>
+
+                {errors.password && <p className="mt-1 text-sm text-red-600">{errors.password}</p>}
+
+                {passwordIsHashed && (
+                  <p className="mt-1 text-sm text-gray-500">Password is stored hashed and cannot be shown; enter a new password to change it.</p>
+                )}
+
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
                   Full Name *
                 </label>
                 <input
@@ -589,18 +808,35 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                 {errors.email && <p className="mt-1 text-sm text-red-600">{errors.email}</p>}
               </div>
 
-              <div>
+             <div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Phone Number *
+  </label>
+
+  <input
+    type="tel"
+    value={formData.phone || formData.driverNo || ''}
+    onChange={(e) => handleInputChange('phone', e.target.value)}
+    onBlur={(e) => handlePhoneBlur(e.target.value)}
+    className={`input ${errors.phone ? 'border-red-300' : ''}`}
+    placeholder="+91 98765 43210"
+  />
+
+  {errors.phone && (
+    <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
+  )}
+</div>
+ <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Phone Number *
+                  Alternate Phone
                 </label>
                 <input
                   type="tel"
-                  value={formData.phone}
-                  onChange={(e) => handleInputChange('phone', e.target.value)}
-                  className={`input ${errors.phone ? 'border-red-300' : ''}`}
-                  placeholder="+91 98765 43210"
+                  value={formData.alternateNo || ''}
+                  onChange={(e) => handleInputChange('alternateNo', e.target.value)}
+                  className="input"
+                  placeholder="Alternate contact number"
                 />
-                {errors.phone && <p className="mt-1 text-sm text-red-600">{errors.phone}</p>}
               </div>
 
               <div>
@@ -615,7 +851,20 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                 />
                 {errors.dateOfBirth && <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth}</p>}
               </div>
-               <div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Join Date
+                </label>
+                <input
+                  type="date"
+                  value={formData.joinDate}
+                  onChange={(e) => handleInputChange('joinDate', e.target.value)}
+                  className={`input ${errors.joinDate ? 'border-red-300' : ''}`}
+                />
+                {errors.joinDate && <p className="mt-1 text-sm text-red-600">{errors.joinDate}</p>}
+              </div>
+               {/* <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Employee ID
                 </label>
@@ -626,7 +875,37 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   className="input"
                   placeholder="Enter employee ID"
                 />
-              </div>
+              </div> */}
+
+            
+
+              {/* <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Driver No
+                </label>
+                <input
+                  type="text"
+                  value={formData.driverNo}
+                  onChange={(e) => handleInputChange('driverNo', e.target.value)}
+                  className="input"
+                  placeholder="Driver number"
+                />
+              </div> */}
+
+             
+
+              {/* <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Deposit
+                </label>
+                <input
+                  type="number"
+                  value={formData.deposit}
+                  onChange={(e) => handleInputChange('deposit', e.target.value)}
+                  className="input"
+                  placeholder="Deposit amount"
+                />
+              </div> */}
 
               <div className="md:col-span-2">
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -714,8 +993,31 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                 />
                 {errors.pincode && <p className="mt-1 text-sm text-red-600">{errors.pincode}</p>}
               </div>
-
-              <div>
+  <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  UDB ID
+                </label>
+                <div className="flex items-center space-x-2">
+                  <input
+                    type="text"
+                    value={formData.udbId}
+                    onChange={(e) => handleInputChange('udbId', e.target.value)}
+                    className="input flex-1"
+                    placeholder="UDB ID"
+                  />
+                  <button
+                    type="button"
+                    onClick={handleGenerateUdb}
+                    className="btn btn-secondary"
+                  >
+                    Generate
+                  </button>
+                </div>
+                {formData.udbId && formData.udbId.startsWith('UDB') && (
+                  <p className="mt-1 text-xs text-gray-500">Generated UDB ID — click Generate to increment</p>
+                )}
+              </div>
+              {/* <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Emergency Contact Name
                 </label>
@@ -726,11 +1028,11 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   className="input"
                   placeholder="Emergency contact name"
                 />
-              </div>
+              </div> */}
              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Relation
+                  Relation Reference 1
                 </label>
                 <input
                   type="text"
@@ -742,7 +1044,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
               </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Primary Contact Phone
+                 Reference 1 Contact No.
                 </label>
                 <input
                   type="tel"
@@ -752,9 +1054,21 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   placeholder="+91 98765 43210"
                 />
               </div>
+               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Relation Reference 2
+                </label>
+                <input
+                  type="text"
+                  value={formData.emergencyRelationSecondary}
+                  onChange={(e) => handleInputChange('emergencyRelationSecondary', e.target.value)}
+                  className="input"
+                  placeholder="Type of relation (e.g. spouse, parent)"
+                />
+              </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Secondary Contact Phone
+                 Reference 2 Contact No.
                 </label>
                 <input
                   type="tel"
@@ -1134,6 +1448,18 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   <span className="font-medium text-gray-700">Experience:</span>
                   <span className="ml-2 text-gray-900">{formData.experience}</span>
                 </div>
+                <div>
+                  <span className="font-medium text-gray-700">Driver No:</span>
+                  <span className="ml-2 text-gray-900">{formData.driverNo}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">Alternate No:</span>
+                  <span className="ml-2 text-gray-900">{formData.alternateNo}</span>
+                </div>
+                <div>
+                  <span className="font-medium text-gray-700">UDB ID:</span>
+                  <span className="ml-2 text-gray-900">{formData.udbId}</span>
+                </div>
               </div>
             </div>
 
@@ -1169,6 +1495,13 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
               <p className="text-sm text-gray-600 mt-1">
                 Step {currentStep} of {steps.length}: {steps.find(s => s.id === currentStep)?.title}
               </p>
+              {driver && (
+                <p className="text-sm text-gray-500 mt-1">
+                  ID: <span className="font-medium">{driver.id || 'N/A'}</span>
+                  {driver.driverNo && (<span className="ml-3">Driver No: <span className="font-medium">{driver.driverNo}</span></span>)}
+                  {driver.udbId && (<span className="ml-3">UDB ID: <span className="font-medium">{driver.udbId}</span></span>)}
+                </p>
+              )}
             </div>
             <button
               onClick={onClose}

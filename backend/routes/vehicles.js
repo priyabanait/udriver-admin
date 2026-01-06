@@ -67,11 +67,16 @@ function normalizeVehicleShape(v) {
     roadTaxPhoto: null,
     pucPhoto: null,
     permitPhoto: null,
+    fcPhoto: null,
     carFrontPhoto: null,
     carLeftPhoto: null,
     carRightPhoto: null,
     carBackPhoto: null,
     carFullPhoto: null,
+    // new fields: insurance, interior, speedometer
+    insurancePhoto: null,
+    interiorPhoto: null,
+    speedometerPhoto: null,
 
     // misc
     make: v?.make ?? '',
@@ -80,7 +85,15 @@ function normalizeVehicleShape(v) {
     currentValue: v?.currentValue ?? null,
     mileage: v?.mileage ?? null,
     lastService: v?.lastService ?? '',
-    nextService: v?.nextService ?? ''
+    nextService: v?.nextService ?? '',
+
+    // New fields: date tracking and uploaded document
+    startDate: v?.startDate ?? null,
+    endDate: v?.endDate ?? null,
+    paymentDate: v?.paymentDate ?? null,
+    paymentDoc: v?.paymentDoc ?? null,
+    attachmentUrl: v?.attachmentUrl ?? null,
+    attachmentName: v?.attachmentName ?? null
   };
 
   // Merge existing doc over defaults
@@ -324,7 +337,7 @@ router.post('/', async (req, res) => {
       console.error('Error calculating monthlyProfitMin:', err);
     }
 
-    const documentFields = ['insuranceDoc', 'rcDoc', 'permitDoc', 'pollutionDoc', 'fitnessDoc'];
+    const documentFields = ['insuranceDoc', 'rcDoc', 'permitDoc', 'pollutionDoc', 'fitnessDoc', 'paymentDoc'];
     // Newly supported photo fields from UI
     const photoFields = [
       'registrationCardPhoto',
@@ -335,7 +348,11 @@ router.post('/', async (req, res) => {
       'carLeftPhoto',
       'carRightPhoto',
       'carBackPhoto',
-      'carFullPhoto'
+      'carFullPhoto',
+      'insurancePhoto',
+      'fcPhoto',
+      'interiorPhoto',
+      'speedometerPhoto'
     ];
     const uploadedDocs = {};
 
@@ -393,6 +410,29 @@ router.post('/', async (req, res) => {
         message: `${savedVehicle.registrationNumber || savedVehicle.vehicleId} added to fleet.`,
         data: { id: savedVehicle._id, vehicleId: savedVehicle.vehicleId }
       });
+
+      // If vehicle has an investor assigned, notify that investor directly via FCM (only if registered)
+      try {
+        if (savedVehicle.investorId) {
+          const InvestorModel = (await import('../models/investor.js')).default;
+          const investor = await InvestorModel.findById(String(savedVehicle.investorId)).lean();
+          if (investor && investor._id) {
+            await createAndEmitNotification({
+              type: 'vehicle_registered',
+              title: `Vehicle registered`,
+              message: `A vehicle (${savedVehicle.registrationNumber || savedVehicle.vehicleId}) has been registered under your account.`,
+              data: { id: savedVehicle._id, vehicleId: savedVehicle.vehicleId },
+              recipientType: 'investor',
+              recipientId: String(investor._id)
+            });
+            console.log(`[VEHICLE] Sent investor notification for vehicle ${savedVehicle.vehicleId} to investor ${investor._id}`);
+          } else {
+            console.log('[VEHICLE] No registered investor found for investorId - skipping per-user FCM');
+          }
+        }
+      } catch (investorNotifyErr) {
+        console.warn('Investor notify failed:', investorNotifyErr.message);
+      }
     } catch (err) {
       console.warn('Notify failed:', err.message);
     }
@@ -426,6 +466,22 @@ router.put('/:id', async (req, res) => {
         delete updates.investorId; // Invalid ObjectId, remove it
       }
     }
+
+    // Parse incoming date strings (startDate, endDate, paymentDate) into Date objects
+    ['startDate', 'endDate', 'paymentDate'].forEach(field => {
+      if (updates[field]) {
+        const d = new Date(updates[field]);
+        if (!isNaN(d.getTime())) {
+          updates[field] = d;
+        } else {
+          // Invalid date — drop it to avoid saving bad data
+          delete updates[field];
+        }
+      }
+    });
+
+    // Allow attachmentUrl and attachmentName to be saved as provided (no special handling required)
+
 
     // Normalize category and carCategory to match investment entry carnames
     try {
@@ -477,7 +533,7 @@ router.put('/:id', async (req, res) => {
       console.error('Error calculating monthlyProfitMin:', err);
     }
 
-    const documentFields = ['insuranceDoc', 'rcDoc', 'permitDoc', 'pollutionDoc', 'fitnessDoc'];
+    const documentFields = ['insuranceDoc', 'rcDoc', 'permitDoc', 'pollutionDoc', 'fitnessDoc', 'paymentDoc'];
     const photoFields = [
       'registrationCardPhoto',
       'roadTaxPhoto',
@@ -487,7 +543,11 @@ router.put('/:id', async (req, res) => {
       'carLeftPhoto',
       'carRightPhoto',
       'carBackPhoto',
-      'carFullPhoto'
+      'carFullPhoto',
+      'insurancePhoto',
+      'fcPhoto',
+      'interiorPhoto',
+      'speedometerPhoto'
     ];
     const uploadedDocs = {};
 
@@ -735,6 +795,8 @@ router.put('/:id', async (req, res) => {
       existing.rentPeriods = [{ start: new Date(), end: null }];
       updates.rentPeriods = existing.rentPeriods;
       updates.rentStartDate = new Date();
+      updates.startDate = new Date();
+      updates.endDate = null;
       updates.rentPausedDate = null;
       
       // Update associated driver plan selections to active
@@ -891,6 +953,7 @@ router.put('/:id', async (req, res) => {
       updates.rentPeriods = [];
       updates.rentPausedDate = new Date();
       updates.rentStartDate = null;
+      updates.endDate = new Date();
       
       // Update associated driver plan selections to inactive
       try {
@@ -1047,7 +1110,7 @@ router.put('/:id', async (req, res) => {
       return res.status(404).json({ message: 'Vehicle not found' });
     }
 
-    // Send notification to driver if vehicle was just assigned
+    // Send notification to driver signup if vehicle was assigned to a signup (use driver_signup to avoid pushing to real driver IDs)
     if (isNewDriverAssignment && assignedDriverSignupId) {
       try {
         const { createAndEmitNotification } = await import('../lib/notify.js');
@@ -1063,10 +1126,10 @@ router.put('/:id', async (req, res) => {
             model: assignedVehicleInfo.model,
             brand: assignedVehicleInfo.brand
           },
-          recipientType: 'driver',
-          recipientId: assignedDriverSignupId
+          recipientType: 'driver_signup',
+          recipientId: String(assignedDriverSignupId)
         });
-        console.log(`✅ Notification sent to driver ${assignedDriverSignupId} for vehicle assignment ${assignedVehicleInfo.vehicleId}`);
+        console.log(`✅ Notification sent to driver signup ${assignedDriverSignupId} for vehicle assignment ${assignedVehicleInfo.vehicleId}`);
       } catch (notifyErr) {
         console.warn('Failed to send vehicle assignment notification:', notifyErr.message);
       }

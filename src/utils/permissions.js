@@ -84,6 +84,12 @@ ATTENDANCE_APPROVE: 'attendance.approve',
   REPORTS_EXPORT: 'reports.export',
   REPORTS_FINANCIAL: 'reports.financial',
   REPORTS_PERFORMANCE: 'reports.performance',
+  
+  // Notification permissions
+  NOTIFICATIONS_VIEW: 'notifications.view',
+  NOTIFICATIONS_SEND: 'notifications.send',
+  NOTIFICATIONS_SCHEDULE: 'notifications.schedule',
+  NOTIFICATIONS_DELETE: 'notifications.delete',
 };
 
 // Role definitions with their permissions
@@ -135,6 +141,10 @@ export const ROLES = {
       PERMISSIONS.PAYMENTS_CREATE,
       PERMISSIONS.PAYMENTS_EDIT,
       PERMISSIONS.PAYMENTS_PROCESS,
+      // Notification permissions
+      PERMISSIONS.NOTIFICATIONS_VIEW,
+      PERMISSIONS.NOTIFICATIONS_SEND,
+      PERMISSIONS.NOTIFICATIONS_SCHEDULE,
     ],
     color: 'blue'
   },
@@ -164,6 +174,10 @@ export const ROLES = {
       PERMISSIONS.REPORTS_EXPORT,
       PERMISSIONS.REPORTS_FINANCIAL,
       PERMISSIONS.PLANS_VIEW,
+      // Notification permissions
+      PERMISSIONS.NOTIFICATIONS_VIEW,
+      PERMISSIONS.NOTIFICATIONS_SEND,
+      PERMISSIONS.NOTIFICATIONS_SCHEDULE,
     ],
     color: 'green'
   },
@@ -189,6 +203,10 @@ export const ROLES = {
     // Optional
     PERMISSIONS.REPORTS_VIEW,
     PERMISSIONS.REPORTS_EXPORT,
+    
+    // Notification permissions
+    PERMISSIONS.NOTIFICATIONS_VIEW,
+    PERMISSIONS.NOTIFICATIONS_SEND,
   ],
   color: 'purple'
 },

@@ -1240,41 +1240,7 @@ export default function DriverPayments() {
                                             </p>
                                           )}
 
-                                          {/* Assign Vehicle - only show KYC-verified & inactive vehicles, filter by plan vehicleType if available */}
-                                          <div className="mt-2">
-                                            <label className="block text-xs text-gray-500 mb-1">Assign Vehicle</label>
-                                            <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
-                                              <select
-                                                value={(vehicles.find(v => v.registrationNumber === s.vehicleAssigned || String(v.vehicleId) === String(s.vehicleAssigned) || v._id === s.vehicleAssigned)?._id) || ''}
-                                                onChange={(e) => handleAssignVehicleToSelection(s._id, e.target.value)}
-                                                disabled={assigningVehicleForSelection === s._id}
-                                                className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white w-full max-w-xs"
-                                              >
-                                                <option value="">No Vehicle</option>
-                                                {vehicles
-                                                  .filter(v => v.status === 'inactive' && ((v.kycStatus || '').toString().toLowerCase() === 'verified'))
-                                                  .filter(v => {
-                                                    const plan = [...weeklyPlans, ...dailyPlans].find(p => p.name === s.planName);
-                                                    if (!plan || !plan.vehicleType) return true;
-                                                    const vt = (plan.vehicleType || '').toString().toLowerCase();
-                                                    return (v.vehicleType || v.category || v.carName || v.model || '').toString().toLowerCase().includes(vt);
-                                                  })
-                                                  .map(v => (
-                                                    <option key={v._id || v.vehicleId || v.registrationNumber} value={v._id || v.vehicleId || v.registrationNumber}>
-                                                      {`${v.registrationNumber || v.vehicleNumber || v._id}${v.carName ? ` — ${v.carName}` : (v.model ? ` — ${v.model}` : '')}`}
-                                                    </option>
-                                                  ))}
-                                              </select>
-                                            </PermissionGuard>
-
-                                            {!s.vehicleAssigned && (
-                                              <div className="text-xs text-gray-500 mt-1">No Vehicle</div>
-                                            )}
-
-                                            {s.vehicleAssigned && (
-                                              <div className="text-xs text-gray-500 mt-1">Assigned: {s.vehicleAssigned}</div>
-                                            )}
-                                          </div>
+                                         
 
                                           <div className="flex items-center gap-4 ">
                                                 <p className="text-xs font-semibold text-yellow-700 whitespace-nowrap">Add Adjustment :</p>

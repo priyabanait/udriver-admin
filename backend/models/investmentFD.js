@@ -78,6 +78,9 @@ const investmentFDSchema = new mongoose.Schema({
     enum: ['active', 'matured', 'withdrawn'],
     default: 'active'
   },
+  // Tax Deduction at Source on profit/interest
+  tdsPercent: { type: Number, default: 0 },
+  tdsAmount: { type: Number, default: 0 },
   maturityDate: {
     type: Date
   },

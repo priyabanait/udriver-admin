@@ -683,6 +683,34 @@ router.post('/zwitch/callback', async (req, res) => {
                     paymentMode: 'Online',
                     paymentDate: new Date()
                   });
+
+                  // Notify the investor app about completed payment (only if a registered investor exists)
+                  try {
+                    const { createAndEmitNotification } = await import('../lib/notify.js');
+                    // Prefer the investment.investorId if it's a real registered investor id
+                    let targetInvestorId = investment.investorId;
+                    if (!targetInvestorId) {
+                      // try find by phone
+                      const InvestorModel = (await import('../models/investor.js')).default;
+                      const found = await InvestorModel.findOne({ phone: investment.phone }).lean();
+                      if (found && found._id) targetInvestorId = String(found._id);
+                    }
+
+                    if (targetInvestorId) {
+                      await createAndEmitNotification({
+                        type: 'investment_payment_received',
+                        title: `Payment received: ₹${investment.investmentAmount}`,
+                        message: `Your payment of ₹${investment.investmentAmount} for FD has been received.`,
+                        data: { id: investment._id, investmentId: String(investment._id) },
+                        recipientType: 'investor',
+                        recipientId: String(targetInvestorId)
+                      });
+                    } else {
+                      console.log('[PAYMENTS] No registered investor found for investment - skipping per-user FCM');
+                    }
+                  } catch (notifErr) {
+                    console.warn('Notify (investment payment) failed:', notifErr.message);
+                  }
                 } else {
                   console.warn('⚠️ InvestmentFD not found:', transaction.metadata.investmentId);
                 }

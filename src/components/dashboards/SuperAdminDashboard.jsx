@@ -17,7 +17,9 @@ import {
   Database,
   CalendarCheck,
   ClipboardList,
-  User
+  User,
+  IndianRupee ,
+  CreditCard 
 } from 'lucide-react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
 import { formatCurrency, formatDate } from '../../utils';
@@ -422,7 +424,7 @@ export default function SuperAdminDashboard() {
           <CardTitle>Quick Actions</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-6 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-4">
             {/* Manage Users/Admin */}
             {/* {hasPermission(PERMISSIONS.ADMIN_VIEW) && (
               <button 
@@ -552,23 +554,14 @@ export default function SuperAdminDashboard() {
                 onClick={() => navigate('/payments/drivers')}
                 className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-emerald-50 transition-colors"
               >
-                <DollarSign className="h-6 w-6 mb-2 text-emerald-600" />
+                <CreditCard  className="h-6 w-6 mb-2 text-emerald-600" />
                 <span className="text-sm font-medium">Payments</span>
                 <span className="text-xs text-gray-500 mt-1">Process payments</span>
               </button>
             )}
 
            
-            {hasPermission(PERMISSIONS.EXPENSES_VIEW) && (
-              <button 
-                onClick={() => navigate('/expenses')}
-                className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-red-50 transition-colors"
-              >
-                <FileText className="h-6 w-6 mb-2 text-red-600" />
-                <span className="text-sm font-medium">Expenses</span>
-                <span className="text-xs text-gray-500 mt-1">{formatCurrency(stats.totalExpenses)}</span>
-              </button>
-            )}
+           
              {hasPermission(PERMISSIONS.ATTENDANCE_VIEW) && (
                           <button 
                             onClick={() => navigate('/attendence')}
@@ -589,6 +582,16 @@ export default function SuperAdminDashboard() {
                             <span className="text-xs text-gray-500 mt-1">Manage Staff</span>
                           </button>
                         )}
+                         {hasPermission(PERMISSIONS.EXPENSES_VIEW) && (
+              <button 
+                onClick={() => navigate('/expenses')}
+                className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-red-50 transition-colors"
+              >
+                <IndianRupee  className="h-6 w-6 mb-2 text-red-600" />
+                <span className="text-sm font-medium">Expenses</span>
+                <span className="text-xs text-gray-500 mt-1">Manage Expenses</span>
+              </button>
+            )}
           </div>
            {/* System Alerts & Recent Activities */}
       

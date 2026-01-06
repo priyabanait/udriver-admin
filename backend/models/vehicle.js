@@ -77,6 +77,11 @@ const VehicleSchema = new mongoose.Schema({
     enum: ['active', 'inactive', 'pending', 'suspended'],
     default: 'inactive'
   },
+  driverAgreementType: {
+    type: String,
+    enum: ['leasing', 'funding'],
+    default: 'leasing'
+  },
   remarks: String,
   
   // Documents
@@ -96,6 +101,10 @@ const VehicleSchema = new mongoose.Schema({
   carRightPhoto: String,
   carBackPhoto: String,
   carFullPhoto: String,
+  insurancePhoto: String,
+  fcPhoto: String,
+  interiorPhoto: String,
+  speedometerPhoto: String,
   
   // Additional fields
   make: String,
