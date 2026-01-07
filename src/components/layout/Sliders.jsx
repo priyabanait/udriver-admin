@@ -13,9 +13,7 @@ export default function Sliders() {
   const fetchSliders = async () => {
     setLoading(true);
     try {
-      const res = await fetch(`${API_BASE}/api/sliders`, {
-        headers: token ? { Authorization: `Bearer ${token}` } : {}
-      });
+      const res = await fetch(`${API_BASE}/api/sliders`);
       if (!res.ok) throw new Error('Failed to load sliders');
       const data = await res.json();
       setSliders(data);
@@ -24,7 +22,7 @@ export default function Sliders() {
     } finally {
       setLoading(false);
     }
-  };
+  }; 
 
   useEffect(() => {
     fetchSliders();
@@ -46,7 +44,6 @@ export default function Sliders() {
 
       const res = await fetch(`${API_BASE}/api/sliders/upload`, {
         method: 'POST',
-        headers: token ? { Authorization: `Bearer ${token}` } : {},
         body: fd
       });
 

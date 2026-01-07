@@ -357,7 +357,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         // Update existing driver
         const res = await fetch(`${API_BASE}/api/drivers/${selectedDriver.id}`, {
           method: 'PUT',
-          headers: {
+        headers: {
             'Content-Type': 'application/json',
             ...(token ? { 'Authorization': `Bearer ${token}` } : {})
           },

@@ -31,7 +31,7 @@ export default function VehicleRentSlabModal({ isOpen, onClose, vehicleName, veh
   const handleSecurityDepositChange = (e) => {
     const newData = {
       ...formData,
-      securityDeposit: parseFloat(e.target.value) || 0
+      securityDeposit: parseFloat(e.target.value) || " "
     };
     setFormData(newData);
     if (embedded) onSave(newData);
@@ -96,38 +96,27 @@ export default function VehicleRentSlabModal({ isOpen, onClose, vehicleName, veh
   if (embedded) {
     return (
       <div className="space-y-6">
-        {/* Show plan image if provided */}
-        {photoPreview && (
-          <div className="mb-4 flex items-center gap-4">
-            <img src={photoPreview} alt="Plan" className="h-24 rounded shadow border" />
-            <button type="button" className="btn btn-outline btn-xs ml-2" onClick={handleEditPhoto}>
-              Edit Image
-            </button>
-            {photoPreview && (
-              <button type="button" className="btn btn-danger btn-xs ml-2" onClick={handleRemovePhoto}>
-                Remove
-              </button>
-            )}
-            <input
-              type="file"
-              accept="image/*"
-              ref={fileInputRef}
-              onChange={handlePhotoChange}
-              style={{ display: 'none' }}
-            />
-          </div>
-        )}
+        {/* Image is shown at the parent Plan level to avoid duplication. Provide an Edit button that delegates to the parent if available. */}
+        {/* <div className="mb-4">
+          <button
+            type="button"
+            className="btn btn-outline btn-sm"
+            onClick={onEditPhoto || handleEditPhoto}
+          >
+            Edit Image
+          </button>
+        </div> */}
         <div>
           <label className="block text-sm font-medium text-gray-700 mb-2">
             Security Deposit (₹)
           </label>
           <input
-            type="number"
+            type="text"
             value={formData.securityDeposit}
             onChange={handleSecurityDepositChange}
             className="input w-full"
             required
-            min="0"
+           
           />
         </div>
 
@@ -283,7 +272,7 @@ export default function VehicleRentSlabModal({ isOpen, onClose, vehicleName, veh
               onChange={handleSecurityDepositChange}
               className="input w-full"
               required
-              min="0"
+             
             />
           </div>
 

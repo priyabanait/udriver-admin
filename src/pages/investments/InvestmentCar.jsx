@@ -999,13 +999,13 @@ const InvestmentCar = () => {
               <input id="edit-carOwnerName" type="text" value={editEntry.carOwnerName || ''} onChange={e => handleEditChange('carOwnerName', e.target.value)} placeholder="Car Owner Name" className="border rounded p-2" />
 
               <label htmlFor="edit-carvalue" className="text-sm font-medium">Car Value</label>
-              <input id="edit-carvalue" type="number" value={editEntry.carvalue || 0} onChange={e => handleEditChange('carvalue', e.target.value)} placeholder="Car Value" className="border rounded p-2" />
+              <input id="edit-carvalue" type="text" value={editEntry.carvalue || ''} onChange={e => handleEditChange('carvalue', e.target.value)} placeholder="Car Value" className="border rounded p-2" />
 
               <label htmlFor="edit-MonthlyPayout" className="text-sm font-medium">Monthly Payout</label>
-              <input id="edit-MonthlyPayout" type="number" value={editEntry.MonthlyPayout || 0} onChange={e => handleEditChange('MonthlyPayout', e.target.value)} placeholder="Monthly Payout" className="border rounded p-2" />
+              <input id="edit-MonthlyPayout" type="text" value={editEntry.MonthlyPayout || ''} onChange={e => handleEditChange('MonthlyPayout', e.target.value)} placeholder="Monthly Payout" className="border rounded p-2" />
 
               <label htmlFor="edit-deductionTDS" className="text-sm font-medium">Deduction TDS (%)</label>
-              <input id="edit-deductionTDS" type="number" value={editEntry.deductionTDS || 0} onChange={e => handleEditChange('deductionTDS', e.target.value)} placeholder="Deduction TDS (%)" className="border rounded p-2" />
+              <input id="edit-deductionTDS" type="text" value={editEntry.deductionTDS || ''} onChange={e => handleEditChange('deductionTDS', e.target.value)} placeholder="Deduction TDS (%)" className="border rounded p-2" />
 
               <label htmlFor="edit-investorId" className="text-sm font-medium">Investor</label>
               <select id="edit-investorId" value={editEntry.investorId || ''} onChange={e => handleEditChange('investorId', e.target.value)} className="border rounded p-2">

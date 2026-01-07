@@ -33,8 +33,8 @@ router.get('/public', async (req, res) => {
   }
 });
 
-// Admin: list all sliders
-router.get('/', authenticateToken, requirePermission('admin.view'), async (req, res) => {
+// List all sliders (public)
+router.get('/', async (req, res) => {
   try {
     const sliders = await Slider.find().sort({ createdAt: -1 });
     res.json(sliders);
@@ -44,8 +44,8 @@ router.get('/', authenticateToken, requirePermission('admin.view'), async (req, 
   }
 });
 
-// Admin: create slider via JSON (image-only: only imageUrl/publicId/active accepted)
-router.post('/', authenticateToken, requirePermission('admin.create'), async (req, res) => {
+// Create slider via JSON (image-only: only imageUrl/publicId/active accepted)
+router.post('/', async (req, res) => {
   try {
     const { imageUrl, publicId, active } = req.body;
     if (!imageUrl) return res.status(400).json({ error: 'imageUrl is required' });
@@ -58,8 +58,8 @@ router.post('/', authenticateToken, requirePermission('admin.create'), async (re
   }
 });
 
-// Admin: upload an image and create slider in one request (multipart/form-data, field `file`)
-router.post('/upload', authenticateToken, requirePermission('admin.create'), parser.single('file'), async (req, res) => {
+// Upload an image and create slider in one request (multipart/form-data, field `file`)
+router.post('/upload', parser.single('file'), async (req, res) => {
   try {
     if (!req.file || !req.file.path) return res.status(400).json({ error: 'No file uploaded' });
     const imageUrl = req.file.path;

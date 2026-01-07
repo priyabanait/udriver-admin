@@ -86,7 +86,7 @@ export default function ExpenseModal({ isOpen, onClose, onSave, expense = null, 
           </div>
           <div>
             <label className="block text-sm font-medium text-gray-700 mb-1">Amount (₹) *</label>
-            <input type="number" className={`input ${errors.amount ? 'border-red-300' : ''}`} value={form.amount} onChange={(e)=>setField('amount', e.target.value)} placeholder="0" />
+            <input type="text" className={`input ${errors.amount ? 'border-red-300' : ''}`} value={form.amount} onChange={(e)=>setField('amount', e.target.value)} placeholder="0" />
             {errors.amount && <p className="mt-1 text-xs text-red-600">{errors.amount}</p>}
           </div>
           <div>

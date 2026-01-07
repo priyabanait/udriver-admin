@@ -177,7 +177,7 @@ export default function InvestmentPlanModal({ isOpen, onClose, onSuccess, plan }
               Minimum Amount (₹) <span className="text-red-500">*</span>
             </label>
             <input
-              type="number"
+              type="text"
               name="minAmount"
               value={formData.minAmount}
               onChange={handleChange}
@@ -194,7 +194,7 @@ export default function InvestmentPlanModal({ isOpen, onClose, onSuccess, plan }
               Maximum Amount (₹) <span className="text-red-500">*</span>
             </label>
             <input
-              type="number"
+              type="text"
               name="maxAmount"
               value={formData.maxAmount}
               onChange={handleChange}
@@ -211,7 +211,7 @@ export default function InvestmentPlanModal({ isOpen, onClose, onSuccess, plan }
               Duration (months) <span className="text-red-500">*</span>
             </label>
             <input
-              type="number"
+              type="text"
               name="duration"
               value={formData.duration}
               onChange={handleChange}
@@ -228,7 +228,7 @@ export default function InvestmentPlanModal({ isOpen, onClose, onSuccess, plan }
               Expected ROI (%) <span className="text-red-500">*</span>
             </label>
             <input
-              type="number"
+              type="text"
               name="expectedROI"
               value={formData.expectedROI}
               onChange={handleChange}

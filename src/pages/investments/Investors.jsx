@@ -723,26 +723,32 @@ const Investors = () => {
   {(() => {
     // compute interest for percent/amount conversions
     const interest = investment.maturityAmount && investment.investmentAmount ? (investment.maturityAmount - investment.investmentAmount) : 0;
-    const displayPercent = investment.tdsPercent !== undefined && investment.tdsPercent !== null
-      ? investment.tdsPercent
-      : (investment.tdsAmount && interest ? Math.round(((investment.tdsAmount / interest) * 100 + Number.EPSILON) * 100) / 100 : '');
+
+    // If user cleared the field while editing, show empty string; otherwise prefer explicit tdsPercent, then fallback to tdsAmount-derived percent
+    const displayPercent = (investment.isTdsEdited && (investment.tdsPercent === null || investment.tdsPercent === ''))
+      ? ''
+      : (investment.tdsPercent !== undefined && investment.tdsPercent !== null && investment.tdsPercent !== ''
+        ? investment.tdsPercent
+        : (investment.tdsAmount && interest ? Math.round(((investment.tdsAmount / interest) * 100 + Number.EPSILON) * 100) / 100 : ''));
+
     const displayAmount = investment.tdsAmount !== undefined && investment.tdsAmount !== null && investment.tdsAmount !== 0
       ? investment.tdsAmount
-      : (investment.tdsPercent ? Math.round(((interest * investment.tdsPercent) / 100 + Number.EPSILON) * 100) / 100 : 0);
+      : (investment.tdsPercent !== undefined && investment.tdsPercent !== null
+        ? Math.round(((interest * Number(investment.tdsPercent || 0)) / 100 + Number.EPSILON) * 100) / 100
+        : 0);
 
     return (
       <div>
         <div className="flex items-center space-x-2">
           <input
-            type="number"
-            step="0.01"
-            min="0"
-            max="100"
+            type="text"
+            inputMode="decimal"
             className="w-28 px-2 py-1 text-sm border border-gray-300 rounded-md focus:ring-2 focus:ring-teal-500 focus:border-teal-500"
             value={displayPercent}
             placeholder="TDS (%)"
             onChange={(e) => {
-              const value = e.target.value === '' ? null : Number(e.target.value);
+              const raw = e.target.value;
+              const value = raw === '' ? null : (isFinite(Number(raw)) ? Number(raw) : raw);
               setInvestments((prev) =>
                 prev.map((inv) =>
                   inv._id === investment._id
