@@ -17,6 +17,7 @@ const DriverSchema = new mongoose.Schema({
   latitude: String,
   longitude: String,
   emergencyContact: String,
+  emergencyContactSecondary: String,
   emergencyRelation: String,
   emergencyRelationSecondary: String,
   emergencyPhone: String,

@@ -492,7 +492,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
           method: 'PUT',
           headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
-          body: JSON.stringify({ currentPlan: '', planAmount: 0 })
+          body: JSON.stringify({ currentPlan: '', planAmount: 0, planType: '' })
         });
         if (!res.ok) throw new Error(`Failed to unassign plan: ${res.status}`);
         const updated = await res.json();
@@ -514,7 +514,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
         method: 'PUT',
         headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
-        body: JSON.stringify({ currentPlan: plan.name, planAmount })
+        body: JSON.stringify({ currentPlan: plan.name, planAmount, planType: (plan.dailyRentSlabs ? 'daily' : (plan.weeklyRentSlabs ? 'weekly' : '')) })
       });
 
       if (!res.ok) {
@@ -720,7 +720,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         'ID', 'Username', 'Name', 'Email', 'Phone', 'Mobile',
         'Date of Birth', 'Address', 'City', 'State', 'Pincode',
         'GPS Latitude', 'GPS Longitude',
-        'Emergency Contact', 'Emergency Relation', 'Emergency Phone', 'Emergency Phone Secondary',
+        'Emergency Contact', 'Emergency Contact Secondary', 'Emergency Relation', 'Emergency Phone', 'Emergency Phone Secondary',
         'Employee ID',
         'License Number', 'License Class', 'License Expiry Date',
         'Aadhar Number', 'PAN Number', 'Electric Bill No',
@@ -749,6 +749,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         driver.latitude || '',
         driver.longitude || '',
         driver.emergencyContact || '',
+        driver.emergencyContactSecondary || '',
         driver.emergencyRelation || '',
         driver.emergencyPhone || '',
         driver.emergencyPhoneSecondary || '',
@@ -1232,7 +1233,15 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                         {driver.signature ? (
                           <>
                             <Badge variant="success" className="flex items-center"><CheckCircle className="h-3 w-3 mr-1" />Signed</Badge>
-                            <a href={`/agreement?driverId=${driver.id || driver._id}`} target="_blank" rel="noopener noreferrer" className="text-blue-600 underline text-sm ml-2">View</a>
+                            {/* Show daily agreement for drivers on daily plan, otherwise show default agreement */}
+                            <a
+                              href={( (driver.planType || '').toString().toLowerCase().includes('daily') || dailyPlans.some(p => p.name === driver.currentPlan) ) ? `/driveragreement?driverId=${driver.id || driver._id}` : `/agreement?driverId=${driver.id || driver._id}`}
+                              target="_blank"
+                              rel="noopener noreferrer"
+                              className="text-blue-600 underline text-sm ml-2"
+                            >
+                              View
+                            </a>
                           </>
                         ) : (
                           <>

@@ -160,14 +160,22 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Email</label>
+                        <label className="block text-sm font-medium text-gray-700">Username</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.username || '—'}</div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Password</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.password || '—'}</div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Email Id</label>
                         <div className="mt-1 flex items-center">
                           <Mail className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">{driver.email}</span>
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Phone</label>
+                        <label className="block text-sm font-medium text-gray-700">Phone No.</label>
                         <div className="mt-1 flex items-center">
                           <Phone className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">
@@ -176,6 +184,14 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
 
                         </div>
                       </div>
+
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Mobile</label>
+                        <div className="mt-1 flex items-center">
+                          <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-sm text-gray-900">{driver.mobile || '—'}</span>
+                        </div>
+                      </div> */}
 
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Alternate No</label>
@@ -226,14 +242,40 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         </div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Emergency Contact</label>
+                        <label className="block text-sm font-medium text-gray-700">Emergency Contact Name</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.emergencyContact || '—'}</div>
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700">Emergency Phone</label>
+                        <label className="block text-sm font-medium text-gray-700">Secondary Emergency Contact Name</label>
+                        
+                        <div className="mt-1 text-sm text-gray-900">{driver.emergencyContactSecondary || '—'}</div>
+                      </div>
+                       <div>
+                        <label className="block text-sm font-medium text-gray-700">Relation Reference 1</label>
+                        <div className="mt-1 flex items-center">
+                    
+                          <span className="text-sm text-gray-900">{driver.emergencyRelation || '—'}</span>
+                        </div>
+                      </div>
+                       <div>
+                        <label className="block text-sm font-medium text-gray-700">Relation Reference 2</label>
+                        <div className="mt-1 flex items-center">
+                     
+                          <span className="text-sm text-gray-900">{driver.emergencyRelationSecondary || '—'}</span>
+                        </div>
+                      </div>
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Reference 1 Contact No.</label>
                         <div className="mt-1 flex items-center">
                           <Phone className="h-4 w-4 text-gray-400 mr-2" />
                           <span className="text-sm text-gray-900">{driver.emergencyPhone || '—'}</span>
+                        </div>
+                      </div>
+                       <div>
+                        <label className="block text-sm font-medium text-gray-700">Reference 2 Contact No.</label>
+                        <div className="mt-1 flex items-center">
+                          <Phone className="h-4 w-4 text-gray-400 mr-2" />
+                          <span className="text-sm text-gray-900">{driver.emergencyPhoneSecondary || '—'}</span>
                         </div>
                       </div>
                       <div>
@@ -242,9 +284,24 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                       </div>
 
                       <div>
+                        <label className="block text-sm font-medium text-gray-700">Last Active</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.lastActive ? formatDate(driver.lastActive) : '—'}</div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Created At</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.createdAt ? formatDate(driver.createdAt) : '—'}</div>
+                      </div>
+
+                      <div>
+                        <label className="block text-sm font-medium text-gray-700">Updated At</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.updatedAt ? formatDate(driver.updatedAt) : '—'}</div>
+                      </div>
+
+                      {/* <div>
                         <label className="block text-sm font-medium text-gray-700">Deposit</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.deposit !== undefined && driver.deposit !== null ? formatCurrency(driver.deposit) : '—'}</div>
-                      </div>
+                      </div> */}
                     </div>
                   </div>
                 </div>
@@ -296,6 +353,10 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                           <span className="text-sm text-gray-900">{driver.planType || driver.currentPlan || '—'}</span>
                         </div>
                       </div>
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Plan Amount</label>
+                        <div className="mt-1 text-sm text-gray-900">{(driver.planAmount || driver.planAmount === 0) ? formatCurrency(driver.planAmount) : '—'}</div>
+                      </div> */}
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Vehicle Preference</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.vehiclePreference || driver.vehicleAssigned || '—'}</div>
@@ -306,6 +367,26 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         <label className="block text-sm font-medium text-gray-700">KYC Status</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.kycStatus || '—'}</div>
                       </div>
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Status</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.status || '—'}</div>
+                      </div> */}
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Registration Completed</label>
+                        <div className="mt-1 text-sm text-gray-900">{typeof driver.registrationCompleted === 'boolean' ? (driver.registrationCompleted ? 'Yes' : 'No') : (driver.registrationCompleted ? String(driver.registrationCompleted) : '—')}</div>
+                      </div> */}
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Total Trips</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.totalTrips || 0}</div>
+                      </div> */}
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Total Earnings</label>
+                        <div className="mt-1 text-sm text-gray-900">{(driver.totalEarnings || driver.totalEarnings === 0) ? formatCurrency(driver.totalEarnings) : '—'}</div>
+                      </div> */}
+                      {/* <div>
+                        <label className="block text-sm font-medium text-gray-700">Rating</label>
+                        <div className="mt-1 text-sm text-gray-900">{driver.rating || '—'}</div>
+                      </div> */}
                     
                       {driver.previousEmployment && (
                         <div className="md:col-span-2">

@@ -22,6 +22,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     latitude: '',
     longitude: '',
     emergencyContact: '',
+    emergencyContactSecondary: '',
     emergencyRelation: '',
     emergencyRelationSecondary: '',
     emergencyPhone: '',
@@ -120,6 +121,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         latitude: driver.latitude || '',
         longitude: driver.longitude || '',
         emergencyContact: driver.emergencyContact || '',
+        emergencyContactSecondary: driver.emergencyContactSecondary || '',
         emergencyRelation: driver.emergencyRelation || '',
         emergencyRelationSecondary: driver.emergencyRelationSecondary || '',
         emergencyPhone: driver.emergencyPhone || '',
@@ -176,6 +178,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         latitude: '',
         longitude: '',
         emergencyContact: '',
+        emergencyContactSecondary: '',
         emergencyRelation: '',
         emergencyRelationSecondary: '',
         emergencyPhone: '',
@@ -622,6 +625,12 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         totalTrips: driver?.totalTrips || 0,
         totalEarnings: driver?.totalEarnings || 0,
         rating: driver?.rating || 0,
+        emergencyContact: formData.emergencyContact || driver?.emergencyContact,
+        emergencyContactSecondary: formData.emergencyContactSecondary || driver?.emergencyContactSecondary,
+        emergencyRelation: formData.emergencyRelation || driver?.emergencyRelation,
+        emergencyRelationSecondary: formData.emergencyRelationSecondary || driver?.emergencyRelationSecondary,
+        emergencyPhone: formData.emergencyPhone || driver?.emergencyPhone,
+        emergencyPhoneSecondary: formData.emergencyPhoneSecondary || driver?.emergencyPhoneSecondary,
         vehicleAssigned: formData.vehiclePreference,
         currentPlan: formData.planType, // Map planType to currentPlan for display
         planAmount: 800, // Default plan amount, can be calculated based on plan type
@@ -950,7 +959,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   <p className="mt-1 text-xs text-gray-500">Generated UDB ID — click Generate to increment</p>
                 )}
               </div>
-              {/* <div>
+              <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Emergency Contact Name
                 </label>
@@ -961,7 +970,19 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   className="input"
                   placeholder="Emergency contact name"
                 />
-              </div> */}
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Secondary Emergency Contact Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.emergencyContactSecondary}
+                  onChange={(e) => handleInputChange('emergencyContactSecondary', e.target.value)}
+                  className="input"
+                  placeholder="Secondary emergency contact name"
+                />
+              </div>
              
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
@@ -1187,8 +1208,8 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   className={`input ${errors.planType ? 'border-red-300' : ''}`}
                 >
                   <option value="">Select Plan</option>
-                  <option value="Uber Plan">Uber Plan</option>
-                  <option value="Daily Collection">Daily Collection</option>
+                  <option value="uber">Uber Plan</option>
+                  <option value="daily">Daily Plan</option>
                  
                 </select>
                 {errors.planType && <p className="mt-1 text-sm text-red-600">{errors.planType}</p>}

@@ -559,6 +559,7 @@ router.post("/", async (req, res) => {
     const baseData = {
       ...fields,
       ...uploadedDocs,
+      emergencyContactSecondary: fields.emergencyContactSecondary || "",
       emergencyRelation: fields.emergencyRelation || "",
       emergencyRelationSecondary: fields.emergencyRelationSecondary || "",
       emergencyPhoneSecondary: fields.emergencyPhoneSecondary || "",
@@ -747,6 +748,7 @@ router.put("/:id", async (req, res) => {
     const updateData = {
       ...fields,
       ...uploadedDocs,
+      emergencyContactSecondary: fields.emergencyContactSecondary || "",
       emergencyRelation: fields.emergencyRelation || "",
       emergencyRelationSecondary: fields.emergencyRelationSecondary || "",
       emergencyPhoneSecondary: fields.emergencyPhoneSecondary || "",

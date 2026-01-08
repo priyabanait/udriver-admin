@@ -214,7 +214,7 @@ export default function DriverAgreement() {
              <img src="/WhatsApp Image 2026-01-05 at 5.09.31 PM.jpeg" alt="U DRIVE Logo" className="h-[70px] w-auto mr-4" crossOrigin="anonymous" />
           <div className="flex items-center justify-center mb-6">
            
-            <h1 className="text-center text-2xl font-bold tracking-wide">Driver Agreement</h1>
+            <h1 className="text-center text-2xl font-bold tracking-wide">Driver Agreement - Daily Rental </h1>
           </div>
 
           <div className="text-sm text-gray-800 z-10">
@@ -241,7 +241,8 @@ export default function DriverAgreement() {
             <p className="font-bold mb-3">AND,</p>
 
             <p className="mb-6">
-              The company agrees to grant the Driver access to a <b>CNG vehicle</b> solely for the purpose of providing rideshare services on the <b>UBER platform</b>, - hereinafter referred to as the <b>"Driver"</b>.
+              The company agrees to grant the Driver access to a <b>CNG vehicle</b> solely for the purpose of providing 
+rideshare services - hereinafter referred to as the <b>"Driver"</b>.
             </p>
 
             {/* Driver KYC */}
@@ -317,24 +318,24 @@ export default function DriverAgreement() {
 
               <div>
                 <p className="font-bold underline mb-2">Security Deposit:</p>
-                <p>
-                  The Driver shall deposit with the company on or before the commencement date, an amount specified in the receipt (as the amount of security deposit to be provided by driver) by away of non-interest bearing adjustable security deposit to secure the due performance of the driver services and of the terms of this agreement.
-                </p>
+               <p>The Driver shall deposit with the company on or before the commencement date, an amount 
+specified in the receipt (as the amount of security deposit to be provided by driver) by away of non
+interest bearing adjustable security deposit to secure the due performance of the driver services and 
+of the terms of this agreement. The Company shall be entitled to adjust against and recover from 
+security deposit, any amounts owed by the driver to the company under terms of this agreement 
+time to time </p>
               </div>
 
               <div>
                 <p className="font-bold underline mb-2">Refund Policy:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li>SD (Security Deposit) refund will be processed only <b>after 60 working days</b>.</li>
-                  <li className="font-bold">Document and agreement charges of ₹ 1000 would be deducted and total amount would be refundable once 60 working days completed which would be credited once resigned</li>
-                 <li className="font-bold">If eligible on the above two conditions Amount would be credited on Friday</li>
-                  <li className="font-bold">Performance analysis would be done through trip which is Considered based on first Slab
-achievement, if the trips completed is less than First slab per week maximum of two
-weeks’ time would be provided for improvement, any deviation would be considered low
-performance and Company would have an authority to take appropriate action</li>
-<li><b>Uber ID blocked, security deposit would be refunded only on technical issues,</b> any other
-issues like safety, rash driving <b>security deposit won’t be refunded</b>
-</li>
+                  <li>SD (Security Deposit) refund will be processed only <b>after 90 working days</b>.</li>
+                  <li className="font-bold">Document and agreement charges of ₹ 1000 would be deducted and total amount would 
+be refundable once 90 working days completed which would be credited once resigned </li>
+                 <li className="font-bold">If eligible on the above two conditions Amount would be credited on next Friday </li>
+                  <li className="font-bold">Performance analysis would be done through daily payment on time which is before         
+12 pm any deviation would be considered low performance and Company would have an 
+authority to take appropriate action </li>
                 </ul>
               </div>
 
@@ -371,7 +372,7 @@ be the responsibility of the company.</li>
                 </ul>
               </div>
 
-              <div>
+              {/* <div>
                 <p className="font-bold underline mb-2">Driver Pay-out:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
                   <li>Pay-outs will be processed weekly.</li>
@@ -379,7 +380,7 @@ be the responsibility of the company.</li>
                   <li>Positive pay-outs will be processed on Tuesday.</li>
                   <li className="font-bold">If a pay-out is missed due to receiver account issue on Tuesday, it will be reprocessed and payment will occur on Friday after reconfirming the account details with Drivers.</li>
                 </ul>
-              </div>
+              </div> */}
 
               <div>
                 <p className="font-bold underline mb-2">Driver Termination:</p>
@@ -429,16 +430,27 @@ be the responsibility of the company.</li>
               <div>
                 <p className="font-bold underline  mb-2">Payment Process:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li>All payments to U DRIVE must be <b>made within 8 hours of receiving the statement</b>.</li>
-                  <li>Failure to make payments by Tuesday before 5PM will result in the <b>Driver's cash trip being blocked</b> until all <b>payments are cleared.</b></li>
-                  <li className="font-bold">Failure to make the payment within 48 hours of receiving the statement will result in vehicle recovery & non-refundable security deposit; a recovery charge of ₹2500/- may be applied and additional location charges may be increased.</li>
+                  <li className="font-bold">All payments to U DRIVE must be made daily before 12 pm any delay after 12 pm extra 
+₹100 need to be paid</li>
+              <li className="font-bold">Failure to make the payment more than 48 hrs will result in vehicle recovery & non
+refundable of security deposit and recovery charge of 2500/- would be applied based on 
+the location charges will be increased </li>
+                  
                 </ul>
               </div>
-
-              <div>
-                <p className="font-bold underline mb-2">Promotions:</p>
+ <div>
+                <p className="font-bold underline  mb-2">FNF (Full and Final) Pay-out:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
-                 <li className="font-bold">Promotions would not be applied to driver since Udrive is Fleet operated.</li>
+                  <li className="font-bold">All Full and Final (FNF) pay-outs will be processed on Fridays.</li>
+              <li className="font-bold">Information regarding FNF pay-outs must be provided to respective DMs by Wednesday, 4 pm.</li>
+                  
+                </ul>
+              </div>
+              <div>
+                <p className="font-bold underline mb-2">Dress Code and Safety: </p>
+                <ul className="list-disc list-inside pl-4 space-y-1">
+                 <li className="font-bold">Drivers must wear a white shirt and seatbelt at all times while driving the vehicle.</li>
+                 <li>All traffic rules must be followed and in case of any miss outs driver will be responsible for the fines imposed.</li>
                 </ul>
               </div>
 
@@ -461,10 +473,14 @@ be the responsibility of the company.</li>
               <div>
                 <p className="font-bold underline mb-2">Penalty:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li>If the<b> Driver has not done any trips</b> on <b>UBER app</b> on that particular day and <b>driven the vehicle empty then the dead KMs penalty will be imposed (₹5/KM)</b>.</li>
-                  <li>If the <b> driver removes the required sticker, a flat ₹500 fine</b> will be applied.</li>
-                  <li>If the <b> vehicle is driven intercity for more than 100 KM the dead KM charge of ₹5/KM</b> will be <b>applied for both up and down</b>.</li>
-                  <li className="font-bold">If the vehicle is recovered under any scenario security deposit would not be refunded.</li>
+                  <li className="font-bold">Weekly limit of 1575 To 1750 Km would be provided per week considered for penalty at 
+extra Rs 5/KM. </li>
+                  <li>If the<b>driver wanted sticker is removed flat 1000 RS fine would be applied </b>.</li>
+                  <li>If the <b>vehicle is performed intercity for more than 100 KM the dead KM of RS 5/KM</b>would 
+be <b> applied for both up and down </b></li>
+                 
+                  <li className="font-bold">If the vehicle is recovered due to non-payment or non-compliance situation Security 
+deposit will not be refunded </li>
                 </ul>
               </div>
 

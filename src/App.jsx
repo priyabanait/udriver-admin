@@ -45,6 +45,7 @@ import PrivacyPolicy from './pages/drivers/Privacypolicy.jsx';
 import Notification from './components/notification/Notification.jsx';
 import Sliders from './components/layout/Sliders.jsx';
 import Agreement from './pages/reports/Agreement.jsx';
+import DriverAgreement from './pages/reports/AgreementDaily.jsx';
 // Error Boundary Component
 class ErrorBoundary extends React.Component {
   constructor(props) {
@@ -179,6 +180,8 @@ function AppRoutes() {
             <Route path="settings" element={<Profile />} />
             <Route path="sliders" element={<Sliders />} />
         <Route path="agreement" element={<Agreement />} />
+                <Route path="driveragreement" element={<DriverAgreement />} />
+                
                 <Route path="attendence" element={
                  
                     <StaffAttendence />
