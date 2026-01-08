@@ -317,7 +317,7 @@ rideshare services - hereinafter referred to as the <b>"Driver"</b>.
               </div>
 
               <div>
-                <p className="font-bold underline mb-2">Security Deposit:</p>
+                <p className="font-bold underline mb-6">Security Deposit:</p>
                <p>The Driver shall deposit with the company on or before the commencement date, an amount 
 specified in the receipt (as the amount of security deposit to be provided by driver) by away of non
 interest bearing adjustable security deposit to secure the due performance of the driver services and 
