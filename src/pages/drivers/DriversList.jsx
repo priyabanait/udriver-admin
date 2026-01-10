@@ -31,6 +31,9 @@ import DriverModal from '../../components/drivers/DriverModal';
 import DriverDetailModal from '../../components/drivers/DriverDetailModal';
 import toast from 'react-hot-toast';
 
+// URL for the driver dummy CSV in this folder (Vite will serve it as an asset)
+const dummyCsvUrl = new URL('./driver dummy.csv', import.meta.url).href;
+
 export default function DriversList() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -717,26 +720,26 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
     try {
       // Prepare CSV data with ALL fields from Driver model
       const headers = [
-        'ID', 'Username', 'Name', 'Email', 'Phone', 'Mobile',
+         'Username', 'Password', 'Name', 'Email', 'Phone No.', 'Alternate No.',
         'Date of Birth', 'Address', 'City', 'State', 'Pincode',
         'GPS Latitude', 'GPS Longitude',
-        'Emergency Contact', 'Emergency Contact Secondary', 'Emergency Relation', 'Emergency Phone', 'Emergency Phone Secondary',
-        'Employee ID',
+        'Emergency Contact Name', 'Secondary Emergency Contact Name ', 'Relation Reference 1','Relation Reference 2', 'Reference 1 Contact No.', 'Reference 2 Contact No.',
+        'UDB ID',
         'License Number', 'License Class', 'License Expiry Date',
         'Aadhar Number', 'PAN Number', 'Electric Bill No',
         'Driving Experience', 'Previous Employment',
         'Plan Type', 'Current Plan', 'Plan Amount', 'Vehicle Preference', 'Vehicle Assigned',
-        'Total Trips', 'Total Earnings', 'Rating',
         'KYC Status', 'Status',
         'Bank Name', 'Branch Name', 'Account Number', 'IFSC Code', 'Account Holder Name',
         'Profile Photo URL', 'License Document URL', 'Aadhar Front URL', 'Aadhar Back URL',
         'PAN Document URL', 'Bank Document URL', 'Electric Bill Document URL',
-        'Join Date', 'Last Active', 'Created At', 'Updated At'
+        'Join Date'
       ];
       
       const csvData = filteredDrivers.map(driver => [
-        driver.id || driver._id || '',
+        // driver.id || driver._id || '',
         driver.username || '',
+        driver.password || '',
         driver.name || '',
         driver.email || '',
         driver.phone || '',
@@ -751,6 +754,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         driver.emergencyContact || '',
         driver.emergencyContactSecondary || '',
         driver.emergencyRelation || '',
+        driver.emergencyRelationSecondary || '',
         driver.emergencyPhone || '',
         driver.emergencyPhoneSecondary || '',
         driver.employeeId || '',
@@ -767,9 +771,6 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         driver.planAmount || '',
         driver.vehiclePreference || '',
         driver.vehicleAssigned || '',
-        driver.totalTrips || '0',
-        driver.totalEarnings || '0',
-        driver.rating || '0',
         driver.kycStatus || '',
         driver.status || '',
         driver.bankName || '',
@@ -784,10 +785,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         driver.panDocument || '',
         driver.bankDocument || '',
         driver.electricBillDocument || '',
-        driver.joinDate ? formatDate(driver.joinDate) : '',
-        driver.lastActive ? formatDate(driver.lastActive) : '',
-        driver.createdAt ? formatDate(driver.createdAt) : '',
-        driver.updatedAt ? formatDate(driver.updatedAt) : ''
+        driver.joinDate ? formatDate(driver.joinDate) : ''
       ]);
 
       // Create CSV content
@@ -825,6 +823,20 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         <div className="mt-4 sm:mt-0 flex space-x-3">
           <input ref={fileInputRef} type="file" accept=".xlsx,.xls,.csv" onChange={handleFileChange} style={{ display: 'none' }} />
           <input ref={signatureFileRef} type="file" accept="image/*" onChange={handleSignatureFileChange} style={{ display: 'none' }} />
+<button
+  onClick={() => {
+    const link = document.createElement('a');
+    link.href = dummyCsvUrl;
+    link.setAttribute('download', 'driver dummy.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+  }}
+  className="btn btn-secondary flex items-center"
+>
+  <Download className="h-4 w-4 mr-2" />
+  Download Reference CSV
+</button>
 
           <PermissionGuard permission={PERMISSIONS.DRIVERS_CREATE}>
             <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="btn btn-outline flex items-center" disabled={importing}>
@@ -1037,7 +1049,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                     <TableCell>
                       <div>
                         <div className="font-medium text-gray-900">{driver.name}</div>
-                        <div className="text-sm text-gray-500">ID: {driver.udbId || ' '}</div>
+                        <div className="text-sm text-gray-500">ID: {driver.udbId || driver.employeeId || ' '}</div>
                         {/* <div className="text-sm text-gray-500">
                           {driver.driverNo ? (
                             <>

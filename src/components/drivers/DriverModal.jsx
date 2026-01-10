@@ -134,7 +134,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         experience: driver.experience || '',
         previousEmployment: driver.previousEmployment || '',
         vehiclePreference: driver.vehiclePreference || driver.vehicleAssigned || '',
-        udbId: driver.udbId || '',
+        udbId: driver.udbId || driver.employeeId || '',
         driverNo: driver.driverNo || '',
         alternateNo: driver.alternateNo || '',
         deposit: driver.deposit || '',
@@ -774,7 +774,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                 </label>
                 <input
                   type="tel"
-                  value={formData.alternateNo || ''}
+                  value={formData.mobile || ''}
                   onChange={(e) => handleInputChange('alternateNo', e.target.value)}
                   className="input"
                   placeholder="Alternate contact number"
@@ -1378,6 +1378,10 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   <span className="font-medium text-gray-700">Phone:</span>
                   <span className="ml-2 text-gray-900">{formData.phone}</span>
                 </div>
+                 <div>
+                  <span className="font-medium text-gray-700">Alternate No:</span>
+                  <span className="ml-2 text-gray-900">{formData.mobile}</span>
+                </div>
                 <div>
                   <span className="font-medium text-gray-700">Address:</span>
                   <span className="ml-2 text-gray-900">{formData.address}</span>
@@ -1402,18 +1406,15 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   <span className="font-medium text-gray-700">Experience:</span>
                   <span className="ml-2 text-gray-900">{formData.experience}</span>
                 </div>
-                <div>
+                {/* <div>
                   <span className="font-medium text-gray-700">Driver No:</span>
                   <span className="ml-2 text-gray-900">{formData.driverNo}</span>
-                </div>
-                <div>
-                  <span className="font-medium text-gray-700">Alternate No:</span>
-                  <span className="ml-2 text-gray-900">{formData.alternateNo}</span>
-                </div>
+                </div> */}
+               
                 <div>
                   <span className="font-medium text-gray-700">UDB ID:</span>
-                  <span className="ml-2 text-gray-900">{formData.udbId}</span>
-                </div>
+                  <span className="ml-2 text-gray-900">{formData.udbId || formData.employeeId}</span>
+                </div> 
               </div>
             </div>
 

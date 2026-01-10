@@ -222,7 +222,7 @@ const navigation = [
     ]
   },
   {
-    name: 'Manage Staff',
+    name: 'Manage Employees',
     href: '/staff',
     icon: ClipboardList,
     permission: PERMISSIONS.HR_VIEW

@@ -76,7 +76,7 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
         pincode: '',
         salary: '',
       
-        department: 'Manager',
+        department: 'Driver Manager',
         
         dob: '',
       });
@@ -98,7 +98,7 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
         >
           &times;
         </button>
-        <h2 className="text-xl font-semibold mb-2">Add New Manager </h2>
+        <h2 className="text-xl font-semibold mb-2">Add New Driver Manager </h2>
         {error && <div className="text-red-500 mb-2">{error}</div>}
         <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
           <input name="username" value={form.username} onChange={handleChange} placeholder="Username" className="border p-2 rounded" required />
@@ -119,7 +119,7 @@ const AddManagerModal = ({ isOpen, onClose, onAddManager, initialData }) => {
   required
 >
   <option value="">Select Department</option>
-  <option value="Manager">Manager</option>
+  <option value="Manager">Driver Manager</option>
   <option value="HR">HR</option>
   <option value="Onboard Team">Onboard Team</option>
 </select>

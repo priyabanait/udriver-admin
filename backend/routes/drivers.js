@@ -296,10 +296,17 @@ router.post("/import", upload.single("file"), async (req, res) => {
       };
 
       const firstOf = (map, choices) => {
+        const keys = Object.keys(map || {});
         for (const c of choices) {
-          const v = map[normalizeKey(c)];
-          if (v !== undefined && String(v).trim() !== "")
-            return String(v).trim();
+          const want = normalizeKey(c);
+          // direct key
+          if (map[want] !== undefined && String(map[want]).trim() !== "") return String(map[want]).trim();
+          // substring match (handles headers like 'profile photo url')
+          for (const hk of keys) {
+            if ((hk || "").includes(want) && map[hk] !== undefined && String(map[hk]).trim() !== "") {
+              return String(map[hk]).trim();
+            }
+          }
         }
         return undefined;
       };
@@ -329,11 +336,53 @@ router.post("/import", upload.single("file"), async (req, res) => {
         const licenseClassV = firstOf(rowMap, ["license class", "licence class"]);
         const planV = firstOf(rowMap, ["plan", "plan type", "current plan"]);
         const experienceV = firstOf(rowMap, ["experience", "driving experience"]);
+        const previousEmploymentV = firstOf(rowMap, ["previous employment", "previous employer", "previous_employment", "previousemployment", "prev employment"]);
         const vehicleV = firstOf(rowMap, ["vehicle", "vehicle preference", "vehicle type"]);
         const udbV = firstOf(rowMap, ["udb id", "udb", "udb_id"]);
         const driverNoV = firstOf(rowMap, ["driver no", "driver no.", "driver number", "driver_no"]);
         const altNoV = firstOf(rowMap, ["alternate no", "alternate number", "alt no", "alternate_no", "alternative no", "alternative number"]);
         const depositV = firstOf(rowMap, ["deposit", "deposite", "deposit amount"]);
+
+        // Additional possible fields exported by front-end CSV
+        const usernameV = firstOf(rowMap, ["username", "user name"]);
+        const passwordV = firstOf(rowMap, ["password"]);
+        const phoneRaw = firstOf(rowMap, ["phone", "phone no", "phone number", "telephone"]);
+        // const mobileRaw = firstOf(rowMap, ["mobile", "mobile no", "mobile number", "contact"]);
+        const latitudeV = firstOf(rowMap, ["gps latitude", "latitude", "gps lat", "lat"]);
+        const longitudeV = firstOf(rowMap, ["gps longitude", "longitude", "gps long", "long", "lng"]);
+        const emergencyContactV = firstOf(rowMap, ["emergency contact", "emergency_contact", "emergency name"]);
+        const emergencyContactSecondaryV = firstOf(rowMap, ["emergency contact secondary", "emergency contact 2", "emergency_contact_secondary"]);
+        const emergencyRelationV = firstOf(rowMap, ["emergency relation", "emergency relation primary"]);
+        const emergencyRelationSecondaryV = firstOf(rowMap, ["emergency relation secondary", "emergency relation 2", "relation reference 2", "relation reference2"]);
+        const cityV = firstOf(rowMap, ["city", "town", "city name"]);
+        const stateV = firstOf(rowMap, ["state", "region", "state name"]);
+        const addressV = firstOf(rowMap, ["address", "address1", "address line", "street address"]);
+        const pincodeV = firstOf(rowMap, ["pincode", "pin code", "postal code", "zip"]);
+        const emergencyPhoneV = firstOf(rowMap, ["emergency phone", "emergency phone no", "emergency phone number"]);
+        const emergencyPhoneSecondaryV = firstOf(rowMap, ["emergency phone secondary", "emergency phone 2"]);
+        const bankNameV = firstOf(rowMap, ["bank name"]);
+        const accountNumberV = firstOf(rowMap, ["account number", "account no", "acc no", "accountnumber"]);
+        const ifscV = firstOf(rowMap, ["ifsc", "ifsc code"]);
+        const accountHolderV = firstOf(rowMap, ["account holder", "account holder name"]);
+        const accountBranchV = firstOf(rowMap, ["branch name", "account branch name", "branch"]);
+        const electricBillNoV = firstOf(rowMap, ["electric bill no", "electric bill number", "electricbillno"]);
+        // Documents / URLs
+        const profilePhotoV = firstOf(rowMap, ["profile photo", "profilephoto", "photo", "profile_photo"]);
+        const licenseDocumentV = firstOf(rowMap, ["license document", "license doc", "license_document"]);
+        const aadharDocumentV = firstOf(rowMap, [
+          "aadhar document",
+          "aadhar doc",
+          "aadhar_document",
+          "aadhar front",
+          "aadhar front url",
+          "aadhar front document",
+          "aadhaar front",
+          "aadhar front image",
+        ]);
+        const aadharDocumentBackV = firstOf(rowMap, ["aadhar back", "aadhar back document", "aadhar document back"]);
+        const panDocumentV = firstOf(rowMap, ["pan document", "pan doc", "pan_document"]);
+        const bankDocumentV = firstOf(rowMap, ["bank document", "bank doc", "bank_document"]);
+        const electricBillDocumentV = firstOf(rowMap, ["electric bill document", "electric bill doc", "electricbilldocument"]);
 
         if (!nameV && !mobileV && !emailV && !aadharV) {
           skipped++;
@@ -378,11 +427,21 @@ router.post("/import", upload.single("file"), async (req, res) => {
         };
 
         const payload = {
+          username: usernameV ? String(usernameV).trim() : undefined,
+          password: passwordV ? String(passwordV) : undefined,
           name: normalizeText(nameV) || undefined,
           email: emailV ? String(emailV).toLowerCase() : undefined,
+          phone: phoneRaw ? normalizePhone(phoneRaw) : (mobileV || undefined),
           mobile: mobileV || undefined,
+          address: addressV ? String(addressV).trim() : undefined,
+          latitude: latitudeV ? String(latitudeV).trim() : undefined,
+          longitude: longitudeV ? String(longitudeV).trim() : undefined,
+          city: cityV ? String(cityV).trim() : undefined,
+          state: stateV ? String(stateV).trim() : undefined,
+          pincode: pincodeV ? String(pincodeV).trim() : undefined,
           aadharNumber: aadharV ? String(aadharV).trim() : undefined,
           panNumber: panV ? String(panV).trim().toUpperCase() : undefined,
+          electricBillNo: electricBillNoV ? String(electricBillNoV).trim() : undefined,
           licenseNumber: licenseV ? String(licenseV).trim() : undefined,
           licenseExpiryDate: normalizeToDateOnly(licenseExpiryV),
           dateOfBirth: normalizeToDateOnly(dobV),
@@ -390,16 +449,65 @@ router.post("/import", upload.single("file"), async (req, res) => {
           licenseClass: licenseClassV ? String(licenseClassV).trim() : undefined,
           planType: planV ? String(planV).trim() : undefined,
           experience: experienceV ? String(experienceV).trim() : undefined,
+          previousEmployment: previousEmploymentV ? String(previousEmploymentV).trim() : undefined,
           vehiclePreference: vehicleV ? String(vehicleV).trim() : undefined,
-          udbId: udbV ? String(udbV).trim() : undefined,
+          udbId: (() => {
+            if (!udbV && udbV !== 0) return undefined;
+            let s = String(udbV).trim();
+            // If value is purely digits, prefix with UDB
+            if (/^\d+$/.test(s)) s = `UDB${s}`;
+            // Keep existing UDB prefix but normalize to upper-case
+            if (/^udb/i.test(s)) s = s.toUpperCase();
+            return s || undefined;
+          })(),
           driverNo: driverNoV ? String(driverNoV).trim() : undefined,
           alternateNo: altNoV ? String(altNoV).trim() : undefined,
           deposit: depositV ? (Number(String(depositV).replace(/[^0-9\.-]+/g, '')) || undefined) : undefined,
           employeeId: empIdV ? String(empIdV).trim() : undefined,
+
+          // Emergency + contact details
+          emergencyContact: emergencyContactV ? String(emergencyContactV).trim() : undefined,
+          emergencyContactSecondary: emergencyContactSecondaryV ? String(emergencyContactSecondaryV).trim() : undefined,
+          emergencyRelation: emergencyRelationV ? String(emergencyRelationV).trim() : undefined,
+          emergencyRelationSecondary: emergencyRelationSecondaryV ? String(emergencyRelationSecondaryV).trim() : undefined,
+          emergencyPhone: emergencyPhoneV ? String(emergencyPhoneV).trim() : undefined,
+          emergencyPhoneSecondary: emergencyPhoneSecondaryV ? String(emergencyPhoneSecondaryV).trim() : undefined,
+
+          // Bank details
+          bankName: bankNameV ? String(bankNameV).trim() : undefined,
+          accountNumber: accountNumberV ? String(accountNumberV).trim() : undefined,
+          ifscCode: ifscV ? String(ifscV).trim() : undefined,
+          accountHolderName: accountHolderV ? String(accountHolderV).trim() : undefined,
+          accountBranchName: accountBranchV ? String(accountBranchV).trim() : undefined,
+
+          // Documents / URLs
+          profilePhoto: profilePhotoV ? String(profilePhotoV).trim() : undefined,
+          licenseDocument: licenseDocumentV ? String(licenseDocumentV).trim() : undefined,
+          aadharDocument: aadharDocumentV ? String(aadharDocumentV).trim() : undefined,
+          aadharDocumentBack: aadharDocumentBackV ? String(aadharDocumentBackV).trim() : undefined,
+          panDocument: panDocumentV ? String(panDocumentV).trim() : undefined,
+          bankDocument: bankDocumentV ? String(bankDocumentV).trim() : undefined,
+          electricBillDocument: electricBillDocumentV ? String(electricBillDocumentV).trim() : undefined,
+
           isManualEntry: true,
           registrationCompleted: false,
           vehicleAssigned: '',
         };
+
+        // Debug: log document fields parsed from spreadsheet (helps verify import captures URLs)
+        try {
+          console.debug && console.debug('IMPORT ROW payload docs', {
+            profilePhoto: payload.profilePhoto,
+            licenseDocument: payload.licenseDocument,
+            aadharDocument: payload.aadharDocument,
+            aadharDocumentBack: payload.aadharDocumentBack,
+            panDocument: payload.panDocument,
+            bankDocument: payload.bankDocument,
+            electricBillDocument: payload.electricBillDocument,
+          });
+        } catch (e) {
+          /* ignore logging errors */
+        }
 
         // Try to find an existing driver using any condition
         let existing = null;

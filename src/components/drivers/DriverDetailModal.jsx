@@ -135,7 +135,8 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
               <div>
                 <h2 className="text-xl font-semibold text-gray-900">{driver.name}</h2>
                 <p className="text-sm text-gray-600">License: {driver.licenseNumber || '—'}</p>
-                <p className="text-sm text-gray-500 mt-1">Driver No: {driver.driverNo || '—'}{driver.udbId ? (<span className="ml-3">• UDB ID: <span className="font-medium">{driver.udbId}</span></span>) : null}</p>
+                {/* <p className="text-sm text-gray-500 mt-1">{driver.udbId ? (<span className="ml-3">• UDB ID: <span className="font-medium">{driver.udbId}</span></span>) : null}</p> */}
+                <p className="text-sm text-gray-500 mt-1">Phone: {driver.phone || driver.mobile || '—'}</p>
               </div>
             </div>
             <button onClick={onClose} className="text-gray-400 hover:text-gray-600 transition-colors">
@@ -197,21 +198,22 @@ export default function DriverDetailModal({ isOpen, onClose, driver }) {
                         <label className="block text-sm font-medium text-gray-700">Alternate No</label>
                         <div className="mt-1 flex items-center">
                           <Phone className="h-4 w-4 text-gray-400 mr-2" />
-                          <span className="text-sm text-gray-900">{driver.alternateNo || '—'}</span>
+                          <span className="text-sm text-gray-900">{driver.mobile || '—'}</span>
                         </div>
                       </div>
                       <div>
                         <label className="block text-sm font-medium text-gray-700">Date of Birth</label>
                         <div className="mt-1 text-sm text-gray-900">{driver.dateOfBirth ? formatDate(driver.dateOfBirth) : '—'}</div>
                       </div>
-                      <div className="md:col-span-2">
-  <label className="block text-sm font-medium text-gray-700">UDB ID</label>
-  <div className="mt-1 flex items-start">
-    <span className="text-sm text-gray-900">
-      {driver.udbId || driver.employeeId || '—'}
-    </span>
-  </div>
-</div>
+                       <div>
+                        <label className="block text-sm font-medium text-gray-700">UDB ID</label>
+                        <div className="mt-1 flex items-center">
+                     
+                          <span className="text-sm text-gray-900">{driver.udbId || driver.employeeId || '—'}</span>
+                        </div>
+                      </div>
+                      
+  
 
                       <div className="md:col-span-2">
                         <label className="block text-sm font-medium text-gray-700">Address</label>
