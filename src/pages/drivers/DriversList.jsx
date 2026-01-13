@@ -32,7 +32,7 @@ import DriverDetailModal from '../../components/drivers/DriverDetailModal';
 import toast from 'react-hot-toast';
 
 // URL for the driver dummy CSV in this folder (Vite will serve it as an asset)
-const dummyCsvUrl = new URL('./Driver Data Format.csv', import.meta.url).href;
+const dummyCsvUrl = new URL('./driver dummy.csv', import.meta.url).href;
 
 export default function DriversList() {
   const { user } = useAuth();
@@ -827,7 +827,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
   onClick={() => {
     const link = document.createElement('a');
     link.href = dummyCsvUrl;
-    link.setAttribute('download', 'Driver Data Format.xlsx');
+    link.setAttribute('download', 'driver dummy.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
