@@ -184,30 +184,34 @@ router.get('/investor/:investorId', async (req, res) => {
 // Get all vehicles
 router.get('/', async (req, res) => {
   try {
-    // Pagination parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const limitParam = req.query.limit;
+
+    const isUnlimited = limitParam === 'all' || limitParam === '0';
+    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
+    const skip = isUnlimited ? 0 : (page - 1) * limit;
+
     const sortBy = req.query.sortBy || 'vehicleId';
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
     const total = await Vehicle.countDocuments();
-    const list = await Vehicle.find()
+
+    let query = Vehicle.find()
       .populate('investorId', 'investorName phone email')
-      .sort({ [sortBy]: sortOrder })
-      .skip(skip)
-      .limit(limit)
-      .lean();
-    
-    // Calculate months and cumulative payout for each vehicle
+      .sort({ [sortBy]: sortOrder });
+
+    if (!isUnlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    const list = await query.lean();
+
     const enhancedList = list.map(vehicle => {
       const normalized = normalizeVehicleShape(vehicle);
       const status = normalized.status || 'inactive';
+
       let calculatedMonths = 0;
-      let cumulativePayout = 0;
-      
-      // Calculate months from rentPeriods if vehicle is active
-      if (Array.isArray(normalized.rentPeriods) && normalized.rentPeriods.length > 0 && status === 'active') {
+      if (Array.isArray(normalized.rentPeriods) && status === 'active') {
         normalized.rentPeriods.forEach(period => {
           const start = new Date(period.start);
           const end = period.end ? new Date(period.end) : new Date();
@@ -215,35 +219,36 @@ router.get('/', async (req, res) => {
           calculatedMonths += Math.floor(diffDays / 30) + 1;
         });
       }
-      
-      // Calculate cumulative payout (monthlyProfitMin * months)
+
       const monthlyProfitMin = normalized.monthlyProfitMin || 0;
-      cumulativePayout = monthlyProfitMin * calculatedMonths;
-      
+
       return {
         ...normalized,
         calculatedMonths,
-        cumulativePayout,
+        cumulativePayout: monthlyProfitMin * calculatedMonths,
         isActive: status === 'active',
-        hasRentPeriods: Array.isArray(normalized.rentPeriods) && normalized.rentPeriods.length > 0
+        hasRentPeriods: Array.isArray(normalized.rentPeriods)
       };
     });
-    
+
     res.json({
       data: enhancedList,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total
-      }
+      pagination: isUnlimited
+        ? null
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total
+          }
     });
   } catch (err) {
     console.error('Error fetching vehicles:', err);
     res.status(500).json({ message: 'Failed to fetch vehicles' });
   }
 });
+
 
 // Get a single vehicle by ID
 router.get('/:id', async (req, res) => {
@@ -783,6 +788,71 @@ router.put('/:id', async (req, res) => {
           }
         } catch (err) {
           console.warn('Failed to auto-activate vehicle after assignment:', err.message);
+        }
+
+        // Send notification to driver about vehicle assignment
+        try {
+          const { createAndEmitNotification } = await import('../lib/notify.js');
+          
+          // Convert driverSignupId to Driver._id for FCM notification
+          let driverRecipientId = String(assignedDriverSignupId || '');
+          
+          if (assignedDriverSignupId) {
+            try {
+              const driverSignup = await DriverSignup.findById(assignedDriverSignupId).lean();
+              if (driverSignup && driverSignup.mobile) {
+                const driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
+                if (driver && driver._id) {
+                  driverRecipientId = String(driver._id);
+                  console.log(`[VEHICLE ASSIGNMENT] Using Driver._id ${driverRecipientId} for notification (from driverSignupId ${assignedDriverSignupId})`);
+                }
+              }
+            } catch (lookupErr) {
+              console.warn('[VEHICLE ASSIGNMENT] Driver lookup failed:', lookupErr.message);
+            }
+          }
+
+          if (driverRecipientId && assignedVehicleInfo) {
+            const vehicleDisplay = assignedVehicleInfo.registrationNumber || 
+                                   `${assignedVehicleInfo.brand} ${assignedVehicleInfo.model}`.trim() || 
+                                   `Vehicle #${assignedVehicleInfo.vehicleId}`;
+            
+            // Notify driver
+            await createAndEmitNotification({
+              type: 'vehicle_assigned',
+              title: 'Vehicle Assigned to You!',
+              message: `${vehicleDisplay} has been assigned to you. Rent calculation starts now.`,
+              data: {
+                vehicleId: assignedVehicleInfo.vehicleId,
+                registrationNumber: assignedVehicleInfo.registrationNumber,
+                model: assignedVehicleInfo.model,
+                brand: assignedVehicleInfo.brand,
+                assignedAt: new Date().toISOString()
+              },
+              recipientType: 'driver',
+              recipientId: driverRecipientId
+            });
+            
+            // Also notify admins
+            await createAndEmitNotification({
+              type: 'vehicle_assignment_admin',
+              title: `Vehicle assigned to driver`,
+              message: `${vehicleDisplay} assigned to ${assignedDriverName || 'driver'}`,
+              data: {
+                vehicleId: assignedVehicleInfo.vehicleId,
+                driverName: assignedDriverName,
+                registrationNumber: assignedVehicleInfo.registrationNumber
+              },
+              recipientType: 'admin',
+              recipientId: null
+            });
+            
+            console.log(`✅ Vehicle assignment notification sent to driver ${driverRecipientId} for vehicle ${vehicleId}`);
+          } else {
+            console.log('⚠️ Skipping vehicle assignment notification - missing driver or vehicle info');
+          }
+        } catch (notifyErr) {
+          console.warn('Failed to send vehicle assignment notification:', notifyErr.message);
         }
       } catch (err) {
         console.error('Error updating driver plan selections for new driver assignment:', err);

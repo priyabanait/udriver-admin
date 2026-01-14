@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
 // Helper to get initial extra state for all selections
-
+import { useMemo } from 'react';
 import { CreditCard, Users, Download, Search, Check, Clock, AlertTriangle, Wallet, User, Phone, IndianRupee, Eye, ChevronDown, CheckCircle } from 'lucide-react';
 import { useAuth } from '../../contexts/AuthContext';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
@@ -44,6 +44,7 @@ export default function DriverPayments() {
   const [adjustmentInputs, setAdjustmentInputs] = useState({});
   // State for admin paid amount per row (for cash payments)
   const [adminPaidInputs, setAdminPaidInputs] = useState({});
+
   // Sync extraInputs state when selections change - keep inputs empty for new entries
   useEffect(() => {
     // Initialize inputs only for new selections, preserve existing input state
@@ -399,9 +400,9 @@ export default function DriverPayments() {
     const fetchPayments = async () => {
       setLoading(true);
       try {
-        let url = `${API_BASE}/api/driver-plan-selections?limit=1000`;
+        let url = `${API_BASE}/api/driver-plan-selections?limit=all`;
         if (managerFilter) {
-          url = `${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(managerFilter)}?limit=1000`;
+          url = `${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(managerFilter)}?limit=all`;
           console.log('Fetching payments for manager:', managerFilter, 'URL:', url);
         } else {
           console.log('Fetching all payments');
@@ -477,7 +478,7 @@ export default function DriverPayments() {
     setLoading(true);
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-      const res = await fetch(`${API_BASE}/api/driver-plan-selections?limit=1000`);
+      const res = await fetch(`${API_BASE}/api/driver-plan-selections?limit=all`);
       if (!res.ok) throw new Error('Failed to load driver payments');
       const result = await res.json();
       const data = result.data || result;
@@ -495,7 +496,7 @@ export default function DriverPayments() {
       // Fetch vehicles and plans for assignment dropdowns
       try {
         const [vehiclesRes, weeklyRes, dailyRes] = await Promise.all([
-          fetch(`${API_BASE}/api/vehicles?limit=1000`),
+          fetch(`${API_BASE}/api/vehicles?limit=all`),
           fetch(`${API_BASE}/api/weekly-rent-plans`),
           fetch(`${API_BASE}/api/daily-rent-plans`)
         ]);
@@ -566,47 +567,63 @@ export default function DriverPayments() {
     }
   };
 
-  const filtered = selections.filter(s => {
-    // s is now an array of transactions for a driver
-    // Filter if any transaction matches
+ const filtered = useMemo(() => {
+  return selections.filter(s => {
     return s.some(tx => {
-      const matchesSearch = (
+      const matchesSearch =
         tx.driverUsername?.toLowerCase().includes(searchTerm.toLowerCase()) ||
         tx.driverMobile?.includes(searchTerm) ||
-        tx.planName?.toLowerCase().includes(searchTerm.toLowerCase())
-      );
+        tx.planName?.toLowerCase().includes(searchTerm.toLowerCase());
+
       let matchesStatus = false;
+      const totalPayable = tx.paymentDetails?.totalPayable || 0;
+
       if (statusFilter === 'unpaid') {
-        // Unpaid: total payable amount > 0
-        const totalPayable = tx.paymentDetails?.totalPayable || 0;
         matchesStatus = totalPayable > 0;
       } else if (statusFilter === 'completed') {
-        // Completed: total payable amount = 0
-        const totalPayable = tx.paymentDetails?.totalPayable || 0;
         matchesStatus = totalPayable === 0;
       } else if (statusFilter === 'all') {
         matchesStatus = true;
       } else {
-        // Other status filters (pending, failed, etc.)
         matchesStatus = tx.paymentStatus === statusFilter;
       }
-      const matchesMode = modeFilter === 'all' || tx.paymentMode === modeFilter;
-      // Date filter
+
+      const matchesMode =
+        modeFilter === 'all' || tx.paymentMode === modeFilter;
+
       let matchesDate = true;
       if (fromDate) {
         const txDate = tx.paymentDate ? new Date(tx.paymentDate) : null;
-        const from = new Date(fromDate);
-        matchesDate = txDate ? txDate >= from : false;
+        matchesDate = txDate ? txDate >= new Date(fromDate) : false;
       }
       if (toDate) {
         const txDate = tx.paymentDate ? new Date(tx.paymentDate) : null;
-        const to = new Date(toDate);
-        matchesDate = matchesDate && (txDate ? txDate <= to : false);
+        matchesDate = matchesDate && (txDate ? txDate <= new Date(toDate) : false);
       }
+
       return matchesSearch && matchesStatus && matchesMode && matchesDate;
     });
   });
+}, [
+  selections,
+  searchTerm,
+  statusFilter,
+  modeFilter,
+  fromDate,
+  toDate
+]);
 
+  const rowsPerPage = 5;
+const [currentPage, setCurrentPage] = useState(1);
+
+const totalPages = Math.ceil(filtered.length / rowsPerPage);
+
+const paginatedFiltered = useMemo(() => {
+  return filtered.slice(
+    (currentPage - 1) * rowsPerPage,
+    currentPage * rowsPerPage
+  );
+}, [filtered, currentPage]);
   const computeTotal = (s) => {
     // Use backend-calculated total if available
     if (s.paymentDetails) {
@@ -1053,7 +1070,7 @@ export default function DriverPayments() {
                     <TableCell colSpan={9} className="text-center py-8 text-gray-500">No records found</TableCell>
                   </TableRow>
                 ) : (
-                  filtered.map((group, idx) => {
+                  paginatedFiltered.map((group, idx) => {
                     const first = group[0];
                     return (
                       <TableRow key={first.driverMobile || first.driverUsername || idx}>
@@ -1447,6 +1464,37 @@ export default function DriverPayments() {
             </Table>
           </div>
         </CardContent>
+        {filtered.length > rowsPerPage && (
+  <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+    <div className="text-gray-600">
+      Showing {(currentPage - 1) * rowsPerPage + 1} –
+      {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+    </div>
+
+    <div className="flex items-center gap-2">
+      <button
+        disabled={currentPage === 1}
+        onClick={() => setCurrentPage(p => p - 1)}
+        className="px-3 py-1 border rounded disabled:opacity-50"
+      >
+        Prev
+      </button>
+
+      <span className="px-2">
+        Page {currentPage} of {totalPages}
+      </span>
+
+      <button
+        disabled={currentPage === totalPages}
+        onClick={() => setCurrentPage(p => p + 1)}
+        className="px-3 py-1 border rounded disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
+
       </Card>
       {/* Payment Detail Modal - All Transactions */}
       {selectedDetail && showDetailModal && Array.isArray(selectedDetail) && (

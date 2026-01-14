@@ -579,36 +579,47 @@ const authenticateDriver = (req, res, next) => {
 // Get all driver plan selections (Admin view)
 router.get("/", async (req, res) => {
   try {
-    // Pagination parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const limitParam = req.query.limit;
+
+    // Unlimited condition
+    const isUnlimited = limitParam === "all" || limitParam === "0";
+    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
+    const skip = isUnlimited ? 0 : (page - 1) * limit;
+
     const sortBy = req.query.sortBy || "selectedDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const total = await DriverPlanSelection.countDocuments();
-    const selections = await DriverPlanSelection.find()
-      .sort({ [sortBy]: sortOrder })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+
+    let query = DriverPlanSelection.find().sort({ [sortBy]: sortOrder });
+
+    // Apply pagination only if NOT unlimited
+    if (!isUnlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    const selections = await query.lean();
 
     // Fetch vehicle data for each selection
     const vehicleIds = [
-      ...new Set(selections.map((s) => s.vehicleId).filter(Boolean)),
+      ...new Set(selections.map(s => s.vehicleId).filter(Boolean)),
     ];
+
     const vehicles = await Vehicle.find({
       vehicleId: { $in: vehicleIds },
     }).lean();
+
     const vehicleMap = {};
-    vehicles.forEach((v) => {
+    vehicles.forEach(v => {
       vehicleMap[v.vehicleId] = v;
     });
 
-    // Add calculated payment details and vehicle info to each selection
-    const selectionsWithBreakdown = selections.map((s) => {
+    // Add calculated payment details and vehicle info
+    const selectionsWithBreakdown = selections.map(s => {
       const paymentDetails = calculatePaymentDetails(s);
       const vehicle = s.vehicleId ? vehicleMap[s.vehicleId] : null;
+
       return {
         ...s,
         paymentDetails,
@@ -619,19 +630,22 @@ router.get("/", async (req, res) => {
 
     res.json({
       data: selectionsWithBreakdown,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total,
-      },
+      pagination: isUnlimited
+        ? null
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
     });
   } catch (err) {
     console.error("Get plan selections error:", err);
     res.status(500).json({ message: "Failed to load plan selections" });
   }
 });
+
 
 // Get all plan selections by driver mobile number
 router.get("/by-mobile/:mobile", async (req, res) => {
@@ -828,23 +842,45 @@ router.post("/public", async (req, res) => {
     try {
       const { createAndEmitNotification } = await import("../lib/notify.js");
       const amount = selection.calculatedTotal || 0;
-      // Notify driver signup if signup exists (use distinct recipientType so we don't send to real driver app tokens)
+      
+      // Convert driverSignupId to Driver._id for FCM notification
+      let driverRecipientId = String(selection.driverSignupId || "");
+      
       if (driverSignup && driverSignup._id) {
-        await createAndEmitNotification({
-          type: "driver_booking",
-          title: `Plan booked: ${selection.planName}`,
-          message: `You have successfully booked ${
-            selection.planName
-          }. Total ₹${amount.toLocaleString("en-IN")}`,
-          data: {
-            selectionId: selection._id,
-            planName: selection.planName,
-            amount,
-          },
-          recipientType: "driver_signup",
-          recipientId: String(selection.driverSignupId),
-        });
+        try {
+          if (driverSignup.mobile) {
+            const driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
+            if (driver && driver._id) {
+              driverRecipientId = String(driver._id);
+              console.log(`[PUBLIC PLAN BOOKING] Using Driver._id ${driverRecipientId} for notification (from driverSignupId ${selection.driverSignupId})`);
+            }
+          }
+        } catch (lookupErr) {
+          console.warn('[PUBLIC PLAN BOOKING] Driver lookup failed:', lookupErr.message);
+        }
+        
+        // Notify driver (use "driver" recipientType, not "driver_signup")
+        if (driverRecipientId) {
+          await createAndEmitNotification({
+            type: "driver_booking",
+            title: `Plan booked: ${selection.planName}`,
+            message: `You have successfully booked ${
+              selection.planName
+            }. Total ₹${amount.toLocaleString("en-IN")}`,
+            data: {
+              selectionId: String(selection._id),
+              planName: selection.planName,
+              amount: String(amount),
+            },
+            recipientType: "driver",
+            recipientId: driverRecipientId,
+          });
+          console.log(`✅ Public plan booking notification sent to driver ${driverRecipientId}`);
+        } else {
+          console.log('⚠️ Skipping public plan booking notification - no valid driver found');
+        }
       }
+      
       // Also create a global/admin notification so admins see new bookings
       await createAndEmitNotification({
         type: "booking_admin",
@@ -853,11 +889,11 @@ router.post("/public", async (req, res) => {
           selection.driverUsername || selection.driverMobile || "N/A"
         } booked ${selection.planName} (₹${amount.toLocaleString("en-IN")})`,
         data: {
-          selectionId: selection._id,
+          selectionId: String(selection._id),
           driverSignupId: selection.driverSignupId
             ? String(selection.driverSignupId)
             : null,
-          amount,
+          amount: String(amount),
         },
         recipientType: "admin",
         recipientId: null,
@@ -948,21 +984,46 @@ router.post("/", authenticateDriver, async (req, res) => {
     try {
       const { createAndEmitNotification } = await import("../lib/notify.js");
       const amount = selection.calculatedTotal || 0;
-      // Notify driver
-      await createAndEmitNotification({
-        type: "driver_booking",
-        title: `Plan booked: ${selection.planName}`,
-        message: `You have successfully booked ${
-          selection.planName
-        }. Total ₹${amount.toLocaleString("en-IN")}`,
-        data: {
-          selectionId: selection._id,
-          planName: selection.planName,
-          amount,
-        },
-        recipientType: "driver_signup",
-        recipientId: String(selection.driverSignupId),
-      });
+      
+      // Convert driverSignupId to Driver._id for FCM notification
+      let driverRecipientId = String(selection.driverSignupId || "");
+      
+      if (selection.driverSignupId) {
+        try {
+          const driverSignup = await DriverSignup.findById(selection.driverSignupId).lean();
+          if (driverSignup && driverSignup.mobile) {
+            const driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
+            if (driver && driver._id) {
+              driverRecipientId = String(driver._id);
+              console.log(`[PLAN BOOKING] Using Driver._id ${driverRecipientId} for notification (from driverSignupId ${selection.driverSignupId})`);
+            }
+          }
+        } catch (lookupErr) {
+          console.warn('[PLAN BOOKING] Driver lookup failed:', lookupErr.message);
+        }
+      }
+      
+      // Notify driver (use "driver" recipientType, not "driver_signup")
+      if (driverRecipientId) {
+        await createAndEmitNotification({
+          type: "driver_booking",
+          title: `Plan booked: ${selection.planName}`,
+          message: `You have successfully booked ${
+            selection.planName
+          }. Total ₹${amount.toLocaleString("en-IN")}`,
+          data: {
+            selectionId: String(selection._id),
+            planName: selection.planName,
+            amount: String(amount),
+          },
+          recipientType: "driver",
+          recipientId: driverRecipientId,
+        });
+        console.log(`✅ Plan booking notification sent to driver ${driverRecipientId}`);
+      } else {
+        console.log('⚠️ Skipping plan booking notification - no valid driver found');
+      }
+      
       // Also create a global/admin notification so admins see new bookings
       await createAndEmitNotification({
         type: "booking_admin",
@@ -971,9 +1032,9 @@ router.post("/", authenticateDriver, async (req, res) => {
           selection.driverUsername || selection.driverMobile || "N/A"
         } booked ${selection.planName} (₹${amount.toLocaleString("en-IN")})`,
         data: {
-          selectionId: selection._id,
-          driverSignupId: String(selection.driverSignupId),
-          amount,
+          selectionId: String(selection._id),
+          driverSignupId: String(selection.driverSignupId || ""),
+          amount: String(amount),
         },
         recipientType: "admin",
         recipientId: null,

@@ -128,48 +128,68 @@ function stripAuthFields(source) {
 
 router.get("/", async (req, res) => {
   try {
-    // Pagination parameters
+    const unlimited = req.query.unlimited === "true";
+
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const requestedLimit = parseInt(req.query.limit) || 10;
+    const MAX_LIMIT = 1000;
+
+    const limit = unlimited
+      ? 0               // MongoDB: limit(0) = no limit
+      : Math.min(requestedLimit, MAX_LIMIT);
+
+    const skip = unlimited ? 0 : (page - 1) * limit;
+
     const sortBy = req.query.sortBy || "createdAt";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    // By default include all drivers (both admin-added and self-registered).
-    // If `manualOnly=true` query param is provided, only return admin-added drivers to preserve legacy behavior.
     const manualOnly = req.query.manualOnly === "true";
     const filter = manualOnly ? { isManualEntry: true } : {};
 
     const total = await Driver.countDocuments(filter);
-    let list = await Driver.find(filter)
-      .sort({ [sortBy]: sortOrder })
-      .skip(skip)
-      .limit(limit)
-      .lean();
 
-    // Normalize joinDate for list responses (don't mutate original too much)
+    let query = Driver.find(filter)
+      .sort({ [sortBy]: sortOrder });
+
+    if (!unlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    let list = await query.lean();
+
     list = list.map(item => ({
       ...item,
-      joinDate: normalizeToDateOnly(item.joinDate) || (item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : undefined)
+      joinDate:
+        normalizeToDateOnly(item.joinDate) ||
+        (item.createdAt
+          ? new Date(item.createdAt).toISOString().split("T")[0]
+          : undefined),
     }));
 
     res.json({
       data: list,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total,
-      },
+      pagination: unlimited
+        ? {
+            total,
+            unlimited: true,
+          }
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
     });
   } catch (error) {
     console.error("Error fetching drivers:", error);
-    res
-      .status(500)
-      .json({ message: "Failed to fetch drivers", error: error.message });
+    res.status(500).json({
+      message: "Failed to fetch drivers",
+      error: error.message,
+    });
   }
 });
+
 
 // GET signup drivers (self-registered with username/mobile/password)
 router.get("/signup/credentials", async (req, res) => {

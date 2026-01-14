@@ -27,6 +27,7 @@ function EditCredentialModal({ open, type, user, onClose, onSave }) {
     ];
   }
   if (!open) return null;
+  
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-30">
       <div className="bg-white rounded-lg shadow-lg w-full max-w-md p-6 relative">
@@ -126,8 +127,8 @@ export default function SignupCredentials() {
       try {
         setLoading(true);
         const [dRes, iRes] = await Promise.all([
-          fetch(`${API_BASE}/api/drivers/signup/credentials?limit=1000`),
-          fetch(`${API_BASE}/api/investors/signup/credentials?limit=1000`)
+          fetch(`${API_BASE}/api/drivers/signup/credentials?limit=all`),
+          fetch(`${API_BASE}/api/investors/signup/credentials?limit=all`)
         ]);
         if (!dRes.ok) throw new Error('Failed to load driver signups');
         if (!iRes.ok) throw new Error('Failed to load investor signups');
@@ -172,7 +173,15 @@ export default function SignupCredentials() {
       i.kycStatus?.toLowerCase().includes(q)
     );
   });
+const rowsPerPage = 10; // rows per page
+const [currentPage, setCurrentPage] = useState(1);
 
+// Decide which data to show based on activeTab
+const data = activeTab === 'drivers' ? filteredDrivers : filteredInvestors;
+
+// Pagination calculations
+const totalPages = Math.ceil(data.length / rowsPerPage);
+const paginatedData = data.slice((currentPage - 1) * rowsPerPage, currentPage * rowsPerPage);
   return (
     <SignupEditModalManager>
       <div className="space-y-6">
@@ -261,7 +270,7 @@ export default function SignupCredentials() {
                 </thead>
                 <tbody className="bg-white divide-y divide-gray-200">
                   {activeTab === 'drivers' ? (
-                    filteredDrivers.map((d, idx) => (
+                    paginatedData.map((d, idx) => (
                       <tr key={d._id || idx} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{d.username || '—'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{d.mobile}</td>
@@ -337,7 +346,24 @@ export default function SignupCredentials() {
                 </tbody>
               </table>
             </div>
+           
           </CardContent>
+           {data.length > rowsPerPage && (
+      <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+        <div className="text-gray-600">
+          Showing {(currentPage - 1) * rowsPerPage + 1} – {Math.min(currentPage * rowsPerPage, data.length)} of {data.length}
+        </div>
+        <div className="flex items-center gap-2">
+          <button disabled={currentPage === 1} onClick={() => setCurrentPage(p => p - 1)} className="px-3 py-1 border rounded disabled:opacity-50">
+            Prev
+          </button>
+          <span className="px-2">Page {currentPage} of {totalPages}</span>
+          <button disabled={currentPage === totalPages} onClick={() => setCurrentPage(p => p + 1)} className="px-3 py-1 border rounded disabled:opacity-50">
+            Next
+          </button>
+        </div>
+      </div>
+    )}
         </Card>
       )}
       </div>

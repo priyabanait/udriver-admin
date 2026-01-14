@@ -106,18 +106,51 @@ router.post('/', authenticateToken, async (req, res) => {
   // Notify dashboard and target related parties when available
   try {
     const { createAndEmitNotification } = await import('../lib/notify.js');
+    const Driver = (await import('../models/driver.js')).default;
+    const DriverSignup = (await import('../models/driverSignup.js')).default;
+    const Investor = (await import('../models/investor.js')).default;
+    const InvestorSignup = (await import('../models/investorSignup.js')).default;
+    
     const payload = {
       type: 'transaction',
       title: `Transaction ${tx.id} - ${tx.status || 'new'}`,
       message: `Amount: ${tx.amount || 0}`,
-      data: { id: tx._id, txId: tx.id }
+      data: { id: String(tx._id), txId: String(tx.id) }
     };
 
     // If this transaction relates to an investor or driver, save recipient info so they get targeted notifications
     if (tx.investorId) {
-      await createAndEmitNotification({ ...payload, recipientType: 'investor', recipientId: tx.investorId });
+      // Convert to actual Investor._id if needed
+      let investorRecipientId = String(tx.investorId);
+      try {
+        let investor = await Investor.findById(String(tx.investorId)).lean();
+        if (!investor) {
+          const investorSignup = await InvestorSignup.findById(String(tx.investorId)).lean();
+          if (investorSignup && investorSignup.phone) {
+            investor = await Investor.findOne({ phone: investorSignup.phone }).lean();
+            if (investor) investorRecipientId = String(investor._id);
+          }
+        }
+      } catch (e) {
+        console.warn('[TRANSACTION] Investor lookup failed:', e.message);
+      }
+      await createAndEmitNotification({ ...payload, recipientType: 'investor', recipientId: investorRecipientId });
     } else if (tx.driverId) {
-      await createAndEmitNotification({ ...payload, recipientType: 'driver', recipientId: tx.driverId });
+      // Convert to actual Driver._id if needed
+      let driverRecipientId = String(tx.driverId);
+      try {
+        let driver = await Driver.findById(String(tx.driverId)).lean();
+        if (!driver) {
+          const driverSignup = await DriverSignup.findById(String(tx.driverId)).lean();
+          if (driverSignup && driverSignup.mobile) {
+            driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
+            if (driver) driverRecipientId = String(driver._id);
+          }
+        }
+      } catch (e) {
+        console.warn('[TRANSACTION] Driver lookup failed:', e.message);
+      }
+      await createAndEmitNotification({ ...payload, recipientType: 'driver', recipientId: driverRecipientId });
     } else {
       await createAndEmitNotification(payload);
     }

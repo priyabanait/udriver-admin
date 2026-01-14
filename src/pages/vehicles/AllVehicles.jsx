@@ -41,7 +41,32 @@ export default function VehiclesList() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
+const [currentPage, setCurrentPage] = useState(1);
+const rowsPerPage = 10;
+ const filtered = vehiclesData.filter(v => {
+    const q = searchTerm.trim().toLowerCase();
+    const matchesQ = !q 
+      || (v.registrationNumber||'').toLowerCase().includes(q) 
+      || (v.model||'').toLowerCase().includes(q) 
+      || (v.carName||'').toLowerCase().includes(q)
+      || (v.brand||v.make||'').toLowerCase().includes(q)
+      || (v.category||'').toLowerCase().includes(q)
+      || (v.ownerName||'').toLowerCase().includes(q);
+    const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
+    const matchesKyc = kycFilter === 'all' || ((v.kycStatus || v.kyc || '').toString().toLowerCase() === kycFilter);
+    return matchesQ && matchesStatus && matchesKyc;
+  });
+const totalPages = Math.ceil(filtered.length / rowsPerPage);
 
+const paginatedVehicles = filtered.slice(
+  (currentPage - 1) * rowsPerPage,
+  currentPage * rowsPerPage
+);
+
+useEffect(() => {
+  setCurrentPage(1);
+}, [filtered.length]);
+  
   // Auth helpers for deployed backend
   const getAuthHeaders = () => {
     const token = localStorage.getItem('udriver_token');
@@ -81,8 +106,8 @@ export default function VehiclesList() {
       try{
        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const [vehicleRes, driverRes, managerRes] = await Promise.all([
-          fetch(`${API_BASE}/api/vehicles?limit=1000`),
-          fetch(`${API_BASE}/api/drivers?limit=1000`),
+          fetch(`${API_BASE}/api/vehicles?limit=all`),
+          fetch(`${API_BASE}/api/drivers?unlimited=true`),
           fetch(`${API_BASE}/api/managers?limit=1000`)
         ]);
         if(!vehicleRes.ok) { throw new Error('Failed to load vehicles'); }
@@ -457,19 +482,7 @@ export default function VehiclesList() {
     }catch(err){ console.error(err); toast.error('Failed to export vehicles'); }
   };
 
-  const filtered = vehiclesData.filter(v => {
-    const q = searchTerm.trim().toLowerCase();
-    const matchesQ = !q 
-      || (v.registrationNumber||'').toLowerCase().includes(q) 
-      || (v.model||'').toLowerCase().includes(q) 
-      || (v.carName||'').toLowerCase().includes(q)
-      || (v.brand||v.make||'').toLowerCase().includes(q)
-      || (v.category||'').toLowerCase().includes(q)
-      || (v.ownerName||'').toLowerCase().includes(q);
-    const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
-    const matchesKyc = kycFilter === 'all' || ((v.kycStatus || v.kyc || '').toString().toLowerCase() === kycFilter);
-    return matchesQ && matchesStatus && matchesKyc;
-  });
+ 
 
   // Stats for top cards
   const activeCount = vehiclesData.filter(v => v.status === 'active').length;
@@ -567,19 +580,6 @@ export default function VehiclesList() {
           </CardContent>
         </Card>
 
-        {/* <Card>
-          <CardContent className="p-2">
-            <div className="flex items-start">
-              <div className="p-2 bg-purple-100 rounded-lg">
-                <Car className="h-6 w-6 text-purple-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Value</p>
-                <p className="text-2xl font-bold text-gray-900">{formatCurrency(totalValue)}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card> */}
       </div>
 
       {/* Search / Filters */}
@@ -671,7 +671,7 @@ export default function VehiclesList() {
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filtered.map((v, index)=> (
+                {paginatedVehicles.map((v, index)=> (
                   <TableRow key={index}>
                     <TableCell>{v.category || '-'}</TableCell>
                     <TableCell>{v.brand || v.make || '-'}</TableCell>
@@ -761,6 +761,37 @@ export default function VehiclesList() {
             </Table>
           )}
         </CardContent>
+        {filtered.length > rowsPerPage && (
+  <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+    <div className="text-gray-600">
+      Showing {(currentPage - 1) * rowsPerPage + 1} –
+      {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+    </div>
+
+    <div className="flex items-center gap-2">
+      <button
+        disabled={currentPage === 1}
+        onClick={() => setCurrentPage(p => p - 1)}
+        className="px-3 py-1 border rounded disabled:opacity-50"
+      >
+        Prev
+      </button>
+
+      <span className="px-2">
+        Page {currentPage} of {totalPages}
+      </span>
+
+      <button
+        disabled={currentPage === totalPages}
+        onClick={() => setCurrentPage(p => p + 1)}
+        className="px-3 py-1 border rounded disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
+
       </Card>
 
       <VehicleModal isOpen={showVehicleModal} onClose={()=>{setShowVehicleModal(false); setSelectedVehicle(null);}} vehicle={selectedVehicle} onSave={handleSaveVehicle} />

@@ -276,21 +276,43 @@ router.post("/", async (req, res) => {
     // Emit dashboard notification for new investment FD
     try {
       const { createAndEmitNotification } = await import("../lib/notify.js");
+      const Investor = (await import('../models/investor.js')).default;
+      const InvestorSignup = (await import('../models/investorSignup.js')).default;
+      
       console.log(
         "[FD-INVESTMENTFDS] About to send notification with recipientId:",
         savedInvestment.investorId
       );
 
-      // Ensure notification is sent with proper investorId
-      if (savedInvestment.investorId) {
+      // Convert investorId to actual Investor._id if needed
+      let investorRecipientId = savedInvestment.investorId ? String(savedInvestment.investorId) : null;
+      
+      if (investorRecipientId) {
+        try {
+          let investor = await Investor.findById(String(investorRecipientId)).lean();
+          if (!investor) {
+            // Might be InvestorSignup ID, try to find by phone
+            const investorSignup = await InvestorSignup.findById(String(investorRecipientId)).lean();
+            if (investorSignup && investorSignup.phone) {
+              investor = await Investor.findOne({ phone: investorSignup.phone }).lean();
+              if (investor && investor._id) {
+                investorRecipientId = String(investor._id);
+                console.log(`[FD-INVESTMENTFDS] Using Investor._id ${investorRecipientId} for notification`);
+              }
+            }
+          }
+        } catch (e) {
+          console.warn('[FD-INVESTMENTFDS] Investor lookup failed:', e.message);
+        }
+        
         console.log(
           "[FD-INVESTMENTFDS] Calling createAndEmitNotification with:"
         );
         console.log({
           type: "new_fd",
           recipientType: "investor",
-          recipientId: savedInvestment.investorId,
-          recipientIdType: typeof savedInvestment.investorId,
+          recipientId: investorRecipientId,
+          recipientIdType: typeof investorRecipientId,
         });
         await createAndEmitNotification({
           type: "new_fd",
@@ -299,13 +321,11 @@ router.post("/", async (req, res) => {
           }`,
           message: `FD of ₹${savedInvestment.investmentAmount} created.`,
           data: {
-            id: savedInvestment._id,
-            investorId: savedInvestment.investorId,
+            id: String(savedInvestment._id),
+            investorId: String(savedInvestment.investorId || ''),
           },
           recipientType: "investor",
-          recipientId: savedInvestment.investorId
-            ? String(savedInvestment.investorId)
-            : null,
+          recipientId: investorRecipientId,
         });
         console.log("[FD-INVESTMENTFDS] Notification sent successfully");
       } else {

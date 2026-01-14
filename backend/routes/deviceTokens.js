@@ -50,8 +50,16 @@ router.post('/register-driver-by-mobile', async (req, res) => {
     if (!token) return res.status(400).json({ error: 'token is required' });
 
     const normalized = String(mobile).trim();
+    console.log('[DeviceToken] register-driver-by-mobile: searching for driver with mobile:', normalized);
+    
     const driver = await Driver.findOne({ mobile: normalized }).lean();
-    if (!driver) return res.status(404).json({ error: 'Driver not found for given mobile' });
+    if (!driver) {
+      console.error('[DeviceToken] register-driver-by-mobile: Driver not found. Mobile:', normalized);
+      // Also check if any drivers exist at all
+      const totalDrivers = await Driver.countDocuments({});
+      console.error('[DeviceToken] Total drivers in database:', totalDrivers);
+      return res.status(404).json({ error: 'Driver not found for given mobile' });
+    }
 
     // Log previous mapping for visibility
     const prev = await DeviceToken.findOne({ token }).lean();

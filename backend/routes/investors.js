@@ -350,41 +350,50 @@ router.get("/", async (req, res) => {
 // GET investor signup credentials (self-registered)
 router.get("/signup/credentials", async (req, res) => {
   try {
-    // Pagination parameters
     const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
-    const skip = (page - 1) * limit;
+    const limitParam = req.query.limit;
+
+    // Unlimited condition: if limit=0 or limit=all, fetch all
+    const isUnlimited = limitParam === "all" || limitParam === "0";
+    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
+    const skip = isUnlimited ? 0 : (page - 1) * limit;
+
     const sortBy = req.query.sortBy || "signupDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const total = await InvestorSignup.countDocuments();
-    const list = await InvestorSignup.find()
+
+    let query = InvestorSignup.find()
       .select("investorName email phone password status kycStatus signupDate")
-      .sort({ [sortBy]: sortOrder })
-      .skip(skip)
-      .limit(limit)
-      .lean();
+      .sort({ [sortBy]: sortOrder });
+
+    if (!isUnlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    const list = await query.lean();
 
     res.json({
       data: list,
-      pagination: {
-        total,
-        page,
-        limit,
-        totalPages: Math.ceil(total / limit),
-        hasMore: page * limit < total,
-      },
+      pagination: isUnlimited
+        ? null
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
     });
   } catch (error) {
     console.error("Error fetching investor signup credentials:", error);
-    res
-      .status(500)
-      .json({
-        error: "Failed to fetch signup credentials",
-        message: error.message,
-      });
+    res.status(500).json({
+      error: "Failed to fetch signup credentials",
+      message: error.message,
+    });
   }
 });
+
 
 // POST - Create new investor OR complete investor registration
 router.post("/", async (req, res) => {

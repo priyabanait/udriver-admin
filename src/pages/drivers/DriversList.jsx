@@ -75,7 +75,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
       // Fetch manual drivers
-      const res = await fetch(`${API_BASE}/api/drivers?limit=1000`);
+      const res = await fetch(`${API_BASE}/api/drivers?unlimited=true`);
       if (!res.ok) throw new Error(`Failed to load drivers: ${res.status}`);
       const result = await res.json();
       const data = result.data || result;
@@ -350,7 +350,9 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       toast.error('Failed to load driver details');
     }
   };
-
+useEffect(() => {
+  setCurrentPage(1);
+}, [filteredDrivers.length]);
   const handleSaveDriver = async (driverData) => {
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
@@ -379,7 +381,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         toast.success('Driver updated successfully');
       } else {
         // Add new driver
-        const res = await fetch(`${API_BASE}/api/drivers`, {
+        const res = await fetch(`${API_BASE}/api/drivers?unlimited=true`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -404,6 +406,14 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       toast.error(err.message || 'Failed to save driver');
     }
   };
+  const [currentPage, setCurrentPage] = useState(1);
+  const rowsPerPage = 10; // 10 / 25 / 50 jo chaho
+const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
+
+const paginatedDrivers = filteredDrivers.slice(
+(currentPage - 1) * rowsPerPage,
+  currentPage * rowsPerPage
+);
 
   const handleDeleteDriver = (driverId) => {
     if (window.confirm('Are you sure you want to delete this driver?')) {
@@ -1044,7 +1054,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {filteredDrivers.map((driver,index) => (
+                {paginatedDrivers.map((driver,index) => (
                   <TableRow key={index}>
                     <TableCell>
                       <div>
@@ -1357,8 +1367,40 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                 ))}
               </TableBody>
             </Table>
+        
           )}
         </CardContent>
+            {filteredDrivers.length > rowsPerPage && (
+  <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+    <div className="text-gray-600">
+      Showing {(currentPage - 1) * rowsPerPage + 1} –
+      {Math.min(currentPage * rowsPerPage, filteredDrivers.length)} of {filteredDrivers.length}
+    </div>
+
+    <div className="flex items-center gap-2">
+      <button
+        disabled={currentPage === 1}
+        onClick={() => setCurrentPage(p => p - 1)}
+        className="px-3 py-1 border rounded disabled:opacity-50"
+      >
+        Prev
+      </button>
+
+      <span className="px-2">
+        Page {currentPage} of {totalPages}
+      </span>
+
+      <button
+        disabled={currentPage === totalPages}
+        onClick={() => setCurrentPage(p => p + 1)}
+        className="px-3 py-1 border rounded disabled:opacity-50"
+      >
+        Next
+      </button>
+    </div>
+  </div>
+)}
+
       </Card>
 
       {/* Driver Modal */}
