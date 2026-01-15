@@ -499,6 +499,55 @@ router.get("/", async (req, res) => {
   }
 });
 
+router.get("/all", async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limitParam = req.query.limit;
+
+    // Unlimited condition
+    const isUnlimited = limitParam === "all" || limitParam === "0";
+    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
+    const skip = isUnlimited ? 0 : (page - 1) * limit;
+
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const total = await Investor.countDocuments();
+
+    let query = Investor.find().sort({ [sortBy]: sortOrder });
+
+    if (!isUnlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    const list = await query.lean();
+
+    // Transform _id → id for frontend
+    const transformedList = list.map((investor) => ({
+      ...investor,
+      id: investor._id.toString(),
+    }));
+
+    res.json({
+      data: transformedList,
+      pagination: isUnlimited
+        ? null
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
+    });
+  } catch (error) {
+    console.error("Error fetching investors:", error);
+    res.status(500).json({
+      error: "Failed to fetch investors",
+      message: error.message,
+    });
+  }
+});
 
 
 // GET investor signup credentials (self-registered)

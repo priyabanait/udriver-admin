@@ -78,13 +78,13 @@ export default function SuperAdminDashboard() {
           investorSignupRes,
           investmentFDRes
         ] = await Promise.all([
-          fetch(`${API_BASE}/api/drivers?unlimited=true`),
-          fetch(`${API_BASE}/api/vehicles?limit=all`),
+          fetch(`${API_BASE}/api/drivers/all?unlimited=true`),
+          fetch(`${API_BASE}/api/vehicles/all?limit=all`),
           fetch(`${API_BASE}/api/expenses?limit=1000`),
           fetch(`${API_BASE}/api/transactions?limit=1000`),
           fetch(`${API_BASE}/api/tickets?limit=1000`).catch(() => ({ ok: false })),
           fetch(`${API_BASE}/api/employees?limit=1000`).catch(() => ({ ok: false })),
-          fetch(`${API_BASE}/api/investors?limit=1000`),
+          fetch(`${API_BASE}/api/investors/all?limit=all`),
           fetch(`${API_BASE}/api/investors/signup/credentials?limit=1000`).catch(() => ({ ok: false })),
           fetch(`${API_BASE}/api/investment-fds?limit=1000`).catch(() => ({ ok: false }))
         ]);

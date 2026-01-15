@@ -215,6 +215,72 @@ router.get('/investor/:investorId', async (req, res) => {
     res.status(500).json({ message: 'Failed to fetch vehicles for investor' });
   }
 });
+router.get('/all', async (req, res) => {
+  try {
+    const page = parseInt(req.query.page) || 1;
+    const limitParam = req.query.limit;
+
+    const isUnlimited = limitParam === 'all' || limitParam === '0';
+    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
+    const skip = isUnlimited ? 0 : (page - 1) * limit;
+
+    const sortBy = req.query.sortBy || 'vehicleId';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+
+    const total = await Vehicle.countDocuments();
+
+    let query = Vehicle.find()
+      .populate('investorId', 'investorName phone email')
+      .sort({ [sortBy]: sortOrder });
+
+    if (!isUnlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    const list = await query.lean();
+
+    const enhancedList = list.map(vehicle => {
+      const normalized = normalizeVehicleShape(vehicle);
+      const status = normalized.status || 'inactive';
+
+      let calculatedMonths = 0;
+      if (Array.isArray(normalized.rentPeriods) && status === 'active') {
+        normalized.rentPeriods.forEach(period => {
+          const start = new Date(period.start);
+          const end = period.end ? new Date(period.end) : new Date();
+          const diffDays = Math.floor((end - start) / (1000 * 60 * 60 * 24));
+          calculatedMonths += Math.floor(diffDays / 30) + 1;
+        });
+      }
+
+      const monthlyProfitMin = normalized.monthlyProfitMin || 0;
+
+      return {
+        ...normalized,
+        calculatedMonths,
+        cumulativePayout: monthlyProfitMin * calculatedMonths,
+        isActive: status === 'active',
+        hasRentPeriods: Array.isArray(normalized.rentPeriods)
+      };
+    });
+
+    res.json({
+      data: enhancedList,
+      pagination: isUnlimited
+        ? null
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total
+          }
+    });
+  } catch (err) {
+    console.error('Error fetching vehicles:', err);
+    res.status(500).json({ message: 'Failed to fetch vehicles' });
+  }
+});
 
 // Get all vehicles
 router.get('/', async (req, res) => {

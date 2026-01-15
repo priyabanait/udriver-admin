@@ -256,6 +256,69 @@ router.get("/search", async (req, res) => {
     });
   }
 });
+router.get("/all", async (req, res) => {
+  try {
+    const unlimited = req.query.unlimited === "true";
+
+    const page = parseInt(req.query.page) || 1;
+    const requestedLimit = parseInt(req.query.limit) || 10;
+    const MAX_LIMIT = 1000;
+
+    const limit = unlimited
+      ? 0               // MongoDB: limit(0) = no limit
+      : Math.min(requestedLimit, MAX_LIMIT);
+
+    const skip = unlimited ? 0 : (page - 1) * limit;
+
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const manualOnly = req.query.manualOnly === "true";
+    const filter = manualOnly ? { isManualEntry: true } : {};
+
+    const total = await Driver.countDocuments(filter);
+
+    let query = Driver.find(filter)
+      .sort({ [sortBy]: sortOrder });
+
+    if (!unlimited) {
+      query = query.skip(skip).limit(limit);
+    }
+
+    let list = await query.lean();
+
+    list = list.map(item => ({
+      ...item,
+      joinDate:
+        normalizeToDateOnly(item.joinDate) ||
+        (item.createdAt
+          ? new Date(item.createdAt).toISOString().split("T")[0]
+          : undefined),
+    }));
+
+    res.json({
+      data: list,
+      pagination: unlimited
+        ? {
+            total,
+            unlimited: true,
+          }
+        : {
+            total,
+            page,
+            limit,
+            totalPages: Math.ceil(total / limit),
+            hasMore: page * limit < total,
+          },
+    });
+  } catch (error) {
+    console.error("Error fetching drivers:", error);
+    res.status(500).json({
+      message: "Failed to fetch drivers",
+      error: error.message,
+    });
+  }
+});
 
 router.get("/", async (req, res) => {
   try {
