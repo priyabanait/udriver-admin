@@ -117,9 +117,9 @@ export default function InvestmentManagement() {
         setLoading(true);
         setCarInvestmentLoading(true);
         const [invRes, plansRes, carInvRes] = await Promise.all([
-          fetch(`${API_BASE}/api/investors?limit=1000`, { method: 'GET' }),
+          fetch(`${API_BASE}/api/investors?page=1&limit=100`, { method: 'GET' }),
           fetch(`${API_BASE}/api/investment-plans`, { method: 'GET' }),
-          fetch(`${API_BASE}/api/car-investment-entries?limit=1000`, { method: 'GET' })
+          fetch(`${API_BASE}/api/car-investment-entries?page=1&limit=100`, { method: 'GET' })
         ]);
 
         if (!invRes.ok) {
@@ -563,8 +563,8 @@ const handleExportReport = () => {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Investor Management</h1>
-          <p className="text-gray-600">Manage investor profiles and investment plans</p>
+          <h1 className="text-2xl font-bold text-gray-900">Investment Management</h1>
+          <p className="text-gray-600">Manage Amount and Car investment plans</p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
           <PermissionGuard permission={PERMISSIONS.INVESTMENTS_CREATE}>
@@ -599,50 +599,7 @@ const handleExportReport = () => {
         
       </div>
 
-      {/* Metrics Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="p-3 bg-blue-100 rounded-lg">
-                <Users className="h-6 w-6 text-blue-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Total Investors</p>
-                <p className="text-2xl font-bold text-gray-900">{metrics.totalInvestors}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="p-3 bg-green-100 rounded-lg">
-                <CheckCircle className="h-6 w-6 text-green-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Verified KYC</p>
-                <p className="text-2xl font-bold text-green-600">{metrics.activeInvestors}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-
-        <Card>
-          <CardContent className="p-4">
-            <div className="flex items-center">
-              <div className="p-3 bg-orange-100 rounded-lg">
-                <Clock className="h-6 w-6 text-orange-600" />
-              </div>
-              <div className="ml-4">
-                <p className="text-sm font-medium text-gray-600">Pending KYC</p>
-                <p className="text-2xl font-bold text-orange-600">{metrics.pendingInvestors}</p>
-              </div>
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+    
 
       {/* Investment Plans */}
       <Card>

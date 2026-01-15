@@ -121,58 +121,62 @@ export default function SignupCredentials() {
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
 
-  useEffect(() => {
-    let mounted = true;
-    async function loadAll() {
-      try {
-        setLoading(true);
-        const [dRes, iRes] = await Promise.all([
-          fetch(`${API_BASE}/api/drivers/signup/credentials?limit=all`),
-          fetch(`${API_BASE}/api/investors/signup/credentials?limit=all`)
-        ]);
-        if (!dRes.ok) throw new Error('Failed to load driver signups');
-        if (!iRes.ok) throw new Error('Failed to load investor signups');
-        const [dResult, iResult] = await Promise.all([dRes.json(), iRes.json()]);
-        if (!mounted) return;
-        const dData = dResult.data || dResult;
-        const iData = iResult.data || iResult;
-        setDrivers(Array.isArray(dData) ? dData : []);
-        setInvestors(Array.isArray(iData) ? iData : []);
-      } catch (err) {
-        console.error(err);
-        toast.error(err.message || 'Failed to load signup credentials');
-        if (mounted) {
-          setDrivers([]);
-          setInvestors([]);
-        }
-      } finally {
-        if (mounted) setLoading(false);
+  const loadAll = async () => {
+    try {
+      setLoading(true);
+      
+      // Build query params with search
+      let driverParams = new URLSearchParams({
+        page: '1',
+        limit: '100'
+      });
+      let investorParams = new URLSearchParams({
+        page: '1',
+        limit: '100'
+      });
+      
+      if (search && search.trim()) {
+        driverParams.append('q', search.trim());
+        investorParams.append('q', search.trim());
       }
+      
+      const [dRes, iRes] = await Promise.all([
+        fetch(`${API_BASE}/api/drivers/signup/credentials?${driverParams.toString()}`),
+        fetch(`${API_BASE}/api/investors/signup/credentials?${investorParams.toString()}`)
+      ]);
+      if (!dRes.ok) throw new Error('Failed to load driver signups');
+      if (!iRes.ok) throw new Error('Failed to load investor signups');
+      const [dResult, iResult] = await Promise.all([dRes.json(), iRes.json()]);
+      const dData = dResult.data || dResult;
+      const iData = iResult.data || iResult;
+      setDrivers(Array.isArray(dData) ? dData : []);
+      setInvestors(Array.isArray(iData) ? iData : []);
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Failed to load signup credentials');
+      setDrivers([]);
+      setInvestors([]);
+    } finally {
+      setLoading(false);
     }
+  };
+
+  useEffect(() => {
     loadAll();
-    return () => { mounted = false; };
   }, []);
 
-  const filteredDrivers = drivers.filter(d => {
-    const q = search.toLowerCase();
-    return (
-      d.username?.toLowerCase().includes(q) ||
-      d.mobile?.toLowerCase().includes(q) ||
-      d.status?.toLowerCase().includes(q) ||
-      d.kycStatus?.toLowerCase().includes(q)
-    );
-  });
+  // Refetch when search changes (with debounce)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadAll();
+    }, search ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [search]);
 
-  const filteredInvestors = investors.filter(i => {
-    const q = search.toLowerCase();
-    return (
-      i.investorName?.toLowerCase().includes(q) ||
-      i.email?.toLowerCase().includes(q) ||
-      i.phone?.toLowerCase().includes(q) ||
-      i.status?.toLowerCase().includes(q) ||
-      i.kycStatus?.toLowerCase().includes(q)
-    );
-  });
+  // Server-side filtering is now used via API, so we just use the data directly
+  const filteredDrivers = drivers;
+  const filteredInvestors = investors;
 const rowsPerPage = 10; // rows per page
 const [currentPage, setCurrentPage] = useState(1);
 
@@ -307,7 +311,7 @@ const paginatedData = data.slice((currentPage - 1) * rowsPerPage, currentPage * 
                       </tr>
                     ))
                   ) : (
-                    filteredInvestors.map((i, idx) => (
+                    paginatedData.map((i, idx) => (
                       <tr key={i._id || idx} className="hover:bg-gray-50">
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{i.investorName || '—'}</td>
                         <td className="px-6 py-4 whitespace-nowrap text-sm text-gray-900">{i.email || '—'}</td>

@@ -61,7 +61,7 @@ export default function StaffAttendence() {
       
       try {
         // Fetch all managers first
-        const managersRes = await fetch(`${API_BASE}/api/managers?limit=1000`);
+        const managersRes = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
         let managersData = [];
         if (managersRes.ok) {
           const managersJson = await managersRes.json();
@@ -284,7 +284,7 @@ export default function StaffAttendence() {
     setLoading(true);
     try {
       // Fetch all managers first
-      const managersRes = await fetch(`${API_BASE}/api/managers?limit=1000`);
+      const managersRes = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
       let managersData = [];
       if (managersRes.ok) {
         const managersJson = await managersRes.json();
@@ -493,7 +493,7 @@ export default function StaffAttendence() {
     }
     
     try {
-      const response = await fetch(`${API_BASE}/api/managers?limit=1000`);
+      const response = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
       if (response.ok) {
         const result = await response.json();
         const managers = result.data || result || [];

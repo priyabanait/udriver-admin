@@ -162,7 +162,42 @@ router.get('/search', async (req, res) => {
     }
 
     const vehicles = await Vehicle.find(filter).lean();
-    res.json(vehicles.map(normalizeVehicleShape));
+    
+    // Fetch all drivers for lookup
+    const Driver = (await import('../models/driver.js')).default;
+    const mongoose = await import('mongoose');
+    const allDrivers = await Driver.find().select('_id id name username mobile phone').lean();
+    
+    const vehiclesWithDriverInfo = vehicles.map(vehicle => {
+      // Resolve assignedDriver to driver info if it's an ObjectId or matches driver fields
+      let driverInfo = null;
+      if (vehicle.assignedDriver) {
+        // Try to match by ObjectId
+        if (mongoose.default.Types.ObjectId.isValid(vehicle.assignedDriver)) {
+          driverInfo = allDrivers.find(d => String(d._id) === String(vehicle.assignedDriver));
+        }
+        // If not found, try to match by mobile, phone, or username
+        if (!driverInfo) {
+          driverInfo = allDrivers.find(d => 
+            d.mobile === vehicle.assignedDriver ||
+            d.phone === vehicle.assignedDriver ||
+            d.username === vehicle.assignedDriver ||
+            String(d.id) === String(vehicle.assignedDriver)
+          );
+        }
+        // If driver found, add driver info to vehicle
+        if (driverInfo) {
+          vehicle.driverDetails = {
+            name: driverInfo.name || driverInfo.username || driverInfo.mobile || driverInfo.phone,
+            mobile: driverInfo.mobile || driverInfo.phone,
+            id: driverInfo._id || driverInfo.id
+          };
+        }
+      }
+      return normalizeVehicleShape(vehicle);
+    });
+    
+    res.json(vehiclesWithDriverInfo);
   } catch (err) {
     console.error('Error searching vehicles:', err);
     res.status(500).json({ message: 'Failed to search vehicles' });
@@ -184,29 +219,60 @@ router.get('/investor/:investorId', async (req, res) => {
 // Get all vehicles
 router.get('/', async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limitParam = req.query.limit;
+    // Enforce pagination - no unlimited option to prevent loading all data
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const requestedLimit = parseInt(req.query.limit) || 10;
+    const MIN_LIMIT = 10;
+    const MAX_LIMIT = 100; // Reduced max limit for safety
 
-    const isUnlimited = limitParam === 'all' || limitParam === '0';
-    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
-    const skip = isUnlimited ? 0 : (page - 1) * limit;
+    // Ensure limit is between MIN and MAX
+    const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+    const skip = (page - 1) * limit;
 
     const sortBy = req.query.sortBy || 'vehicleId';
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
     const total = await Vehicle.countDocuments();
 
-    let query = Vehicle.find()
+    const list = await Vehicle.find()
       .populate('investorId', 'investorName phone email')
-      .sort({ [sortBy]: sortOrder });
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
-    if (!isUnlimited) {
-      query = query.skip(skip).limit(limit);
-    }
-
-    const list = await query.lean();
+    // Fetch all drivers for lookup
+    const Driver = (await import('../models/driver.js')).default;
+    const mongoose = await import('mongoose');
+    const allDrivers = await Driver.find().select('_id id name username mobile phone').lean();
 
     const enhancedList = list.map(vehicle => {
+      // Resolve assignedDriver to driver info if it's an ObjectId or matches driver fields
+      if (vehicle.assignedDriver) {
+        let driverInfo = null;
+        // Try to match by ObjectId
+        if (mongoose.default.Types.ObjectId.isValid(vehicle.assignedDriver)) {
+          driverInfo = allDrivers.find(d => String(d._id) === String(vehicle.assignedDriver));
+        }
+        // If not found, try to match by mobile, phone, or username
+        if (!driverInfo) {
+          driverInfo = allDrivers.find(d => 
+            d.mobile === vehicle.assignedDriver ||
+            d.phone === vehicle.assignedDriver ||
+            d.username === vehicle.assignedDriver ||
+            String(d.id) === String(vehicle.assignedDriver)
+          );
+        }
+        // If driver found, add driver info to vehicle
+        if (driverInfo) {
+          vehicle.driverDetails = {
+            name: driverInfo.name || driverInfo.username || driverInfo.mobile || driverInfo.phone,
+            mobile: driverInfo.mobile || driverInfo.phone,
+            id: driverInfo._id || driverInfo.id
+          };
+        }
+      }
+      
       const normalized = normalizeVehicleShape(vehicle);
       const status = normalized.status || 'inactive';
 
@@ -233,15 +299,13 @@ router.get('/', async (req, res) => {
 
     res.json({
       data: enhancedList,
-      pagination: isUnlimited
-        ? null
-        : {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            hasMore: page * limit < total
-          }
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
     });
   } catch (err) {
     console.error('Error fetching vehicles:', err);

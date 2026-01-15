@@ -34,7 +34,7 @@ const ManagerPage = () => {
       setLoading(true);
       try {
         const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-        const res = await fetch(`${API_BASE}/api/managers?limit=1000`);
+        const res = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
         const result = await res.json();
         const data = result.data || result;
         setManagers(Array.isArray(data) ? data : []);

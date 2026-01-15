@@ -27,6 +27,90 @@ router.get('/categories', async (req, res) => {
   ]);
 });
 
+// Search expenses endpoint
+router.get('/search', async (req, res) => {
+  try {
+    const {
+      q, // general search query
+      title,
+      vendor,
+      description,
+      category,
+      status,
+      minAmount,
+      maxAmount,
+      dateFrom,
+      dateTo
+    } = req.query;
+
+    const filter = {};
+
+    // General search across multiple fields
+    if (q && q.trim()) {
+      const searchRegex = new RegExp(q.trim(), 'i');
+      filter.$or = [
+        { title: searchRegex },
+        { vendor: searchRegex },
+        { description: searchRegex },
+        { category: searchRegex }
+      ];
+    }
+
+    // Specific field filters
+    if (title) filter.title = new RegExp(title, 'i');
+    if (vendor) filter.vendor = new RegExp(vendor, 'i');
+    if (description) filter.description = new RegExp(description, 'i');
+    if (category) filter.category = category;
+    if (status) filter.status = status;
+
+    // Amount range filter
+    if (minAmount || maxAmount) {
+      filter.amount = {};
+      if (minAmount) filter.amount.$gte = Number(minAmount);
+      if (maxAmount) filter.amount.$lte = Number(maxAmount);
+    }
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      filter.date = {};
+      if (dateFrom) filter.date.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        filter.date.$lte = endDate;
+      }
+    }
+
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const sortBy = req.query.sortBy || 'createdAt';
+    const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
+
+    const total = await Expense.countDocuments(filter);
+    const list = await Expense.find(filter)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+    
+    res.json({
+      data: list,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total
+      }
+    });
+  } catch (error) {
+    console.error('Error searching expenses:', error);
+    res.status(500).json({ message: 'Failed to search expenses', error: error.message });
+  }
+});
+
 // List expenses
 router.get('/', async (req, res) => {
   try {
@@ -37,8 +121,22 @@ router.get('/', async (req, res) => {
     const sortBy = req.query.sortBy || 'createdAt';
     const sortOrder = req.query.sortOrder === 'asc' ? 1 : -1;
 
-    const total = await Expense.countDocuments();
-    const list = await Expense.find()
+    // Add search support to main GET endpoint
+    const filter = {};
+    if (req.query.q && req.query.q.trim()) {
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      filter.$or = [
+        { title: searchRegex },
+        { vendor: searchRegex },
+        { description: searchRegex },
+        { category: searchRegex }
+      ];
+    }
+    if (req.query.category) filter.category = req.query.category;
+    if (req.query.status) filter.status = req.query.status;
+
+    const total = await Expense.countDocuments(filter);
+    const list = await Expense.find(filter)
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(limit)

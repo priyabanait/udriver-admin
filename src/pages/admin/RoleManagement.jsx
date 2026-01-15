@@ -48,7 +48,7 @@ export default function RoleManagement() {
   };
 
   const fetchManagers = async () => {
-    const res = await fetch(`${API_BASE}/api/managers?limit=1000`);
+    const res = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
     const json = await res.json();
     setManagers(json.data || []);
   };

@@ -5,8 +5,8 @@ export default function AddWalletAmount() {
   const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
   const [investors, setInvestors] = useState([]);
-  const [selectedInvestor, setSelectedInvestor] = useState('');
   const [investorSearch, setInvestorSearch] = useState('');
+  const [selectedInvestor, setSelectedInvestor] = useState(null);
   const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
 
   const [amount, setAmount] = useState('');
@@ -16,55 +16,81 @@ export default function AddWalletAmount() {
   const [loading, setLoading] = useState(false);
   const [submitLoading, setSubmitLoading] = useState(false);
 
-  // Fetch investors
+  // -----------------------------
+  // Helper
+  // -----------------------------
+  const getInvestorLabel = (inv) =>
+    inv?.investorName || inv?.phone || '';
+
+  // -----------------------------
+  // Search Investors (FILTERS)
+  // -----------------------------
   useEffect(() => {
-    async function fetchInvestors() {
+    if (!showInvestorDropdown) return;
+
+    let cancelled = false;
+    const timer = setTimeout(async () => {
       setLoading(true);
       try {
-        const res = await axios.get(`${API_BASE}/api/investors?limit=1000`);
-        setInvestors(res.data.data || res.data);
-      } catch (err) {
-        console.error('Failed to fetch investors', err);
-      } finally {
-        setLoading(false);
-      }
-    }
-    fetchInvestors();
-  }, []);
+        const res = await axios.get(
+          `${API_BASE}/api/investors/search?q=${encodeURIComponent(
+            investorSearch
+          )}&limit=50`
+        );
 
-  // Fetch wallet when investor changes
+        if (!cancelled) {
+          setInvestors(res.data?.data || res.data || []);
+        }
+      } catch (err) {
+        console.error('Investor search failed', err);
+      } finally {
+        if (!cancelled) setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [investorSearch, showInvestorDropdown]);
+
+  // -----------------------------
+  // Fetch Wallet
+  // -----------------------------
   useEffect(() => {
     async function fetchWallet() {
-      if (!selectedInvestor) {
+      if (!selectedInvestor?.phone) {
         setWallet(null);
         return;
       }
-      setLoading(true);
+
       try {
-        const investor = investors.find(i => (i._id || i.id) === selectedInvestor);
-        if (investor?.phone) {
-          const res = await axios.get(`${API_BASE}/api/investor-wallet/${investor.phone}`);
-          setWallet(res.data);
-        }
+        setLoading(true);
+        const res = await axios.get(
+          `${API_BASE}/api/investor-wallet/${selectedInvestor.phone}`
+        );
+        setWallet(res.data);
       } catch {
         setWallet(null);
       } finally {
         setLoading(false);
       }
     }
-    fetchWallet();
-  }, [selectedInvestor, investors]);
 
-  // Submit wallet amount
+    fetchWallet();
+  }, [selectedInvestor]);
+
+  // -----------------------------
+  // Submit Amount
+  // -----------------------------
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedInvestor || !amount) return;
 
     setSubmitLoading(true);
     try {
-      const investor = investors.find(i => (i._id || i.id) === selectedInvestor);
       await axios.post(`${API_BASE}/api/investor-wallet`, {
-        phone: investor.phone,
+        phone: selectedInvestor.phone,
         amount: Number(amount),
         description,
         type: 'credit',
@@ -73,7 +99,9 @@ export default function AddWalletAmount() {
       setAmount('');
       setDescription('');
 
-      const res = await axios.get(`${API_BASE}/api/investor-wallet/${investor.phone}`);
+      const res = await axios.get(
+        `${API_BASE}/api/investor-wallet/${selectedInvestor.phone}`
+      );
       setWallet(res.data);
     } catch {
       alert('Failed to add amount');
@@ -82,19 +110,16 @@ export default function AddWalletAmount() {
     }
   };
 
-  const selectedInvestorObj = investors.find(
-    i => (i._id || i.id) === selectedInvestor
-  );
-
+  // -----------------------------
+  // UI
+  // -----------------------------
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex justify-center">
       <div className="w-full max-w-xl bg-white shadow-lg rounded-2xl p-8">
-
-        <h1 className="text-2xl font-bold mb-6">Add Wallet Amount</h1>
+        <h1 className="text-2xl font-bold mb-6">Addsd Wallet Amount</h1>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
-          
-          {/* Select Investor */}
+          {/* INVESTOR SEARCH */}
           <div className="relative">
             <label className="block text-sm font-medium mb-1">
               Select Investor
@@ -104,32 +129,31 @@ export default function AddWalletAmount() {
               type="text"
               className="w-full border rounded-lg px-4 py-3"
               placeholder="Search investor..."
-              value={
-                investorSearch ||
-                (selectedInvestorObj
-                  ? `${selectedInvestorObj.investorName} (${selectedInvestorObj.phone})`
-                  : '')
-              }
+              value={investorSearch}
               onChange={(e) => {
                 setInvestorSearch(e.target.value);
+                setSelectedInvestor(null);
                 setShowInvestorDropdown(true);
               }}
               onFocus={() => setShowInvestorDropdown(true)}
             />
 
-            {selectedInvestor && (
+            {/* CLEAR */}
+            {investorSearch && (
               <button
                 type="button"
                 className="absolute right-3 top-1/2 -translate-y-1/2 text-gray-400"
                 onClick={() => {
-                  setSelectedInvestor('');
                   setInvestorSearch('');
+                  setSelectedInvestor(null);
+                  setWallet(null);
                 }}
               >
                 ✕
               </button>
             )}
 
+            {/* DROPDOWN */}
             {showInvestorDropdown && (
               <>
                 <div
@@ -138,71 +162,61 @@ export default function AddWalletAmount() {
                 />
 
                 <div className="absolute z-20 w-full mt-1 bg-white border rounded-lg shadow max-h-60 overflow-auto">
-                  {investors
-                    .filter(inv => {
-                      const s = investorSearch.toLowerCase();
-                      return (
-                        inv.investorName?.toLowerCase().includes(s) ||
-                        inv.phone?.includes(s)
-                      );
-                    })
-                    .map(inv => {
-                      const id = inv._id || inv.id;
-                      return (
-                        <div
-                          key={id}
-                          className="px-4 py-2 cursor-pointer hover:bg-blue-50"
-                          onClick={() => {
-                            setSelectedInvestor(id);
-                            setInvestorSearch('');
-                            setShowInvestorDropdown(false);
-                          }}
-                        >
-                          <div className="font-medium">
-                            {inv.investorName}
-                          </div>
-                          <div className="text-xs text-gray-500">
-                            {inv.phone}
-                          </div>
-                        </div>
-                      );
-                    })}
+                  {loading && (
+                    <div className="px-4 py-2 text-sm text-gray-400">
+                      Searching...
+                    </div>
+                  )}
 
-                  {investors.filter(inv =>
-                    inv.investorName
-                      ?.toLowerCase()
-                      .includes(investorSearch.toLowerCase()) ||
-                    inv.phone?.includes(investorSearch)
-                  ).length === 0 && (
+                  {!loading && investors.length === 0 && (
                     <div className="px-4 py-2 text-gray-400 text-sm">
                       No investors found
                     </div>
                   )}
+
+                  {investors.map(inv => (
+                    <div
+                      key={inv._id || inv.id}
+                      className="px-4 py-2 cursor-pointer hover:bg-blue-50"
+                      onClick={() => {
+                        setSelectedInvestor(inv);
+                        setInvestorSearch(getInvestorLabel(inv));
+                        setShowInvestorDropdown(false);
+                      }}
+                    >
+                      <div className="font-medium">
+                        {inv.investorName}
+                      </div>
+                      <div className="text-xs text-gray-500">
+                        {inv.phone}
+                      </div>
+                    </div>
+                  ))}
                 </div>
               </>
             )}
           </div>
 
-          {/* Amount */}
+          {/* AMOUNT */}
           <div>
             <label className="block font-medium mb-1">Enter Amount</label>
             <input
               type="number"
               className="w-full border rounded-lg px-4 py-3"
               value={amount}
-              onChange={e => setAmount(e.target.value)}
+              onChange={(e) => setAmount(e.target.value)}
               disabled={!selectedInvestor || submitLoading}
             />
           </div>
 
-          {/* Description */}
+          {/* DESCRIPTION */}
           <div>
             <label className="block font-medium mb-1">Description</label>
             <textarea
               rows="3"
               className="w-full border rounded-lg px-4 py-3"
               value={description}
-              onChange={e => setDescription(e.target.value)}
+              onChange={(e) => setDescription(e.target.value)}
               disabled={!selectedInvestor || submitLoading}
             />
           </div>
@@ -216,7 +230,7 @@ export default function AddWalletAmount() {
           </button>
         </form>
 
-        {/* Wallet Details */}
+        {/* WALLET */}
         {wallet && (
           <div className="mt-8">
             <h2 className="font-semibold mb-2">Wallet Balance</h2>
@@ -238,7 +252,9 @@ export default function AddWalletAmount() {
                     <td className="border px-2 py-1">{i + 1}</td>
                     <td className="border px-2 py-1">₹{txn.amount}</td>
                     <td className="border px-2 py-1">{txn.type}</td>
-                    <td className="border px-2 py-1">{txn.description || '-'}</td>
+                    <td className="border px-2 py-1">
+                      {txn.description || '-'}
+                    </td>
                     <td className="border px-2 py-1">
                       {new Date(txn.date).toLocaleString()}
                     </td>
@@ -248,7 +264,6 @@ export default function AddWalletAmount() {
             </table>
           </div>
         )}
-
       </div>
     </div>
   );

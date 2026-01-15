@@ -23,6 +23,12 @@ export default function SendNotification() {
   const [drivers, setDrivers] = useState([]);
   const [investors, setInvestors] = useState([]);
   const [loadingUsers, setLoadingUsers] = useState(false);
+  const [driverPage, setDriverPage] = useState(1);
+  const [investorPage, setInvestorPage] = useState(1);
+  const [loadingMoreDrivers, setLoadingMoreDrivers] = useState(false);
+  const [loadingMoreInvestors, setLoadingMoreInvestors] = useState(false);
+  const [driverHasMore, setDriverHasMore] = useState(false);
+  const [investorHasMore, setInvestorHasMore] = useState(false);
 
   const [commonData, setCommonData] = useState({
     title: "",
@@ -54,6 +60,8 @@ export default function SendNotification() {
       // Clear data when switching away from specific mode
       setDrivers([]);
       setInvestors([]);
+      setDriverPage(1);
+      setInvestorPage(1);
       return;
     }
 
@@ -71,56 +79,67 @@ export default function SendNotification() {
           fetchPromises.push(
             axios.get(`${API_BASE}/api/notifications/admin/drivers`, {
               headers,
-              params: { search: driverSearch || '', limit: 50 }
+              params: { search: driverSearch || '', page: driverPage, limit: 100 }
             }).catch(err => {
               console.error("Error fetching drivers:", err.response?.data || err.message);
-              return { data: { drivers: [] } };
+              return { data: { drivers: [], pagination: { hasMore: false } } };
             })
           );
         } else {
-          fetchPromises.push(Promise.resolve({ data: { drivers: [] } }));
+          fetchPromises.push(Promise.resolve({ data: { drivers: [], pagination: { hasMore: false } } }));
         }
 
         if (apps.driver) {
           fetchPromises.push(
             axios.get(`${API_BASE}/api/notifications/admin/investors`, {
               headers,
-              params: { search: investorSearch || '', limit: 50 }
+              params: { search: investorSearch || '', page: investorPage, limit: 100 }
             }).catch(err => {
               console.error("Error fetching investors:", err.response?.data || err.message);
-              return { data: { investors: [] } };
+              return { data: { investors: [], pagination: { hasMore: false } } };
             })
           );
         } else {
-          fetchPromises.push(Promise.resolve({ data: { investors: [] } }));
+          fetchPromises.push(Promise.resolve({ data: { investors: [], pagination: { hasMore: false } } }));
         }
 
         const [driversRes, investorsRes] = await Promise.all(fetchPromises);
 
         const driversData = driversRes.data?.drivers || [];
         const investorsData = investorsRes.data?.investors || [];
+        const driversPagination = driversRes.data?.pagination || {};
+        const investorsPagination = investorsRes.data?.pagination || {};
         
-        console.log(`Fetched ${driversData.length} drivers and ${investorsData.length} investors`);
+        console.log(`Fetched ${driversData.length} drivers (page ${driverPage})`, driversPagination);
+        console.log(`Fetched ${investorsData.length} investors (page ${investorPage})`, investorsPagination);
         
-        setDrivers(driversData);
-        setInvestors(investorsData);
+        // When page is 1 (new search or first load), replace data. Otherwise, append (Load More)
+        if (driverPage === 1) {
+          setDrivers(driversData);
+        } else {
+          setDrivers(prev => [...prev, ...driversData]);
+        }
+        
+        if (investorPage === 1) {
+          setInvestors(investorsData);
+        } else {
+          setInvestors(prev => [...prev, ...investorsData]);
+        }
+        
+        setDriverHasMore(driversPagination.hasMore || false);
+        setInvestorHasMore(investorsPagination.hasMore || false);
       } catch (err) {
         console.error("Error fetching users:", err);
-        setDrivers([]);
-        setInvestors([]);
+        if (driverPage === 1) setDrivers([]);
+        if (investorPage === 1) setInvestors([]);
       } finally {
         setLoadingUsers(false);
       }
     };
 
-    // Debounce search queries, but fetch immediately when switching to specific mode
-    const isInitialLoad = sendMode === "specific" && driverSearch === "" && investorSearch === "";
-    const timeoutId = setTimeout(() => {
-      fetchUsers();
-    }, isInitialLoad ? 0 : 300); // No delay for initial load, 300ms debounce for search
-
-    return () => clearTimeout(timeoutId);
-  }, [sendMode, driverSearch, investorSearch, apps.customer, apps.driver, auth?.token]);
+    // Fetch immediately without debounce
+    fetchUsers();
+  }, [sendMode, driverSearch, investorSearch, apps.customer, apps.driver, auth?.token, driverPage, investorPage]);
 
   const handleSend = async () => {
     // Validation
@@ -417,6 +436,7 @@ export default function SendNotification() {
               <button
                 onClick={() => {
                   setDriverSearch("");
+                  setDriverPage(1);
                   // Trigger fetch by clearing and resetting
                   const fetchDrivers = async () => {
                     setLoadingUsers(true);
@@ -425,9 +445,10 @@ export default function SendNotification() {
                       const headers = token ? { Authorization: `Bearer ${token}` } : {};
                       const driversRes = await axios.get(`${API_BASE}/api/notifications/admin/drivers`, {
                         headers,
-                        params: { search: '', limit: 50 }
+                        params: { search: '', page: 1, limit: 100 }
                       });
                       setDrivers(driversRes.data?.drivers || []);
+                      setDriverHasMore(driversRes.data?.pagination?.hasMore || false);
                     } catch (err) {
                       console.error("Error fetching drivers:", err);
                       setDrivers([]);
@@ -481,6 +502,37 @@ export default function SendNotification() {
                 ))
               )}
             </div>
+            {driverHasMore && (
+              <div className="mt-3 text-center">
+                <button
+                  onClick={async () => {
+                    setLoadingMoreDrivers(true);
+                    try {
+                      const token = auth?.token || localStorage.getItem('token');
+                      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                      const nextPage = driverPage + 1;
+                      console.log(`Loading more drivers - page: ${nextPage}, search: "${driverSearch}"`);
+                      const driversRes = await axios.get(`${API_BASE}/api/notifications/admin/drivers`, {
+                        headers,
+                        params: { search: driverSearch || '', page: nextPage, limit: 100 }
+                      });
+                      console.log(`Got ${driversRes.data?.drivers?.length} more drivers`, driversRes.data?.pagination);
+                      setDrivers([...drivers, ...(driversRes.data?.drivers || [])]);
+                      setDriverPage(nextPage);
+                      setDriverHasMore(driversRes.data?.pagination?.hasMore || false);
+                    } catch (err) {
+                      console.error("Error loading more drivers:", err);
+                    } finally {
+                      setLoadingMoreDrivers(false);
+                    }
+                  }}
+                  disabled={loadingMoreDrivers}
+                  className="text-sm text-blue-600 hover:text-blue-800 px-4 py-2 border border-blue-300 rounded hover:bg-blue-50 disabled:opacity-50"
+                >
+                  {loadingMoreDrivers ? "Loading..." : "Load More Drivers"}
+                </button>
+              </div>
+            )}
             {selectedDrivers.length > 0 && (
               <div className="mt-3">
                 <p className="text-sm text-gray-600 mb-2">Selected Drivers ({selectedDrivers.length}):</p>
@@ -512,6 +564,7 @@ export default function SendNotification() {
               <button
                 onClick={() => {
                   setInvestorSearch("");
+                  setInvestorPage(1);
                   // Trigger fetch by clearing and resetting
                   const fetchInvestors = async () => {
                     setLoadingUsers(true);
@@ -520,9 +573,10 @@ export default function SendNotification() {
                       const headers = token ? { Authorization: `Bearer ${token}` } : {};
                       const investorsRes = await axios.get(`${API_BASE}/api/notifications/admin/investors`, {
                         headers,
-                        params: { search: '', limit: 50 }
+                        params: { search: '', page: 1, limit: 100 }
                       });
                       setInvestors(investorsRes.data?.investors || []);
+                      setInvestorHasMore(investorsRes.data?.pagination?.hasMore || false);
                     } catch (err) {
                       console.error("Error fetching investors:", err);
                       setInvestors([]);
@@ -576,6 +630,37 @@ export default function SendNotification() {
                 ))
               )}
             </div>
+            {investorHasMore && (
+              <div className="mt-3 text-center">
+                <button
+                  onClick={async () => {
+                    setLoadingMoreInvestors(true);
+                    try {
+                      const token = auth?.token || localStorage.getItem('token');
+                      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+                      const nextPage = investorPage + 1;
+                      console.log(`Loading more investors - page: ${nextPage}, search: "${investorSearch}"`);
+                      const investorsRes = await axios.get(`${API_BASE}/api/notifications/admin/investors`, {
+                        headers,
+                        params: { search: investorSearch || '', page: nextPage, limit: 100 }
+                      });
+                      console.log(`Got ${investorsRes.data?.investors?.length} more investors`, investorsRes.data?.pagination);
+                      setInvestors([...investors, ...(investorsRes.data?.investors || [])]);
+                      setInvestorPage(nextPage);
+                      setInvestorHasMore(investorsRes.data?.pagination?.hasMore || false);
+                    } catch (err) {
+                      console.error("Error loading more investors:", err);
+                    } finally {
+                      setLoadingMoreInvestors(false);
+                    }
+                  }}
+                  disabled={loadingMoreInvestors}
+                  className="text-sm text-green-600 hover:text-green-800 px-4 py-2 border border-green-300 rounded hover:bg-green-50 disabled:opacity-50"
+                >
+                  {loadingMoreInvestors ? "Loading..." : "Load More Investors"}
+                </button>
+              </div>
+            )}
             {selectedInvestors.length > 0 && (
               <div className="mt-3">
                 <p className="text-sm text-gray-600 mb-2">Selected Investors ({selectedInvestors.length}):</p>

@@ -435,7 +435,10 @@ router.post("/admin/send", async (req, res) => {
  */
 router.get("/admin/drivers", async (req, res) => {
   try {
-    const { search = "", limit = 100 } = req.query;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 10), 100); // Between 10-100
+    const { search = "" } = req.query;
+    
     let query = {};
 
     // If search is provided, search across name, phone, email, and mobile fields
@@ -450,14 +453,28 @@ router.get("/admin/drivers", async (req, res) => {
       };
     }
 
+    const total = await Driver.countDocuments(query);
+    const skip = (page - 1) * limit;
+    const totalPages = Math.ceil(total / limit);
+
     const drivers = await Driver.find(query)
       .select("_id name phone mobile email")
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    console.log(`Fetched ${drivers.length} drivers (search: "${search}")`);
-    res.json({ drivers: drivers || [] });
+    console.log(`Fetched ${drivers.length} drivers (page: ${page}, limit: ${limit}, search: "${search}")`);
+    res.json({ 
+      drivers: drivers || [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages
+      }
+    });
   } catch (err) {
     console.error("Error fetching drivers:", err);
     res
@@ -472,7 +489,10 @@ router.get("/admin/drivers", async (req, res) => {
  */
 router.get("/admin/investors", async (req, res) => {
   try {
-    const { search = "", limit = 100 } = req.query;
+    const page = Math.max(parseInt(req.query.page) || 1, 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 100, 10), 100); // Between 10-100
+    const { search = "" } = req.query;
+    
     let query = {};
 
     // If search is provided, search across investorName, phone, and email fields
@@ -486,14 +506,28 @@ router.get("/admin/investors", async (req, res) => {
       };
     }
 
+    const total = await Investor.countDocuments(query);
+    const skip = (page - 1) * limit;
+    const totalPages = Math.ceil(total / limit);
+
     const investors = await Investor.find(query)
       .select("_id investorName phone email")
       .sort({ createdAt: -1 })
-      .limit(parseInt(limit))
+      .skip(skip)
+      .limit(limit)
       .lean();
 
-    console.log(`Fetched ${investors.length} investors (search: "${search}")`);
-    res.json({ investors: investors || [] });
+    console.log(`Fetched ${investors.length} investors (page: ${page}, limit: ${limit}, search: "${search}")`);
+    res.json({ 
+      investors: investors || [],
+      pagination: {
+        page,
+        limit,
+        total,
+        totalPages,
+        hasMore: page < totalPages
+      }
+    });
   } catch (err) {
     console.error("Error fetching investors:", err);
     res

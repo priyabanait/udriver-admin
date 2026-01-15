@@ -126,36 +126,108 @@ function stripAuthFields(source) {
   return cleaned;
 }
 
-router.get("/", async (req, res) => {
+// Search drivers endpoint
+router.get("/search", async (req, res) => {
   try {
-    const unlimited = req.query.unlimited === "true";
+    const {
+      q, // general search query
+      name,
+      email,
+      phone,
+      mobile,
+      username,
+      driverNo,
+      udbId,
+      employeeId,
+      aadharNumber,
+      panNumber,
+      status,
+      planType,
+      kycStatus,
+      city,
+      state
+    } = req.query;
 
-    const page = parseInt(req.query.page) || 1;
+    const filter = {};
+
+    // General search across multiple fields
+    if (q && q.trim()) {
+      const searchRegex = new RegExp(q.trim(), 'i');
+      const searchRegexUpper = new RegExp(q.trim().toUpperCase(), 'i');
+      const normalized = String(q).replace(/\D/g, '').trim();
+      const last10 = normalized.slice(-10);
+      
+      filter.$or = [
+        { name: searchRegex },
+        { email: searchRegex },
+        { username: searchRegex },
+        { driverNo: searchRegex },
+        { udbId: searchRegex },
+        { employeeId: searchRegex },
+        { aadharNumber: searchRegex },
+        { panNumber: searchRegexUpper }
+      ];
+      
+      // Phone number searches
+      if (normalized) {
+        filter.$or.push({ mobile: normalized });
+        filter.$or.push({ phone: normalized });
+        if (last10.length >= 6) {
+          filter.$or.push({ mobile: { $regex: `${last10}$` } });
+          filter.$or.push({ phone: { $regex: `${last10}$` } });
+        }
+      }
+    }
+
+    // Specific field filters
+    if (name) filter.name = new RegExp(name, 'i');
+    if (email) filter.email = new RegExp(email, 'i');
+    if (phone) {
+      const normalized = String(phone).replace(/\D/g, '');
+      if (!filter.$or) filter.$or = [];
+      filter.$or.push({ phone: normalized });
+      filter.$or.push({ mobile: normalized });
+    }
+    if (mobile) {
+      const normalized = String(mobile).replace(/\D/g, '');
+      if (!filter.$or) filter.$or = [];
+      if (!filter.$or.some(item => item.mobile === normalized)) {
+        filter.$or.push({ mobile: normalized });
+      }
+      if (!filter.$or.some(item => item.phone === normalized)) {
+        filter.$or.push({ phone: normalized });
+      }
+    }
+    if (username) filter.username = new RegExp(username, 'i');
+    if (driverNo) filter.driverNo = new RegExp(driverNo, 'i');
+    if (udbId) filter.udbId = new RegExp(udbId, 'i');
+    if (employeeId) filter.employeeId = new RegExp(employeeId, 'i');
+    if (aadharNumber) filter.aadharNumber = new RegExp(aadharNumber, 'i');
+    if (panNumber) filter.panNumber = panNumber.toUpperCase();
+    if (status) filter.status = status;
+    if (planType) filter.planType = new RegExp(planType, 'i');
+    if (kycStatus) filter.kycStatus = kycStatus;
+    if (city) filter.city = new RegExp(city, 'i');
+    if (state) filter.state = new RegExp(state, 'i');
+
+    // Pagination
+    const page = Math.max(1, parseInt(req.query.page) || 1);
     const requestedLimit = parseInt(req.query.limit) || 10;
-    const MAX_LIMIT = 1000;
-
-    const limit = unlimited
-      ? 0               // MongoDB: limit(0) = no limit
-      : Math.min(requestedLimit, MAX_LIMIT);
-
-    const skip = unlimited ? 0 : (page - 1) * limit;
+    const MIN_LIMIT = 10;
+    const MAX_LIMIT = 100;
+    const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+    const skip = (page - 1) * limit;
 
     const sortBy = req.query.sortBy || "createdAt";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    const manualOnly = req.query.manualOnly === "true";
-    const filter = manualOnly ? { isManualEntry: true } : {};
-
     const total = await Driver.countDocuments(filter);
 
-    let query = Driver.find(filter)
-      .sort({ [sortBy]: sortOrder });
-
-    if (!unlimited) {
-      query = query.skip(skip).limit(limit);
-    }
-
-    let list = await query.lean();
+    let list = await Driver.find(filter)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     list = list.map(item => ({
       ...item,
@@ -168,18 +240,98 @@ router.get("/", async (req, res) => {
 
     res.json({
       data: list,
-      pagination: unlimited
-        ? {
-            total,
-            unlimited: true,
-          }
-        : {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            hasMore: page * limit < total,
-          },
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    });
+  } catch (error) {
+    console.error("Error searching drivers:", error);
+    res.status(500).json({
+      message: "Failed to search drivers",
+      error: error.message,
+    });
+  }
+});
+
+router.get("/", async (req, res) => {
+  try {
+    // Enforce pagination - no unlimited option to prevent loading all data
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const requestedLimit = parseInt(req.query.limit) || 10;
+    const MIN_LIMIT = 10;
+    const MAX_LIMIT = 100; // Reduced max limit for safety
+
+    // Ensure limit is between MIN and MAX
+    const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+
+    const skip = (page - 1) * limit;
+
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const manualOnly = req.query.manualOnly === "true";
+    const filter = manualOnly ? { isManualEntry: true } : {};
+
+    // Add search support to main GET endpoint
+    if (req.query.q && req.query.q.trim()) {
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      const normalized = String(req.query.q).replace(/\D/g, '').trim();
+      const last10 = normalized.slice(-10);
+      
+      const searchFilter = {
+        $or: [
+          { name: searchRegex },
+          { email: searchRegex },
+          { username: searchRegex },
+          { driverNo: searchRegex },
+          { udbId: searchRegex },
+          { employeeId: searchRegex }
+        ]
+      };
+      
+      if (normalized) {
+        searchFilter.$or.push({ mobile: normalized });
+        searchFilter.$or.push({ phone: normalized });
+        if (last10.length >= 6) {
+          searchFilter.$or.push({ mobile: { $regex: `${last10}$` } });
+          searchFilter.$or.push({ phone: { $regex: `${last10}$` } });
+        }
+      }
+      
+      filter.$and = filter.$and || [];
+      filter.$and.push(searchFilter);
+    }
+
+    const total = await Driver.countDocuments(filter);
+
+    let list = await Driver.find(filter)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    list = list.map(item => ({
+      ...item,
+      joinDate:
+        normalizeToDateOnly(item.joinDate) ||
+        (item.createdAt
+          ? new Date(item.createdAt).toISOString().split("T")[0]
+          : undefined),
+    }));
+
+    res.json({
+      data: list,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
     });
   } catch (error) {
     console.error("Error fetching drivers:", error);
@@ -201,8 +353,26 @@ router.get("/signup/credentials", async (req, res) => {
     const sortBy = req.query.sortBy || "signupDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    const total = await DriverSignup.countDocuments();
-    const list = await DriverSignup.find()
+    // Add search support
+    const filter = {};
+    if (req.query.q && req.query.q.trim()) {
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      const normalized = String(req.query.q).replace(/\D/g, '').trim();
+      
+      filter.$or = [
+        { username: searchRegex },
+        { mobile: searchRegex },
+        { status: searchRegex },
+        { kycStatus: searchRegex }
+      ];
+      
+      if (normalized) {
+        filter.$or.push({ mobile: normalized });
+      }
+    }
+
+    const total = await DriverSignup.countDocuments(filter);
+    const list = await DriverSignup.find(filter)
       .select(
         "username mobile password status kycStatus signupDate registrationCompleted name profilePhoto signature licenseDocument aadharDocument aadharDocumentBack panDocument bankDocument electricBillDocument"
       )

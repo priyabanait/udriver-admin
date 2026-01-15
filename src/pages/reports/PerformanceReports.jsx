@@ -54,13 +54,13 @@ export default function PerformanceReports() {
       try {
         const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         
-        // Fetch all performance-related data in parallel
+        // Fetch all performance-related data in parallel with pagination
         const [driversRes, vehiclesRes, expensesRes, transactionsRes, ticketsRes] = await Promise.all([
-          fetch(`${API_BASE}/api/drivers?limit=1000`),
-          fetch(`${API_BASE}/api/vehicles?limit=1000`),
-          fetch(`${API_BASE}/api/expenses?limit=1000`),
-          fetch(`${API_BASE}/api/transactions?limit=1000`),
-          fetch(`${API_BASE}/api/tickets?limit=1000`).catch(() => ({ ok: false }))
+          fetch(`${API_BASE}/api/drivers?page=1&limit=100`),
+          fetch(`${API_BASE}/api/vehicles?page=1&limit=100`),
+          fetch(`${API_BASE}/api/expenses?page=1&limit=100`),
+          fetch(`${API_BASE}/api/transactions?page=1&limit=100`),
+          fetch(`${API_BASE}/api/tickets?page=1&limit=100`).catch(() => ({ ok: false }))
         ]);
 
         if (mounted) {

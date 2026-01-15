@@ -41,31 +41,14 @@ export default function VehiclesList() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
   const [showDetailModal, setShowDetailModal] = useState(false);
-const [currentPage, setCurrentPage] = useState(1);
-const rowsPerPage = 10;
- const filtered = vehiclesData.filter(v => {
-    const q = searchTerm.trim().toLowerCase();
-    const matchesQ = !q 
-      || (v.registrationNumber||'').toLowerCase().includes(q) 
-      || (v.model||'').toLowerCase().includes(q) 
-      || (v.carName||'').toLowerCase().includes(q)
-      || (v.brand||v.make||'').toLowerCase().includes(q)
-      || (v.category||'').toLowerCase().includes(q)
-      || (v.ownerName||'').toLowerCase().includes(q);
-    const matchesStatus = statusFilter === 'all' || v.status === statusFilter;
-    const matchesKyc = kycFilter === 'all' || ((v.kycStatus || v.kyc || '').toString().toLowerCase() === kycFilter);
-    return matchesQ && matchesStatus && matchesKyc;
-  });
-const totalPages = Math.ceil(filtered.length / rowsPerPage);
-
-const paginatedVehicles = filtered.slice(
-  (currentPage - 1) * rowsPerPage,
-  currentPage * rowsPerPage
-);
-
-useEffect(() => {
-  setCurrentPage(1);
-}, [filtered.length]);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [paginationInfo, setPaginationInfo] = useState({});
+  const [totalVehicles, setTotalVehicles] = useState(0);
+  
+  // Server-side filtering is now used via API, so we just use vehiclesData directly
+  // The filtered logic has been moved to the backend search endpoint
+  const paginatedVehicles = vehiclesData;
   
   // Auth helpers for deployed backend
   const getAuthHeaders = () => {
@@ -98,17 +81,35 @@ useEffect(() => {
     return Number.isFinite(numericId) ? { ...vehicle, vehicleId: numericId } : { ...vehicle };
   }, []);
 
-  useEffect(() => {
-    let mounted = true;
-    let handleVehicleAssigned = null;
-    (async function fetchAll(){
-      setLoading(true);
-      try{
+  const fetchAll = async () => {
+    setLoading(true);
+    try{
        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+       
+       // Build vehicle query params
+       let vehicleParams = new URLSearchParams({
+         page: currentPage.toString(),
+         limit: pageSize.toString()
+       });
+       if (searchTerm && searchTerm.trim()) {
+         vehicleParams.append('q', searchTerm.trim());
+       }
+       if (statusFilter && statusFilter !== 'all') {
+         vehicleParams.append('status', statusFilter);
+       }
+       if (kycFilter && kycFilter !== 'all') {
+         vehicleParams.append('kycStatus', kycFilter);
+       }
+       
+       // Use search endpoint if search term or filters are provided
+       const vehicleEndpoint = (searchTerm && searchTerm.trim()) || statusFilter !== 'all' || kycFilter !== 'all'
+         ? `${API_BASE}/api/vehicles/search?${vehicleParams.toString()}`
+         : `${API_BASE}/api/vehicles?${vehicleParams.toString()}`;
+       
         const [vehicleRes, driverRes, managerRes] = await Promise.all([
-          fetch(`${API_BASE}/api/vehicles?limit=all`),
-          fetch(`${API_BASE}/api/drivers?unlimited=true`),
-          fetch(`${API_BASE}/api/managers?limit=1000`)
+          fetch(vehicleEndpoint),
+          fetch(`${API_BASE}/api/drivers?page=1&limit=100`),
+          fetch(`${API_BASE}/api/managers?limit=100`)
         ]);
         if(!vehicleRes.ok) { throw new Error('Failed to load vehicles'); }
         if(!driverRes.ok) { throw new Error('Failed to load drivers'); }
@@ -120,37 +121,67 @@ useEffect(() => {
         const driverData = driverResult.data || driverResult;
         const managerData = managerResult.data || managerResult;
         const normalized = Array.isArray(vehicleData) ? vehicleData.map(normalizeVehicle) : [];
-        if(mounted) setVehiclesData(normalized);
-        if(mounted) setDrivers(driverData);
-        if(mounted) setManagers(managerData);
-
-        // Listen for vehicle assignment events to refresh a single vehicle row
-        handleVehicleAssigned = async (e) => {
-          try {
-            const vid = e?.detail?.vehicleId;
-            if (!vid) return;
-            const id = vid; // already numeric id where possible
-            const res = await fetch(`${API_BASE}/api/vehicles/${id}`);
-            if (!res.ok) return;
-            const v = await res.json();
-            const n = normalizeVehicle(v);
-            setVehiclesData(prev => prev.map(x => resolveApiVehicleId(x) === resolveApiVehicleId(n) ? n : x));
-          } catch (err) {
-            console.warn('vehicleAssigned handler failed', err);
-          }
-        };
-        window.addEventListener('vehicleAssigned', handleVehicleAssigned);
+        setVehiclesData(normalized);
+        setDrivers(driverData);
+        setManagers(managerData);
+        
+        // Store pagination info
+        if(vehicleResult.pagination) {
+          setPaginationInfo(vehicleResult.pagination);
+          setTotalVehicles(vehicleResult.pagination.total || 0);
+        }
 
       }catch(err){
         console.error(err);
         setError(err.message || 'Failed to load vehicles');
         toast.error('Failed to load vehicles');
       }finally{
-        if(mounted) setLoading(false);
+        setLoading(false);
       }
-    })();
-    return () => { mounted = false; if (handleVehicleAssigned) window.removeEventListener('vehicleAssigned', handleVehicleAssigned); };
-  }, [normalizeVehicle]);
+  };
+
+  useEffect(() => {
+    let handleVehicleAssigned = null;
+    
+    fetchAll();
+    
+    // Listen for vehicle assignment events to refresh a single vehicle row
+    handleVehicleAssigned = async (e) => {
+      try {
+        const vid = e?.detail?.vehicleId;
+        if (!vid) return;
+        const id = vid;
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const res = await fetch(`${API_BASE}/api/vehicles/${id}`);
+        if (!res.ok) return;
+        const v = await res.json();
+        const n = normalizeVehicle(v);
+        setVehiclesData(prev => prev.map(x => resolveApiVehicleId(x) === resolveApiVehicleId(n) ? n : x));
+      } catch (err) {
+        console.warn('vehicleAssigned handler failed', err);
+      }
+    };
+    window.addEventListener('vehicleAssigned', handleVehicleAssigned);
+
+    return () => {
+      if (handleVehicleAssigned) {
+        window.removeEventListener('vehicleAssigned', handleVehicleAssigned);
+      }
+    };
+  }, [normalizeVehicle, currentPage, pageSize, searchTerm, statusFilter, kycFilter]);
+
+  // Refetch when search or filters change (with debounce for search)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      if (currentPage === 1) {
+        fetchAll();
+      } else {
+        setCurrentPage(1); // This will trigger the main useEffect
+      }
+    }, searchTerm ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, kycFilter]);
 
   const getStatusBadge = (status) => {
     if (status === 'active') return <Badge variant="success">Active</Badge>;
@@ -518,7 +549,7 @@ useEffect(() => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Vehicles</p>
-                <p className="text-2xl font-bold text-gray-900">{vehiclesData.length}</p>
+                <p className="text-2xl font-bold text-gray-900">{paginationInfo.total || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -631,13 +662,13 @@ useEffect(() => {
 
       <Card>
         <CardHeader>
-          <CardTitle>Vehicles List ({filtered.length})</CardTitle>
+          <CardTitle>Vehicles List ({paginatedVehicles.length})</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading && <div className="p-4 text-center text-sm text-gray-600">Loading vehicles...</div>}
           {error && <div className="p-4 text-center text-sm text-red-600">{error}</div>}
-          {!loading && !error && filtered.length === 0 && <div className="p-6 text-center text-sm text-gray-600">No vehicle found for the current search or filters.</div>}
-          {filtered.length > 0 && (
+          {!loading && !error && paginatedVehicles.length === 0 && <div className="p-6 text-center text-sm text-gray-600">No vehicle found for the current search or filters.</div>}
+          {paginatedVehicles.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -761,11 +792,11 @@ useEffect(() => {
             </Table>
           )}
         </CardContent>
-        {filtered.length > rowsPerPage && (
+        {paginationInfo.totalPages > 1 && (
   <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
     <div className="text-gray-600">
-      Showing {(currentPage - 1) * rowsPerPage + 1} –
-      {Math.min(currentPage * rowsPerPage, filtered.length)} of {filtered.length}
+      Showing {(currentPage - 1) * pageSize + 1} –
+      {Math.min(currentPage * pageSize, paginationInfo.total)} of {paginationInfo.total}
     </div>
 
     <div className="flex items-center gap-2">
@@ -778,11 +809,11 @@ useEffect(() => {
       </button>
 
       <span className="px-2">
-        Page {currentPage} of {totalPages}
+        Page {currentPage} of {paginationInfo.totalPages}
       </span>
 
       <button
-        disabled={currentPage === totalPages}
+        disabled={currentPage === paginationInfo.totalPages}
         onClick={() => setCurrentPage(p => p + 1)}
         className="px-3 py-1 border rounded disabled:opacity-50"
       >

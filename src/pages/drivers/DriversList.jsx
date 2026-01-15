@@ -53,6 +53,7 @@ export default function DriversList() {
   const [dailyPlans, setDailyPlans] = useState([]);
   const [assigningPlanFor, setAssigningPlanFor] = useState(null);
   const [vehicles, setVehicles] = useState([]);
+  const [vehicleOptions, setVehicleOptions] = useState([]);
   const [assigningVehicleFor, setAssigningVehicleFor] = useState(null);
 const [vehicleSearch, setVehicleSearch] = useState('');
 const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
@@ -68,21 +69,65 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
   const [signingFor, setSigningFor] = useState(null);
   const [updatingSignature, setUpdatingSignature] = useState(false);
 
-  const fetchDrivers = async () => {
+  // Pagination state
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize, setPageSize] = useState(10);
+  const [totalDrivers, setTotalDrivers] = useState(0);
+  const [paginationInfo, setPaginationInfo] = useState({});
+
+  const fetchDrivers = async (page = 1) => {
     setLoading(true);
     setError(null);
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
-      // Fetch manual drivers
-      const res = await fetch(`${API_BASE}/api/drivers?unlimited=true`);
+      // Build query params
+      let queryParams = new URLSearchParams({
+        page: page,
+        limit: pageSize
+      });
+
+      // Add search query if provided
+      if (searchTerm && searchTerm.trim()) {
+        queryParams.append('q', searchTerm.trim());
+      }
+
+      // Add status filter
+      if (statusFilter && statusFilter !== 'all') {
+        queryParams.append('status', statusFilter);
+      }
+
+      // Add plan filter
+      if (planFilter && planFilter !== 'all') {
+        queryParams.append('planType', planFilter);
+      }
+
+      // Add KYC filter
+      if (kycFilter && kycFilter !== 'all') {
+        queryParams.append('kycStatus', kycFilter);
+      }
+      
+      // Use search endpoint if search term or filters are provided
+      const endpoint = (searchTerm && searchTerm.trim()) || statusFilter !== 'all' || planFilter !== 'all' || kycFilter !== 'all'
+        ? `${API_BASE}/api/drivers/search?${queryParams.toString()}`
+        : `${API_BASE}/api/drivers?${queryParams.toString()}`;
+      
+      // Fetch paginated drivers from backend
+      const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`Failed to load drivers: ${res.status}`);
       const result = await res.json();
       const data = result.data || result;
       setDriversData(data);
+      
+      // Store pagination info
+      if (result.pagination) {
+        setPaginationInfo(result.pagination);
+        setTotalDrivers(result.pagination.total || 0);
+      }
+      setCurrentPage(page);
 
-      // Fetch signup credentials
-      const credRes = await fetch(`${API_BASE}/api/drivers/signup/credentials?limit=1000`);
+      // Fetch signup credentials with pagination
+      const credRes = await fetch(`${API_BASE}/api/drivers/signup/credentials?page=1&limit=100`);
       if (credRes.ok) {
         const credResult = await credRes.json();
         const credData = credResult.data || credResult;
@@ -102,7 +147,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
 
       // Fetch vehicles so admins can assign vehicles to drivers
       try {
-        const vehiclesRes = await fetch(`${API_BASE}/api/vehicles?limit=1000`);
+        const vehiclesRes = await fetch(`${API_BASE}/api/vehicles?page=1&limit=100`);
         if (vehiclesRes.ok) {
           const vehiclesData = await vehiclesRes.json();
           const list = vehiclesData.data || vehiclesData;
@@ -125,6 +170,45 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
     fetchDrivers();
     return () => { mounted = false; };
   }, []);
+
+  // Refetch when search or filters change (with debounce for search)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchDrivers(1);
+    }, searchTerm ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, planFilter, kycFilter]);
+
+  // Debounced server-side search for vehicle dropdown
+  useEffect(() => {
+    if (showVehicleDropdown == null) return;
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+        const q = vehicleSearch || '';
+        // We only want inactive, KYC verified vehicles for assignment
+        const url = `${API_BASE}/api/vehicles/search?q=${encodeURIComponent(q)}&limit=50&status=inactive&kycStatus=verified`;
+        const res = await fetch(url, { signal: controller.signal });
+        if (!res.ok) {
+          setVehicleOptions([]);
+          return;
+        }
+        const body = await res.json();
+        const list = body.data || body;
+        setVehicleOptions(Array.isArray(list) ? list : []);
+      } catch (err) {
+        if (err.name !== 'AbortError') console.error('Vehicle search failed:', err);
+        setVehicleOptions([]);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [vehicleSearch, showVehicleDropdown]);
 
   const handleImportClick = () => { previewMode.current = false; if (fileInputRef.current) fileInputRef.current.click(); };
   const handlePreviewClick = () => { previewMode.current = true; if (fileInputRef.current) fileInputRef.current.click(); };
@@ -211,19 +295,8 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
     }
   };
 
-  const filteredDrivers = driversData.filter(driver => {
-    const matchesSearch = (driver.name || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (driver.email || '').toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         (driver.phone || '').includes(searchTerm) ||
-                         (driver.mobile || '').includes(searchTerm) ||
-                         (driver.username || '').toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || driver.status === statusFilter;
-    const matchesPlan = planFilter === 'all' || driver.currentPlan === planFilter;
-    const matchesKyc = kycFilter === 'all' || driver.kycStatus === kycFilter;
-    
-    return matchesSearch && matchesStatus && matchesPlan && matchesKyc;
-  });
+  // Server-side filtering is now used via API, so we just use driversData directly
+  // The filteredDrivers logic has been moved to the backend search endpoint
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -350,9 +423,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       toast.error('Failed to load driver details');
     }
   };
-useEffect(() => {
-  setCurrentPage(1);
-}, [filteredDrivers.length]);
+// Filter change effect is now handled by the debounced search effect above
   const handleSaveDriver = async (driverData) => {
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
@@ -381,7 +452,7 @@ useEffect(() => {
         toast.success('Driver updated successfully');
       } else {
         // Add new driver
-        const res = await fetch(`${API_BASE}/api/drivers?unlimited=true`, {
+        const res = await fetch(`${API_BASE}/api/drivers`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
@@ -406,14 +477,9 @@ useEffect(() => {
       toast.error(err.message || 'Failed to save driver');
     }
   };
-  const [currentPage, setCurrentPage] = useState(1);
-  const rowsPerPage = 10; // 10 / 25 / 50 jo chaho
-const totalPages = Math.ceil(filteredDrivers.length / rowsPerPage);
 
-const paginatedDrivers = filteredDrivers.slice(
-(currentPage - 1) * rowsPerPage,
-  currentPage * rowsPerPage
-);
+  // Use backend pagination - no longer need client-side slicing
+  const paginatedDrivers = driversData;
 
   const handleDeleteDriver = (driverId) => {
     if (window.confirm('Are you sure you want to delete this driver?')) {
@@ -746,7 +812,7 @@ const paginatedDrivers = filteredDrivers.slice(
         'Join Date'
       ];
       
-      const csvData = filteredDrivers.map(driver => [
+      const csvData = driversData.map(driver => [
         // driver.id || driver._id || '',
         driver.username || '',
         driver.password || '',
@@ -815,7 +881,7 @@ const paginatedDrivers = filteredDrivers.slice(
       link.click();
       document.body.removeChild(link);
       
-      toast.success(`Exported ${filteredDrivers.length} drivers with complete details to CSV`);
+      toast.success(`Exported ${driversData.length} drivers from current page to CSV`);
     } catch (err) {
       console.error('Export error:', err);
       toast.error('Failed to export drivers');
@@ -889,7 +955,7 @@ const paginatedDrivers = filteredDrivers.slice(
                       </div>
                       <div className="ml-4">
                         <p className="text-sm font-medium text-gray-600">Total Drivers</p>
-                        <p className="text-2xl font-bold text-gray-900">{driversData.length}</p>
+                        <p className="text-2xl font-bold text-gray-900">{paginationInfo.total || 0}</p>
               
                       </div>
                     </div>
@@ -1024,7 +1090,7 @@ const paginatedDrivers = filteredDrivers.slice(
       {/* Drivers Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Drivers List ({filteredDrivers.length})</CardTitle>
+          <CardTitle>Drivers List ({driversData.length} on page / {paginationInfo.total || 0} total)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           {loading && (
@@ -1033,10 +1099,10 @@ const paginatedDrivers = filteredDrivers.slice(
           {error && (
             <div className="p-4 text-center text-sm text-red-600">{error}</div>
           )}
-          {!loading && !error && filteredDrivers.length === 0 && (
+          {!loading && !error && driversData.length === 0 && (
             <div className="p-6 text-center text-sm text-gray-600">No drivers found for the current search or filters.</div>
           )}
-          {filteredDrivers.length > 0 && (
+          {driversData.length > 0 && (
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1054,7 +1120,7 @@ const paginatedDrivers = filteredDrivers.slice(
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {paginatedDrivers.map((driver,index) => (
+                {driversData.map((driver,index) => (
                   <TableRow key={index}>
                     <TableCell>
                       <div>
@@ -1139,45 +1205,26 @@ const paginatedDrivers = filteredDrivers.slice(
           Select Vehicle
         </div>
 
-        {/* filtered list */}
-        {vehicles
-          .filter(
-            v =>
-              v.status === 'inactive' &&
-              ((v.kycStatus || '').toString().toLowerCase() === 'verified')
-          )
-          .filter(v => {
-            const s = vehicleSearch.toLowerCase();
-            return (
-              v.registrationNumber?.toLowerCase().includes(s) ||
-              v.vehicleNumber?.toLowerCase().includes(s) ||
-              v.carName?.toLowerCase().includes(s) ||
-              v.model?.toLowerCase().includes(s)
-            );
-          })
-          .map(v => {
-            const value = v._id || v.vehicleId || v.registrationNumber;
-            return (
-              <div
-                key={value}
-                className="px-2 py-1 cursor-pointer hover:bg-blue-50"
-                onClick={() => {
-                  handleAssignVehicle(driver.id, value);
-                  setVehicleSearch('');
-                  setShowVehicleDropdown(null);
-                }}
-              >
-                {`${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`}
-              </div>
-            );
-          })}
+        {/* server-side vehicle options */}
+        {vehicleOptions.map(v => {
+          const value = v._id || v.vehicleId || v.registrationNumber;
+          return (
+            <div
+              key={value}
+              className="px-2 py-1 cursor-pointer hover:bg-blue-50"
+              onClick={() => {
+                handleAssignVehicle(driver.id, value);
+                setVehicleSearch('');
+                setShowVehicleDropdown(null);
+              }}
+            >
+              {`${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`}
+            </div>
+          );
+        })}
 
         {/* empty */}
-        {vehicles.filter(
-          v =>
-            v.status === 'inactive' &&
-            ((v.kycStatus || '').toString().toLowerCase() === 'verified')
-        ).length === 0 && (
+        {vehicleOptions.length === 0 && (
           <div className="px-2 py-1 text-gray-400">
             No vehicles available
           </div>
@@ -1370,29 +1417,29 @@ const paginatedDrivers = filteredDrivers.slice(
         
           )}
         </CardContent>
-            {filteredDrivers.length > rowsPerPage && (
+            {paginationInfo.totalPages > 1 && (
   <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
     <div className="text-gray-600">
-      Showing {(currentPage - 1) * rowsPerPage + 1} –
-      {Math.min(currentPage * rowsPerPage, filteredDrivers.length)} of {filteredDrivers.length}
+      Showing {(currentPage - 1) * pageSize + 1} –
+      {Math.min(currentPage * pageSize, paginationInfo.total)} of {paginationInfo.total}
     </div>
 
     <div className="flex items-center gap-2">
       <button
         disabled={currentPage === 1}
-        onClick={() => setCurrentPage(p => p - 1)}
+        onClick={() => fetchDrivers(currentPage - 1)}
         className="px-3 py-1 border rounded disabled:opacity-50"
       >
         Prev
       </button>
 
       <span className="px-2">
-        Page {currentPage} of {totalPages}
+        Page {currentPage} of {paginationInfo.totalPages}
       </span>
 
       <button
-        disabled={currentPage === totalPages}
-        onClick={() => setCurrentPage(p => p + 1)}
+        disabled={currentPage === paginationInfo.totalPages}
+        onClick={() => fetchDrivers(currentPage + 1)}
         className="px-3 py-1 border rounded disabled:opacity-50"
       >
         Next

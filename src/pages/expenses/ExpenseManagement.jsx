@@ -45,24 +45,62 @@ export default function ExpenseManagement() {
   const [error, setError] = useState(null);
   const [selectedExpense, setSelectedExpense] = useState(null);
 
+  const fetchExpenses = async () => {
+    setLoading(true);
+    setError(null);
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      
+      // Build query params
+      let queryParams = new URLSearchParams({
+        page: '1',
+        limit: '100'
+      });
+      
+      // Add search query if provided
+      if (searchTerm && searchTerm.trim()) {
+        queryParams.append('q', searchTerm.trim());
+      }
+      
+      // Add filters
+      if (statusFilter && statusFilter !== 'all') {
+        queryParams.append('status', statusFilter);
+      }
+      if (categoryFilter && categoryFilter !== 'all') {
+        queryParams.append('category', categoryFilter);
+      }
+      
+      // Use search endpoint if search term or filters are provided
+      const endpoint = (searchTerm && searchTerm.trim()) || statusFilter !== 'all' || categoryFilter !== 'all'
+        ? `${API_BASE}/api/expenses/search?${queryParams.toString()}`
+        : `${API_BASE}/api/expenses?${queryParams.toString()}`;
+      
+      const res = await fetch(endpoint);
+      if (!res.ok) throw new Error(`Failed to load expenses: ${res.status}`);
+      const result = await res.json();
+      const data = result.data || result;
+      setExpenses(Array.isArray(data) ? data : []);
+    } catch (err) {
+      console.error(err);
+      setError(err.message || 'Failed to load expenses');
+      setExpenses([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
-    let mounted = true;
-    (async () => {
-      setLoading(true); setError(null);
-      try {
-        const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-        const res = await fetch(`${API_BASE}/api/expenses?limit=1000`);
-        if (!res.ok) throw new Error(`Failed to load expenses: ${res.status}`);
-        const result = await res.json();
-        const data = result.data || result;
-        if (mounted) setExpenses(Array.isArray(data) ? data : []);
-      } catch (err) {
-        console.error(err); setError(err.message || 'Failed to load expenses');
-        if (mounted) setExpenses([]);
-      } finally { if (mounted) setLoading(false); }
-    })();
-    return () => { mounted = false; };
+    fetchExpenses();
   }, []);
+
+  // Refetch when search or filters change (with debounce for search)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchExpenses();
+    }, searchTerm ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm, statusFilter, categoryFilter]);
 
   const iconMap = {
     fuel: { icon: Fuel, color: 'text-orange-600' },
@@ -122,16 +160,9 @@ export default function ExpenseManagement() {
     return <FileText className="h-5 w-5 text-gray-500" />;
   };
 
-  const filteredExpenses = expenses.filter(expense => {
-    const matchesSearch = expense.title.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         expense.vendor.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         expense.description.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    const matchesStatus = statusFilter === 'all' || expense.status === statusFilter;
-    const matchesCategory = categoryFilter === 'all' || expense.category === categoryFilter;
-    
-    return matchesSearch && matchesStatus && matchesCategory;
-  });
+  // Server-side filtering is now used via API, so we just use expenses directly
+  // The filteredExpenses logic has been moved to the backend search endpoint
+  const filteredExpenses = expenses;
 
   const calculateMetrics = () => {
     const totalExpenses = expenses.reduce((sum, expense) => sum + expense.amount, 0);

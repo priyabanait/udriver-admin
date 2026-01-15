@@ -36,6 +36,9 @@ const Investors = () => {
   const [showPaymentModal, setShowPaymentModal] = useState(false);
   const [editingInvestment, setEditingInvestment] = useState(null);
   const [paymentInvestment, setPaymentInvestment] = useState(null);
+  const [currentPage, setCurrentPage] = useState(1);
+  const [pageSize] = useState(10);
+  const [paginationInfo, setPaginationInfo] = useState({});
   const [paymentFormData, setPaymentFormData] = useState({
     paymentAmount: '',
     paymentDate: new Date().toISOString().split('T')[0],
@@ -66,13 +69,39 @@ const Investors = () => {
 
   useEffect(() => {
     loadInvestments();
-      loadPlans();
+    loadPlans();
   }, []);
 
-  const loadInvestments = async () => {
+  // Refetch when search term changes (with debounce)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      loadInvestments(1);
+    }, searchTerm ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+  }, [searchTerm]);
+
+  const loadInvestments = async (page = 1) => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/api/investment-fds?limit=1000`, {
+      
+      // Build query params
+      let queryParams = new URLSearchParams({
+        page: page.toString(),
+        limit: pageSize.toString()
+      });
+      
+      // Add search query if provided
+      if (searchTerm && searchTerm.trim()) {
+        queryParams.append('q', searchTerm.trim());
+      }
+      
+      // Use search endpoint if search term is provided
+      const endpoint = (searchTerm && searchTerm.trim())
+        ? `${API_BASE}/api/investment-fds/search?${queryParams.toString()}`
+        : `${API_BASE}/api/investment-fds?${queryParams.toString()}`;
+      
+      const response = await fetch(endpoint, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -85,6 +114,12 @@ const Investors = () => {
       const data = result.data || result;
       const enriched = Array.isArray(data) ? data.map(inv => ({ ...inv, isTdsEdited: false, isTdsSaving: false })) : [];
       setInvestments(enriched);
+      
+      // Store pagination info
+      if(result.pagination) {
+        setPaginationInfo(result.pagination);
+      }
+      setCurrentPage(page);
     } catch (err) {
       console.error('Failed to load investments:', err);
       toast.error('Failed to load investments');
@@ -612,7 +647,7 @@ const Investors = () => {
               </div>
               <div className="ml-4">
                 <p className="text-sm font-medium text-gray-600">Total Investors</p>
-                <p className="text-2xl font-bold text-purple-600">{investments.length}</p>
+                <p className="text-2xl font-bold text-purple-600">{paginationInfo.total || 0}</p>
               </div>
             </div>
           </CardContent>
@@ -638,7 +673,7 @@ const Investors = () => {
       {/* Table */}
       <Card>
         <CardHeader>
-          <CardTitle>Investors FD Records ({filteredInvestments.length})</CardTitle>
+          <CardTitle>Investors FD Records ({investments.length} on page / {paginationInfo.total || 0} total)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto overflow-y-auto max-h-[calc(100vh-400px)]">
@@ -895,6 +930,36 @@ const Investors = () => {
             )}
           </div>
         </CardContent>
+        {paginationInfo.totalPages > 1 && (
+          <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+            <div className="text-gray-600">
+              Showing {(currentPage - 1) * pageSize + 1} –
+              {Math.min(currentPage * pageSize, paginationInfo.total)} of {paginationInfo.total}
+            </div>
+
+            <div className="flex items-center gap-2">
+              <button
+                disabled={currentPage === 1}
+                onClick={() => loadInvestments(currentPage - 1)}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Prev
+              </button>
+
+              <span className="px-2">
+                Page {currentPage} of {paginationInfo.totalPages}
+              </span>
+
+              <button
+                disabled={currentPage === paginationInfo.totalPages}
+                onClick={() => loadInvestments(currentPage + 1)}
+                className="px-3 py-1 border rounded disabled:opacity-50"
+              >
+                Next
+              </button>
+            </div>
+          </div>
+        )}
       </Card>
 
       {/* Modal */}

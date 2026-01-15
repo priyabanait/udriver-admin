@@ -36,7 +36,7 @@ import CarInvestmentModal from '../../components/investors/CarInvestmentModal';
   const reloadCarInvestments = async () => {
     try {
       setCarInvestmentLoading(true);
-      const response = await fetch(`${API_BASE}/api/car-investment-entries?limit=1000`, { method: 'GET' });
+      const response = await fetch(`${API_BASE}/api/car-investment-entries?page=${carInvestmentPage}&limit=10`, { method: 'GET' });
       if (!response.ok) {
         const text = await response.text();
         console.error('Reload car investments failed', response.status, text);
@@ -46,6 +46,7 @@ import CarInvestmentModal from '../../components/investors/CarInvestmentModal';
       const result = await response.json();
       const data = result.data || result;
       if (Array.isArray(data)) setCarInvestments(data);
+      if (result.pagination) setCarInvestmentPagination(result.pagination);
       toast.success('Car investments reloaded');
     } catch (err) {
       console.error('Failed to reload car investments:', err);
@@ -71,9 +72,14 @@ export default function InvestmentManagement() {
   const [investments, setInvestments] = useState([]);
   const [investmentPlans, setInvestmentPlans] = useState([]);
   const [loading, setLoading] = useState(true);
+  // Pagination states for investors
+  const [investorPage, setInvestorPage] = useState(1);
+  const [investorPagination, setInvestorPagination] = useState(null);
   // Car Investment states
   const [carInvestments, setCarInvestments] = useState([]);
   const [carInvestmentLoading, setCarInvestmentLoading] = useState(true);
+  const [carInvestmentPage, setCarInvestmentPage] = useState(1);
+  const [carInvestmentPagination, setCarInvestmentPagination] = useState(null);
   // Car Investment modal state
   const [showCarInvestmentModal, setShowCarInvestmentModal] = useState(false);
   const [selectedCarInvestment, setSelectedCarInvestment] = useState(null);
@@ -112,9 +118,9 @@ export default function InvestmentManagement() {
         setLoading(true);
         setCarInvestmentLoading(true);
         const [invRes, plansRes, carInvRes] = await Promise.all([
-          fetch(`${API_BASE}/api/investors?limit=1000`, { method: 'GET' }),
+          fetch(`${API_BASE}/api/investors?page=${investorPage}&limit=10`, { method: 'GET' }),
           fetch(`${API_BASE}/api/investment-plans`, { method: 'GET' }),
-          fetch(`${API_BASE}/api/car-investment-entries?limit=1000`, { method: 'GET' })
+          fetch(`${API_BASE}/api/car-investment-entries?page=${carInvestmentPage}&limit=10`, { method: 'GET' })
         ]);
 
         if (!invRes.ok) {
@@ -125,6 +131,7 @@ export default function InvestmentManagement() {
           const result = await invRes.json();
           const inv = result.data || result;
           if (Array.isArray(inv)) setInvestments(inv);
+          if (result.pagination) setInvestorPagination(result.pagination);
         }
 
         if (!plansRes.ok) {
@@ -145,6 +152,7 @@ export default function InvestmentManagement() {
           const result = await carInvRes.json();
           const carInv = result.data || result;
           if (Array.isArray(carInv)) setCarInvestments(carInv);
+          if (result.pagination) setCarInvestmentPagination(result.pagination);
         }
       } catch (err) {
         console.error('Failed to load investments/plans/carInvestments:', err);
@@ -155,7 +163,7 @@ export default function InvestmentManagement() {
       }
     };
     loadData();
-  }, []);
+  }, [investorPage, carInvestmentPage]);
 
   const getStatusBadge = (status) => {
     switch (status) {
@@ -209,7 +217,8 @@ export default function InvestmentManagement() {
   });
 
   const calculateMetrics = () => {
-    const totalInvestors = investments.length;
+    // Use pagination total for accurate investor count, fallback to current page length
+    const totalInvestors = investorPagination?.total || investments.length;
     const activeInvestors = investments.filter(inv => inv.kycStatus === 'verified').length;
     const pendingInvestors = investments.filter(inv => inv.kycStatus === 'pending').length;
 
@@ -349,7 +358,7 @@ export default function InvestmentManagement() {
   // Reload investments list from database
   const reloadInvestments = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/investors?limit=1000`, { method: 'GET' });
+      const response = await fetch(`${API_BASE}/api/investors?page=${investorPage}&limit=10`, { method: 'GET' });
       if (!response.ok) {
         const text = await response.text();
         console.error('Reload investments failed', response.status, text);
@@ -359,6 +368,7 @@ export default function InvestmentManagement() {
       const result = await response.json();
       const data = result.data || result;
       if (Array.isArray(data)) setInvestments(data);
+      if (result.pagination) setInvestorPagination(result.pagination);
       toast.success('Investments reloaded');
     } catch (err) {
       console.error('Failed to reload investments:', err);
@@ -796,6 +806,30 @@ const handleExportReport = () => {
               </tbody>
             </table>
           </div>
+          {/* Pagination Controls */}
+          {investorPagination && (
+            <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                Page {investorPagination.page} of {investorPagination.totalPages} | Total: {investorPagination.total} investors
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setInvestorPage(prev => Math.max(prev - 1, 1))}
+                  disabled={investorPagination.page === 1}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ← Previous
+                </button>
+                <button
+                  onClick={() => setInvestorPage(prev => prev + 1)}
+                  disabled={!investorPagination.hasMore}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

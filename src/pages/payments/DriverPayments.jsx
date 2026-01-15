@@ -384,11 +384,7 @@ export default function DriverPayments() {
     if (!isManager) {
       (async () => {
         try {
-          const res = await fetch(`${API_BASE}/api/managers?limit=1000`);
-          if (!res.ok) throw new Error(`Failed to load managers: ${res.status}`);
-          const result = await res.json();
-          const data = result.data || result;
-          setManagers(Array.isArray(data) ? data : []);
+            const res = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
         } catch (err) {
           console.error('Error loading managers:', err);
           setManagers([]);
@@ -400,9 +396,9 @@ export default function DriverPayments() {
     const fetchPayments = async () => {
       setLoading(true);
       try {
-        let url = `${API_BASE}/api/driver-plan-selections?limit=all`;
+        let url = `${API_BASE}/api/driver-plan-selections?page=1&limit=100`;
         if (managerFilter) {
-          url = `${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(managerFilter)}?limit=all`;
+          url = `${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(managerFilter)}?page=1&limit=100`;
           console.log('Fetching payments for manager:', managerFilter, 'URL:', url);
         } else {
           console.log('Fetching all payments');
@@ -478,7 +474,7 @@ export default function DriverPayments() {
     setLoading(true);
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-      const res = await fetch(`${API_BASE}/api/driver-plan-selections?limit=all`);
+      const res = await fetch(`${API_BASE}/api/driver-plan-selections?page=1&limit=100`);
       if (!res.ok) throw new Error('Failed to load driver payments');
       const result = await res.json();
       const data = result.data || result;
@@ -496,7 +492,7 @@ export default function DriverPayments() {
       // Fetch vehicles and plans for assignment dropdowns
       try {
         const [vehiclesRes, weeklyRes, dailyRes] = await Promise.all([
-          fetch(`${API_BASE}/api/vehicles?limit=all`),
+          fetch(`${API_BASE}/api/vehicles?page=1&limit=100`),
           fetch(`${API_BASE}/api/weekly-rent-plans`),
           fetch(`${API_BASE}/api/daily-rent-plans`)
         ]);

@@ -306,24 +306,175 @@ router.post("/login-otp", async (req, res) => {
   }
 });
 
-// GET all investors (only manual entries for admin panel)
-router.get("/", async (req, res) => {
+// Search investors endpoint
+router.get("/search", async (req, res) => {
   try {
-    // Pagination parameters
-    const page = parseInt(req.query.page) || 1;
-    const limit = parseInt(req.query.limit) || 10;
+    const {
+      q,
+      investorName,
+      email,
+      phone,
+      aadharNumber,
+      panNumber,
+      city,
+      state,
+      status,
+      kycStatus,
+    } = req.query;
+
+    const filter = {};
+
+    // ✅ SAFE regex escape
+    const escapeRegex = (text = "") =>
+      text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+
+    // 🔍 General search
+    if (q && q.trim()) {
+      const safeQ = escapeRegex(q.trim());
+      const regex = new RegExp(safeQ, "i");
+      const normalizedPhone = q.replace(/\D/g, "");
+
+      filter.$or = [
+        { investorName: regex },
+        { email: regex },
+        { aadharNumber: regex },
+        { panNumber: regex },
+      ];
+
+      if (normalizedPhone) {
+        filter.$or.push({ phone: normalizedPhone });
+      }
+    }
+
+    // 🎯 Specific filters (do NOT override $or)
+    if (investorName) {
+      filter.investorName = new RegExp(
+        escapeRegex(investorName),
+        "i"
+      );
+    }
+
+    if (email) {
+      filter.email = new RegExp(
+        escapeRegex(email),
+        "i"
+      );
+    }
+
+    if (phone) {
+      filter.phone = phone.replace(/\D/g, "");
+    }
+
+    if (aadharNumber) {
+      filter.aadharNumber = new RegExp(
+        escapeRegex(aadharNumber),
+        "i"
+      );
+    }
+
+    if (panNumber) {
+      filter.panNumber = panNumber.toUpperCase();
+    }
+
+    if (city) {
+      filter.city = new RegExp(
+        escapeRegex(city),
+        "i"
+      );
+    }
+
+    if (state) {
+      filter.state = new RegExp(
+        escapeRegex(state),
+        "i"
+      );
+    }
+
+    if (status) filter.status = status;
+    if (kycStatus) filter.kycStatus = kycStatus;
+
+    // 📄 Pagination
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const limit = Math.min(Math.max(parseInt(req.query.limit) || 10, 10), 100);
     const skip = (page - 1) * limit;
+
     const sortBy = req.query.sortBy || "createdAt";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    const total = await Investor.countDocuments();
-    const list = await Investor.find()
+    const total = await Investor.countDocuments(filter);
+
+    const list = await Investor.find(filter)
       .sort({ [sortBy]: sortOrder })
       .skip(skip)
       .limit(limit)
       .lean();
 
-    // Transform _id to id for frontend compatibility
+    const transformedList = list.map((inv) => ({
+      ...inv,
+      id: inv._id.toString(),
+    }));
+
+    res.json({
+      data: transformedList,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    });
+  } catch (error) {
+    console.error("Error searching investors:", error);
+    res.status(500).json({
+      error: "Failed to search investors",
+      message: error.message,
+    });
+  }
+});
+
+// GET all investors (only manual entries for admin panel)
+router.get("/", async (req, res) => {
+  try {
+    // Enforce pagination - no unlimited option
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const requestedLimit = parseInt(req.query.limit) || 10;
+    const MIN_LIMIT = 10;
+    const MAX_LIMIT = 100;
+
+    const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const sortBy = req.query.sortBy || "createdAt";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    // Add search support to main GET endpoint
+    const filter = {};
+    if (req.query.q && req.query.q.trim()) {
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      const normalized = String(req.query.q).replace(/\D/g, '').trim();
+      
+      filter.$or = [
+        { investorName: searchRegex },
+        { email: searchRegex },
+        { aadharNumber: searchRegex },
+        { panNumber: searchRegex.toUpperCase() }
+      ];
+      
+      if (normalized) {
+        filter.$or.push({ phone: normalized });
+      }
+    }
+
+    const total = await Investor.countDocuments(filter);
+
+    const list = await Investor.find(filter)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Transform _id → id for frontend
     const transformedList = list.map((investor) => ({
       ...investor,
       id: investor._id.toString(),
@@ -341,11 +492,14 @@ router.get("/", async (req, res) => {
     });
   } catch (error) {
     console.error("Error fetching investors:", error);
-    res
-      .status(500)
-      .json({ error: "Failed to fetch investors", message: error.message });
+    res.status(500).json({
+      error: "Failed to fetch investors",
+      message: error.message,
+    });
   }
 });
+
+
 
 // GET investor signup credentials (self-registered)
 router.get("/signup/credentials", async (req, res) => {
@@ -353,37 +507,54 @@ router.get("/signup/credentials", async (req, res) => {
     const page = parseInt(req.query.page) || 1;
     const limitParam = req.query.limit;
 
-    // Unlimited condition: if limit=0 or limit=all, fetch all
-    const isUnlimited = limitParam === "all" || limitParam === "0";
-    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
-    const skip = isUnlimited ? 0 : (page - 1) * limit;
+    const MIN_LIMIT = 10;
+    const MAX_LIMIT = 100;
+
+    // Enforce limit constraints
+    let limit = parseInt(limitParam) || MIN_LIMIT;
+    limit = Math.max(MIN_LIMIT, Math.min(MAX_LIMIT, limit));
+    const skip = (page - 1) * limit;
 
     const sortBy = req.query.sortBy || "signupDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    const total = await InvestorSignup.countDocuments();
-
-    let query = InvestorSignup.find()
-      .select("investorName email phone password status kycStatus signupDate")
-      .sort({ [sortBy]: sortOrder });
-
-    if (!isUnlimited) {
-      query = query.skip(skip).limit(limit);
+    // Add search support
+    const filter = {};
+    if (req.query.q && req.query.q.trim()) {
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      const normalized = String(req.query.q).replace(/\D/g, '').trim();
+      
+      filter.$or = [
+        { investorName: searchRegex },
+        { email: searchRegex },
+        { phone: searchRegex },
+        { status: searchRegex },
+        { kycStatus: searchRegex }
+      ];
+      
+      if (normalized) {
+        filter.$or.push({ phone: normalized });
+      }
     }
 
-    const list = await query.lean();
+    const total = await InvestorSignup.countDocuments(filter);
+
+    const list = await InvestorSignup.find(filter)
+      .select("investorName email phone password status kycStatus signupDate")
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     res.json({
       data: list,
-      pagination: isUnlimited
-        ? null
-        : {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            hasMore: page * limit < total,
-          },
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
     });
   } catch (error) {
     console.error("Error fetching investor signup credentials:", error);

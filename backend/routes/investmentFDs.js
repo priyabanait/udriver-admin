@@ -4,6 +4,103 @@ import InvestmentPlan from "../models/investmentPlan.js";
 
 const router = express.Router();
 
+// Search investment FDs endpoint
+router.get("/search", async (req, res) => {
+  try {
+    const {
+      q, // general search query
+      investorName,
+      phone,
+      email,
+      investorId,
+      status,
+      fdType,
+      planId,
+      minAmount,
+      maxAmount,
+      dateFrom,
+      dateTo
+    } = req.query;
+
+    const filter = {};
+
+    // General search across multiple fields
+    if (q && q.trim()) {
+      const searchRegex = new RegExp(q.trim(), 'i');
+      const normalized = String(q).replace(/\D/g, '').trim();
+      
+      filter.$or = [
+        { investorName: searchRegex },
+        { email: searchRegex }
+      ];
+      
+      if (normalized) {
+        filter.$or.push({ phone: normalized });
+      }
+    }
+
+    // Specific field filters
+    if (investorId) filter.investorId = investorId;
+    if (investorName) filter.investorName = new RegExp(investorName, 'i');
+    if (phone) {
+      const normalized = String(phone).replace(/\D/g, '');
+      filter.phone = normalized;
+    }
+    if (email) filter.email = new RegExp(email, 'i');
+    if (status) filter.status = status;
+    if (fdType) filter.fdType = fdType;
+    if (planId) filter.planId = planId;
+
+    // Amount range filter
+    if (minAmount || maxAmount) {
+      filter.investmentAmount = {};
+      if (minAmount) filter.investmentAmount.$gte = Number(minAmount);
+      if (maxAmount) filter.investmentAmount.$lte = Number(maxAmount);
+    }
+
+    // Date range filter
+    if (dateFrom || dateTo) {
+      filter.investmentDate = {};
+      if (dateFrom) filter.investmentDate.$gte = new Date(dateFrom);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        filter.investmentDate.$lte = endDate;
+      }
+    }
+
+    // Pagination
+    const page = parseInt(req.query.page) || 1;
+    const limit = parseInt(req.query.limit) || 10;
+    const skip = (page - 1) * limit;
+    const sortBy = req.query.sortBy || "investmentDate";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const total = await InvestmentFD.countDocuments(filter);
+    const investments = await InvestmentFD.find(filter)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit);
+
+    res.json({
+      data: investments,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
+    });
+  } catch (error) {
+    console.error("Error searching investment FDs:", error);
+    res.status(500).json({
+      error: "Failed to search investment FDs",
+      message: error.message,
+    });
+  }
+});
+
 // GET all investment FDs
 router.get("/", async (req, res) => {
   try {
@@ -16,8 +113,29 @@ router.get("/", async (req, res) => {
     const sortBy = req.query.sortBy || "investmentDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    // If investorId is provided, filter by it
-    const filter = investorId ? { investorId } : {};
+    // Build filter
+    const filter = {};
+    if (investorId) filter.investorId = investorId;
+    
+    // Add search support to main GET endpoint
+    if (req.query.q && req.query.q.trim()) {
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      const normalized = String(req.query.q).replace(/\D/g, '').trim();
+      
+      const searchFilter = {
+        $or: [
+          { investorName: searchRegex },
+          { email: searchRegex }
+        ]
+      };
+      
+      if (normalized) {
+        searchFilter.$or.push({ phone: normalized });
+      }
+      
+      filter.$and = filter.$and || [];
+      filter.$and.push(searchFilter);
+    }
 
     const total = await InvestmentFD.countDocuments(filter);
     const investments = await InvestmentFD.find(filter)

@@ -37,73 +37,129 @@ export default function VehicleDocuments() {
   const [editingDoc, setEditingDoc] = useState(null);
   const [viewDoc, setViewDoc] = useState(null);
 
-  useEffect(() => {
-    let mounted = true;
-    (async function fetchAll() {
-      try {
-        const [vehicleRes, driverRes] = await Promise.all([
-          fetch(`${API_BASE}/api/vehicles?limit=1000`),
-          fetch(`${API_BASE}/api/drivers?limit=1000`)
-        ]);
-        if (!vehicleRes.ok) throw new Error(`Failed to load vehicles: ${vehicleRes.status}`);
-        if (!driverRes.ok) throw new Error(`Failed to load drivers: ${driverRes.status}`);
-        const vResult = await vehicleRes.json();
-        const dResult = await driverRes.json();
-        const vehicles = vResult.data || vResult;
-        const driversData = dResult.data || dResult;
-        if (mounted) setDrivers(driversData);
-
-        // Map vehicles to the document-centric shape expected by this page
-        const docs = vehicles.map(v => {
-          let driverName = '';
-          if (v.assignedDriver) {
-            const found = driversData.find(d => d._id === v.assignedDriver);
-            driverName = found ? (found.name || found.username || found.phone) : v.assignedDriver;
-          } else {
-            driverName = v.driverName || '';
-          }
-          return {
-            id: v.vehicleId ?? v.id ?? v._id,
-            vehicleNumber: v.registrationNumber || v.registration_number || v.regNo || v.vehicleId || v.id,
-            vehicleType: v.model || v.make || '',
-            driverName,
-            documents: {
-              registration: {
-                expiryDate: v.registrationDate || v.registration_expiry || null,
-                uploadDate: v.registrationDate || null,
-                status: v.registrationDate ? 'verified' : 'pending'
-              },
-              insurance: {
-                expiryDate: v.insuranceDate || v.insuranceExpiry || null,
-                uploadDate: v.insuranceDate || null,
-                status: v.insuranceDate ? 'verified' : 'pending'
-              },
-              puc: {
-                expiryDate: v.emissionDate || null,
-                uploadDate: v.emissionDate || null,
-                status: v.emissionDate ? 'verified' : 'pending'
-              },
-              permit: {
-                expiryDate: v.permitDate || null,
-                uploadDate: v.permitDate || null,
-                status: v.permitDate ? 'verified' : 'pending'
-              },
-              // fitness: {
-              //   expiryDate: v.fitnessExpiry || v.fitnessDate || null,
-              //   uploadDate: v.fitnessExpiry || null,
-              //   status: v.fitnessExpiry || v.fitnessDate ? 'verified' : 'pending'
-              // }
-            }
-          };
-        });
-        if (mounted) setVehicleDocuments(docs);
-      } catch (err) {
-        console.error('Failed to fetch vehicle documents', err);
-        toast.error('Failed to load vehicle documents');
+  const fetchAll = async () => {
+    try {
+      // Build vehicle query params with search
+      let vehicleParams = new URLSearchParams({
+        page: '1',
+        limit: '100'
+      });
+      
+      if (searchTerm && searchTerm.trim()) {
+        vehicleParams.append('q', searchTerm.trim());
       }
-    })();
-    return () => { mounted = false; };
+      
+      // Use search endpoint if search term is provided
+      const vehicleEndpoint = (searchTerm && searchTerm.trim())
+        ? `${API_BASE}/api/vehicles/search?${vehicleParams.toString()}`
+        : `${API_BASE}/api/vehicles?${vehicleParams.toString()}`;
+      
+      const [vehicleRes, driverRes] = await Promise.all([
+        fetch(vehicleEndpoint),
+        fetch(`${API_BASE}/api/drivers?page=1&limit=100`)
+      ]);
+      if (!vehicleRes.ok) throw new Error(`Failed to load vehicles: ${vehicleRes.status}`);
+      if (!driverRes.ok) throw new Error(`Failed to load drivers: ${driverRes.status}`);
+      const vResult = await vehicleRes.json();
+      const dResult = await driverRes.json();
+      const vehicles = vResult.data || vResult;
+      const driversData = dResult.data || dResult;
+      setDrivers(driversData);
+
+      // Map vehicles to the document-centric shape expected by this page
+      const docs = vehicles.map(v => {
+        let driverName = '';
+        let driverMobile = '';
+        
+        // First check if backend provided driverDetails
+        if (v.driverDetails) {
+          driverName = v.driverDetails.name || '';
+          driverMobile = v.driverDetails.mobile || '';
+        } 
+        // Fallback to frontend lookup
+        else if (v.assignedDriver) {
+          // Try multiple matching strategies
+          const found = driversData.find(d => {
+            const assignedValue = String(v.assignedDriver);
+            return (
+              String(d._id) === assignedValue ||
+              String(d.id) === assignedValue ||
+              d.mobile === assignedValue ||
+              d.phone === assignedValue ||
+              d.username === assignedValue ||
+              String(d.mobile) === assignedValue ||
+              String(d.phone) === assignedValue
+            );
+          });
+          
+          if (found) {
+            driverName = found.name || found.username || found.mobile || found.phone || '';
+            driverMobile = found.mobile || found.phone || '';
+          } else {
+            // If not found, check if it's already a readable string (not an ObjectId)
+            const isObjectId = /^[0-9a-fA-F]{24}$/.test(String(v.assignedDriver));
+            driverName = isObjectId ? '' : String(v.assignedDriver);
+          }
+        } else {
+          driverName = v.driverName || '';
+        }
+        
+        return {
+          id: v.vehicleId ?? v.id ?? v._id,
+          vehicleNumber: v.registrationNumber || v.registration_number || v.regNo || v.vehicleId || v.id,
+          vehicleType: v.model || v.make || v.brand || '',
+          driverName: driverName || 'Not Assigned',
+          driverMobile,
+          documents: {
+            registration: {
+              expiryDate: v.registrationDate || v.registration_expiry || null,
+              uploadDate: v.registrationDate || null,
+              status: v.registrationDate ? 'verified' : 'pending'
+            },
+            insurance: {
+              expiryDate: v.insuranceDate || v.insuranceExpiry || null,
+              uploadDate: v.insuranceDate || null,
+              status: v.insuranceDate ? 'verified' : 'pending'
+            },
+            puc: {
+              expiryDate: v.emissionDate || null,
+              uploadDate: v.emissionDate || null,
+              status: v.emissionDate ? 'verified' : 'pending'
+            },
+            permit: {
+              expiryDate: v.permitDate || null,
+              uploadDate: v.permitDate || null,
+              status: v.permitDate ? 'verified' : 'pending'
+            },
+            // fitness: {
+            //   expiryDate: v.fitnessExpiry || v.fitnessDate || null,
+            //   uploadDate: v.fitnessExpiry || null,
+            //   status: v.fitnessExpiry || v.fitnessDate ? 'verified' : 'pending'
+            // }
+          }
+        };
+      });
+      setVehicleDocuments(docs);
+    } catch (err) {
+      console.error('Failed to fetch vehicle documents', err);
+      toast.error('Failed to load vehicle documents');
+    }
+  };
+
+  useEffect(() => {
+    fetchAll();
   }, []);
+
+  // Refetch when search changes (with debounce)
+  useEffect(() => {
+    const timeoutId = setTimeout(() => {
+      fetchAll();
+    }, searchTerm ? 500 : 0); // Debounce search by 500ms
+    
+    return () => clearTimeout(timeoutId);
+    // fetchAll is stable and doesn't need to be in deps as it uses state values directly
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [searchTerm]);
 
   const documentTypes = [
     { key: 'registration', label: 'Registration Certificate (RC)', required: true },
@@ -215,17 +271,16 @@ export default function VehicleDocuments() {
     return document.status || 'verified';
   };
 
+  // Server-side search is now used via API, so we only filter by status client-side
+  // Status filtering remains client-side since it's based on computed document expiry statuses
   const filteredVehicles = vehicleDocuments.filter(vehicle => {
-    const matchesSearch = vehicle.vehicleNumber.toLowerCase().includes(searchTerm.toLowerCase()) ||
-                         vehicle.driverName.toLowerCase().includes(searchTerm.toLowerCase());
-    
-    if (statusFilter === 'all') return matchesSearch;
+    if (statusFilter === 'all') return true;
     
     const hasMatchingStatus = Object.values(vehicle.documents).some(doc => 
       getDocumentStatus(doc) === statusFilter
     );
     
-    return matchesSearch && hasMatchingStatus;
+    return hasMatchingStatus;
   });
 
   const handleDocumentAction = (vehicleId, docType, action) => {
@@ -448,7 +503,10 @@ export default function VehicleDocuments() {
                         <div className="ml-4">
                           <div className="text-sm font-medium text-gray-900">{vehicle.vehicleNumber}</div>
                           <div className="text-sm text-gray-500">{vehicle.vehicleType}</div>
-                          <div className="text-sm text-gray-500">Driver: {vehicle.driverName}</div>
+                          <div className="text-sm text-gray-500">
+                            Driver: {vehicle.driverName}
+                            {vehicle.driverMobile && <span className="ml-2 text-gray-400">({vehicle.driverMobile})</span>}
+                          </div>
                         </div>
                       </div>
                     </td>
@@ -560,6 +618,7 @@ export default function VehicleDocuments() {
                           </p>
                           <p className="text-sm text-gray-600">
                             Driver: {vehicle.driverName}
+                            {vehicle.driverMobile && <span className="ml-2">({vehicle.driverMobile})</span>}
                           </p>
                           <p className="text-sm text-gray-600">
                             {status === 'expired' ? 'Expired on' : 'Expires on'}: {formatDate(doc.expiryDate)}
@@ -586,7 +645,10 @@ export default function VehicleDocuments() {
             <div className="p-4 border-b">
               <h3 className="text-lg font-semibold">{documentTypes.find(d => d.key === viewDoc.docKey)?.label}</h3>
               <p className="text-sm text-gray-600">Vehicle: {viewDoc.vehicleNumber}</p>
-              <p className="text-sm text-gray-600">Driver: {viewDoc.driverName}</p>
+              <p className="text-sm text-gray-600">
+                Driver: {viewDoc.driverName}
+                {viewDoc.driverMobile && <span className="ml-2">({viewDoc.driverMobile})</span>}
+              </p>
             </div>
             <div className="p-4 space-y-2">
               <p className="text-sm text-gray-700">Expiry: {formatDate(viewDoc.doc?.expiryDate)}</p>

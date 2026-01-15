@@ -34,6 +34,9 @@ const InvestmentCar = () => {
   const [investors, setInvestors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [searchTerm, setSearchTerm] = useState('');
+  // Pagination states
+  const [carInvestmentPage, setCarInvestmentPage] = useState(1);
+  const [carInvestmentPagination, setCarInvestmentPagination] = useState(null);
   const [editModalOpen, setEditModalOpen] = useState(false);
   const [editEntry, setEditEntry] = useState(null);
   const [editLoading, setEditLoading] = useState(false);
@@ -48,12 +51,13 @@ const InvestmentCar = () => {
     loadCarInvestments();
     loadVehicles();
     loadInvestors();
-  }, []);
+    window.scrollTo(0, 0); // Scroll to top when page changes
+  }, [carInvestmentPage]);
 
   const loadCarInvestments = async () => {
     try {
       setLoading(true);
-      const response = await fetch(`${API_BASE}/api/car-investment-entries?limit=1000`, {
+      const response = await fetch(`${API_BASE}/api/car-investment-entries?page=${carInvestmentPage}&limit=10`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -61,8 +65,14 @@ const InvestmentCar = () => {
       const result = await response.json();
       // Handle both paginated response and legacy array response
       const data = result.data || result;
-      console.log('Car Investments loaded:', Array.isArray(data) ? data.length : 0, data);
+      console.log('Car Investments loaded:', Array.isArray(data) ? data.length : 0, 'Pagination:', result.pagination);
       setCarInvestments(Array.isArray(data) ? data : []);
+      if (result.pagination) {
+        console.log('Setting pagination:', result.pagination);
+        setCarInvestmentPagination(result.pagination);
+      } else {
+        console.warn('No pagination data in response');
+      }
     } catch (err) {
       console.error('Failed to load car investments:', err);
       setCarInvestments([]);
@@ -74,7 +84,7 @@ const InvestmentCar = () => {
 
   const loadVehicles = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/vehicles?limit=1000`, {
+      const response = await fetch(`${API_BASE}/api/vehicles?page=1&limit=100`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -91,7 +101,7 @@ const InvestmentCar = () => {
   };
   const loadInvestors = async () => {
     try {
-      const response = await fetch(`${API_BASE}/api/investors?limit=1000`, {
+      const response = await fetch(`${API_BASE}/api/investors?page=1&limit=100`, {
         method: 'GET',
         headers: { 'Content-Type': 'application/json' }
       });
@@ -618,7 +628,7 @@ const InvestmentCar = () => {
       {/* Matched Vehicles with Car Investment Details */}
       <Card>
         <CardHeader>
-          <CardTitle> Vehicles Matched with Car Investment Entries ({matchedVehicles.length})</CardTitle>
+          <CardTitle>Vehicles Matched with Car Investment Entries (Page {carInvestmentPagination?.page || 1} - {matchedVehicles.length} vehicles matched)</CardTitle>
         </CardHeader>
         <CardContent className="p-0">
           <div className="overflow-x-auto overflow-y-auto h-[80vh]">
@@ -984,6 +994,31 @@ const InvestmentCar = () => {
               </div>
             )}
           </div>
+          {/* Pagination Controls */}
+          {carInvestmentPagination && (
+            <div className="flex items-center justify-between px-6 py-4 bg-gray-50 border-t border-gray-200">
+              <div className="text-sm text-gray-600">
+                <div>Car Investments: Page {carInvestmentPagination.page} of {carInvestmentPagination.totalPages}</div>
+                <div className="text-xs text-gray-500 mt-1">Total: {carInvestmentPagination.total} car investments | Currently showing {matchedVehicles.length} matched vehicles</div>
+              </div>
+              <div className="flex space-x-2">
+                <button
+                  onClick={() => setCarInvestmentPage(prev => Math.max(prev - 1, 1))}
+                  disabled={carInvestmentPagination.page === 1}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  ← Previous
+                </button>
+                <button
+                  onClick={() => setCarInvestmentPage(prev => prev + 1)}
+                  disabled={!carInvestmentPagination.hasMore}
+                  className="px-4 py-2 border border-gray-300 rounded-md text-sm font-medium text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+                >
+                  Next →
+                </button>
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 

@@ -133,7 +133,8 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
 
   const fetchDrivers = async () => {
     try {
-      const res = await fetch(`${API_BASE}/api/drivers?limit=1000`);
+      // Use search API to fetch a larger set for dropdowns (keeps behaviour similar)
+      const res = await fetch(`${API_BASE}/api/drivers/search?limit=1000`);
       const result = res.ok ? await res.json() : [];
       const data = result.data || result;
       setDrivers(Array.isArray(data) ? data : []);
@@ -141,6 +142,32 @@ const [showInvestorDropdown, setShowInvestorDropdown] = useState(false);
       setDrivers([]);
     }
   };
+
+  // Debounced search when user opens the driver dropdown or types
+  useEffect(() => {
+    if (!showDriverDropdown) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(async () => {
+      try {
+        setLoading(true);
+        const q = driverSearch || '';
+        const res = await fetch(`${API_BASE}/api/drivers/search?q=${encodeURIComponent(q)}&limit=50`, { signal: controller.signal });
+        const result = res.ok ? await res.json() : [];
+        const data = result.data || result;
+        setDrivers(Array.isArray(data) ? data : []);
+      } catch (err) {
+        if (err.name !== 'AbortError') console.error('Driver search failed:', err);
+      } finally {
+        setLoading(false);
+      }
+    }, 300);
+
+    return () => {
+      controller.abort();
+      clearTimeout(timer);
+    };
+  }, [driverSearch, showDriverDropdown]);
 
   useEffect(() => {
     if (vehicle) {

@@ -579,27 +579,25 @@ const authenticateDriver = (req, res, next) => {
 // Get all driver plan selections (Admin view)
 router.get("/", async (req, res) => {
   try {
-    const page = parseInt(req.query.page) || 1;
-    const limitParam = req.query.limit;
+    // Enforce pagination - no unlimited option
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const requestedLimit = parseInt(req.query.limit) || 10;
+    const MIN_LIMIT = 10;
+    const MAX_LIMIT = 100;
 
-    // Unlimited condition
-    const isUnlimited = limitParam === "all" || limitParam === "0";
-    const limit = isUnlimited ? 0 : parseInt(limitParam) || 10;
-    const skip = isUnlimited ? 0 : (page - 1) * limit;
+    const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+    const skip = (page - 1) * limit;
 
     const sortBy = req.query.sortBy || "selectedDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const total = await DriverPlanSelection.countDocuments();
 
-    let query = DriverPlanSelection.find().sort({ [sortBy]: sortOrder });
-
-    // Apply pagination only if NOT unlimited
-    if (!isUnlimited) {
-      query = query.skip(skip).limit(limit);
-    }
-
-    const selections = await query.lean();
+    const selections = await DriverPlanSelection.find()
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
 
     // Fetch vehicle data for each selection
     const vehicleIds = [
@@ -630,15 +628,13 @@ router.get("/", async (req, res) => {
 
     res.json({
       data: selectionsWithBreakdown,
-      pagination: isUnlimited
-        ? null
-        : {
-            total,
-            page,
-            limit,
-            totalPages: Math.ceil(total / limit),
-            hasMore: page * limit < total,
-          },
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+        hasMore: page * limit < total,
+      },
     });
   } catch (err) {
     console.error("Get plan selections error:", err);

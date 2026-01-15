@@ -58,7 +58,7 @@ export default function DriverPayments() {
       try {
         const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         // Load drivers for selector
-        const dRes = await fetch(`${API_BASE}/api/drivers?limit=1000`);
+        const dRes = await fetch(`${API_BASE}/api/drivers?page=1&limit=100`);
         if (!dRes.ok) throw new Error(`Failed to load drivers: ${dRes.status}`);
         const dResult = await dRes.json();
         const dList = dResult.data || dResult;
@@ -66,7 +66,7 @@ export default function DriverPayments() {
         setDrivers(dList);
 
         // Load managers for dropdown
-        const mRes = await fetch(`${API_BASE}/api/managers?limit=1000`);
+        const mRes = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
         if (mRes.ok) {
           const mResult = await mRes.json();
           const mList = mResult.data || mResult;
@@ -76,13 +76,13 @@ export default function DriverPayments() {
         // Manager filter logic
         let paymentsData = [];
         if (selectedManager) {
-          const pRes = await fetch(`${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(selectedManager)}?limit=1000`);
+          const pRes = await fetch(`${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(selectedManager)}?page=1&limit=100`);
           if (!pRes.ok) throw new Error(`Failed to load payments for manager: ${pRes.status}`);
           const pResult = await pRes.json();
           paymentsData = pResult.data || pResult;
         } else {
           // Load all payments if no manager selected
-          const pRes = await fetch(`${API_BASE}/api/driver-plan-selections?limit=1000`);
+          const pRes = await fetch(`${API_BASE}/api/driver-plan-selections?page=1&limit=100`);
           if (!pRes.ok) throw new Error(`Failed to load payments: ${pRes.status}`);
           const pResult = await pRes.json();
           paymentsData = pResult.data || pResult;
@@ -302,8 +302,8 @@ export default function DriverPayments() {
               setError(null);
               // re-fetch drivers and transactions
               const [dRes, tRes] = await Promise.all([
-                fetch(`${API_BASE}/api/drivers?limit=1000`),
-                fetch(`${API_BASE}/api/transactions?include=summary&limit=1000`)
+                fetch(`${API_BASE}/api/drivers?page=1&limit=100`),
+                fetch(`${API_BASE}/api/transactions?include=summary&page=1&limit=100`)
               ]);
               if (!dRes.ok) throw new Error(`Failed to load drivers: ${dRes.status}`);
               if (!tRes.ok) throw new Error(`Failed to load payments: ${tRes.status}`);
