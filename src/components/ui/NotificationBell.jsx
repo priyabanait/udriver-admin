@@ -3,7 +3,7 @@ import { Bell, Check } from 'lucide-react';
 import useNotifications from '../../hooks/useNotifications';
 
 export default function NotificationBell() {
-  const { notifications, unreadCount, markAsRead, loadMore, hasMore, loading } = useNotifications();
+  const { notifications, unreadCount, markAsRead, markAllAsRead, loadMore, hasMore, loading } = useNotifications();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -52,10 +52,7 @@ export default function NotificationBell() {
               <div className="text-sm font-medium text-gray-700">Notifications</div>
               {unreadCount > 0 ? (
                 <button
-                  onClick={async () => {
-                    const unread = notifications.filter(n => !n.read);
-                    await Promise.all(unread.map(n => markAsRead(n._id || n.id)));
-                  }}
+                  onClick={markAllAsRead}
                   className="text-xs text-primary-600 hover:underline"
                 >
                   Mark all read

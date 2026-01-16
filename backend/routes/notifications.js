@@ -31,6 +31,36 @@ router.get("/debug/all", async (req, res) => {
         title: n.title?.substring(0, 50),
         recipientType: n.recipientType,
         recipientId: n.recipientId,
+        read: n.read,
+        createdAt: n.createdAt,
+      })),
+    });
+  } catch (err) {
+    res.status(500).json({ error: err.message });
+  }
+});
+
+/**
+ * DEBUG endpoint - List unread notifications in database
+ * GET /api/notifications/debug/unread
+ */
+router.get("/debug/unread", async (req, res) => {
+  try {
+    const unreadNotifs = await Notification.find({ read: false })
+      .sort({ createdAt: -1 })
+      .limit(50)
+      .lean();
+    const totalUnread = await Notification.countDocuments({ read: false });
+    res.json({
+      totalUnread,
+      count: unreadNotifs.length,
+      notifications: unreadNotifs.map((n) => ({
+        _id: n._id,
+        type: n.type,
+        title: n.title?.substring(0, 50),
+        recipientType: n.recipientType,
+        recipientId: n.recipientId,
+        read: n.read,
         createdAt: n.createdAt,
       })),
     });
@@ -58,6 +88,7 @@ router.get("/count/unread", async (req, res) => {
           { recipientType: "driver", recipientId: null },
         ],
       };
+      console.log(`[COUNT] Counting unread for driver ${normalizedDriverId}:`, JSON.stringify(query, null, 2));
     } else if (investorId) {
       const normalizedInvestorId = String(investorId);
       query = {
@@ -67,6 +98,7 @@ router.get("/count/unread", async (req, res) => {
           { recipientType: "investor", recipientId: null },
         ],
       };
+      console.log(`[COUNT] Counting unread for investor ${normalizedInvestorId}:`, JSON.stringify(query, null, 2));
     } else if (recipientType && recipientId) {
       const normalizedRecipientType = String(recipientType).toLowerCase();
       const normalizedRecipientId = String(recipientId);
@@ -77,9 +109,22 @@ router.get("/count/unread", async (req, res) => {
           { recipientType: normalizedRecipientType, recipientId: null },
         ],
       };
+      console.log(`[COUNT] Counting unread for ${normalizedRecipientType}/${normalizedRecipientId}:`, JSON.stringify(query, null, 2));
+    } else if (recipientType) {
+      // For users checking unread count for a specific type without ID (e.g., all driver or investor notifications)
+      const normalizedRecipientType = String(recipientType).toLowerCase();
+      query = {
+        read: false,
+        recipientType: normalizedRecipientType,
+      };
+      console.log(`[COUNT] Counting unread for all ${normalizedRecipientType}:`, JSON.stringify(query, null, 2));
+    } else {
+      // For admin view with no filters - count ALL unread notifications
+      console.log(`[COUNT] Counting all unread notifications (admin view):`, JSON.stringify(query, null, 2));
     }
     
     const unreadCount = await Notification.countDocuments(query);
+    console.log(`[COUNT] Result: ${unreadCount} unread notifications`);
     res.json({ unreadCount });
   } catch (err) {
     console.error("Error fetching unread count:", err);
@@ -206,12 +251,36 @@ router.post("/investor/:investorId/read-all", async (req, res) => {
         .json({ message: "investorId parameter is required" });
     }
 
+    console.log(`[READ-ALL] Marking all notifications as read for investor ${investorId}`);
+    
     const { markAllAsRead } = await import("../lib/notify.js");
     const result = await markAllAsRead({
       recipientType: "investor",
       recipientId: String(investorId),
     });
-    res.json({ message: "All notifications marked as read", result });
+    
+    console.log(`[READ-ALL] Marked ${result.modifiedCount} investor notifications as read for investor ${investorId}`);
+    console.log(`[READ-ALL] MongoDB result:`, result);
+    
+    // Verify the count is now 0
+    const { Notification } = await import("../models/notification.js");
+    const verifyQuery = {
+      read: false,
+      $or: [
+        { recipientType: "investor", recipientId: String(investorId) },
+        { recipientType: "investor", recipientId: null },
+      ],
+    };
+    const remainingUnread = await Notification.countDocuments(verifyQuery);
+    console.log(`[READ-ALL] Verification: ${remainingUnread} unread notifications remaining for investor ${investorId}`);
+    
+    res.json({ 
+      message: "All notifications marked as read", 
+      result,
+      modifiedCount: result.modifiedCount,
+      investorId,
+      remainingUnread
+    });
   } catch (err) {
     console.error("Error marking investor notifications as read:", err);
     res.status(500).json({
@@ -234,14 +303,79 @@ router.post("/driver/:driverId/read-all", async (req, res) => {
         .json({ message: "driverId parameter is required" });
     }
 
+    console.log(`[READ-ALL] Marking all notifications as read for driver ${driverId}`);
+    
     const { markAllAsRead } = await import("../lib/notify.js");
     const result = await markAllAsRead({
       recipientType: "driver",
       recipientId: String(driverId),
     });
-    res.json({ message: "All notifications marked as read", result });
+    
+    console.log(`[READ-ALL] Marked ${result.modifiedCount} driver notifications as read for driver ${driverId}`);
+    console.log(`[READ-ALL] MongoDB result:`, result);
+    
+    // Verify the count is now 0
+    const { Notification } = await import("../models/notification.js");
+    const verifyQuery = {
+      read: false,
+      $or: [
+        { recipientType: "driver", recipientId: String(driverId) },
+        { recipientType: "driver", recipientId: null },
+      ],
+    };
+    const remainingUnread = await Notification.countDocuments(verifyQuery);
+    console.log(`[READ-ALL] Verification: ${remainingUnread} unread notifications remaining for driver ${driverId}`);
+    
+    res.json({ 
+      message: "All notifications marked as read", 
+      result,
+      modifiedCount: result.modifiedCount,
+      driverId,
+      remainingUnread
+    });
   } catch (err) {
     console.error("Error marking driver notifications as read:", err);
+    res.status(500).json({
+      message: "Failed to mark notifications as read",
+      error: err.message,
+    });
+  }
+});
+
+/**
+ * Mark all notifications as read for admin
+ * POST /api/notifications/admin/read-all
+ */
+router.post("/admin/read-all", async (req, res) => {
+  try {
+    console.log(`[READ-ALL] Marking all admin notifications as read`);
+    
+    const { markAllAsRead } = await import("../lib/notify.js");
+    // For admins, mark ALL unread notifications (no recipient type filter)
+    const result = await markAllAsRead({
+      recipientType: null,
+      recipientId: null,
+    });
+    
+    console.log(`[READ-ALL] Marked ${result.modifiedCount} admin notifications as read`);
+    console.log(`[READ-ALL] MongoDB result:`, result);
+    
+    // Verify the count is now 0
+    const { Notification } = await import("../models/notification.js");
+    const verifyQuery = {
+      read: false,
+    };
+    const remainingUnread = await Notification.countDocuments(verifyQuery);
+    console.log(`[READ-ALL] Verification: ${remainingUnread} unread notifications remaining`);
+    
+    res.json({ 
+      message: "All admin notifications marked as read", 
+      result,
+      modifiedCount: result.modifiedCount,
+      remainingUnread
+    });
+  } catch (err) {
+    console.error("Error marking admin notifications as read:", err);
     res.status(500).json({
       message: "Failed to mark notifications as read",
       error: err.message,

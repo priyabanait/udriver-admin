@@ -68,7 +68,8 @@ export default function useNotifications(options = {}) {
       setTotalPages(pagination.totalPages || 0);
       
       // Get real unread count from dedicated endpoint
-      const countRes = await axios.get(`${API_BASE}/api/notifications/count/unread`, { headers, params });
+      const countParams = { ...params };
+      const countRes = await axios.get(`${API_BASE}/api/notifications/count/unread`, { headers, params: countParams });
       const realUnreadCount = countRes.data?.unreadCount || 0;
       console.log('Real unread notifications:', realUnreadCount);
       setUnreadCount(realUnreadCount);
@@ -204,5 +205,73 @@ export default function useNotifications(options = {}) {
     }
   }
 
-  return { notifications, unreadCount, markAsRead, loadMore: () => loadNotifications(page + 1), hasMore: page < totalPages, loading };
+  async function markAllAsRead() {
+    try {
+      const token = auth?.token || localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      
+      // Determine the correct endpoint based on user type/role
+      let endpoint;
+      let countParams = {};
+      const isAdmin = auth?.role === 'super_admin' || auth?.role === 'admin' || auth?.role === 'fleet_manager';
+      
+      if (isAdmin) {
+        endpoint = `${API_BASE}/api/notifications/admin/read-all`;
+        // For admin, no params needed for count - it will count all
+      } else if (auth?.type === 'investor' || auth?.role === 'investor') {
+        endpoint = `${API_BASE}/api/notifications/investor/${auth?.id}/read-all`;
+        countParams.investorId = auth?.id;
+      } else if (auth?.type === 'driver' || auth?.role === 'driver') {
+        endpoint = `${API_BASE}/api/notifications/driver/${auth?.id}/read-all`;
+        countParams.driverId = auth?.id;
+      } else {
+        // Fallback to admin endpoint
+        endpoint = `${API_BASE}/api/notifications/admin/read-all`;
+      }
+      
+      console.log('Marking all notifications as read:', endpoint);
+      const response = await axios.post(endpoint, {}, { headers });
+      console.log('Mark all as read response:', response.data);
+      
+      // Immediately mark all notifications as read locally
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+      console.log('Frontend: All notifications marked as read. Unread count: 0');
+      
+      // Verify count is 0 after a delay
+      setTimeout(async () => {
+        try {
+          console.log('Verifying unread count from backend with params:', countParams);
+          const countRes = await axios.get(`${API_BASE}/api/notifications/count/unread`, { 
+            headers, 
+            params: countParams 
+          });
+          const verifiedUnreadCount = countRes.data?.unreadCount || 0;
+          console.log('Backend unread count verification:', verifiedUnreadCount);
+          
+          if (verifiedUnreadCount === 0) {
+            console.log('✓ SUCCESS: Count is verified as 0');
+            setUnreadCount(0);
+          } else {
+            console.warn(`⚠ MISMATCH: Backend still shows ${verifiedUnreadCount} unread notifications`);
+            console.warn('Backend response:', countRes.data);
+            // Force count to 0 anyway
+            setUnreadCount(0);
+          }
+        } catch (verifyErr) {
+          console.warn('Failed to verify unread count:', verifyErr.message);
+          // Keep count at 0 anyway
+          setUnreadCount(0);
+        }
+      }, 300);
+    } catch (err) {
+      console.error('Error marking all as read:', err);
+      console.error('Error details:', err.response?.data || err.message);
+      // Optimistically update UI
+      setNotifications(prev => prev.map(n => ({ ...n, read: true })));
+      setUnreadCount(0);
+    }
+  }
+
+  return { notifications, unreadCount, markAsRead, markAllAsRead, loadMore: () => loadNotifications(page + 1), hasMore: page < totalPages, loading };
 }

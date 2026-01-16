@@ -441,24 +441,32 @@ export async function markAllAsRead({
   const normalizedRecipientType = recipientType ? String(recipientType).toLowerCase() : null;
 
   // Build query similar to listNotifications: specific recipient + broadcast to type only (NO global notifications)
-  let query = {};
+  // IMPORTANT: Only mark notifications that are currently unread (read: false)
+  let query = { read: false };
+  
   if (normalizedRecipientType && recipientId) {
     // Normalize recipientId to string for consistent comparison
     const normalizedRecipientId = String(recipientId);
     query = {
+      read: false,
       $or: [
         { recipientType: normalizedRecipientType, recipientId: normalizedRecipientId }, // Specific to this user
         { recipientType: normalizedRecipientType, recipientId: null }, // Broadcast to all users of this type
       ],
     };
-  } else if (normalizedRecipientType) {
+  } else if (normalizedRecipientType && !recipientId) {
     query = {
+      read: false,
       recipientType: normalizedRecipientType, // All notifications for this type (both specific and broadcast, but not global)
     };
   } else {
-    query = {}; // mark all notifications
+    // No recipient type specified - mark ALL unread notifications (for admin view)
+    query = { read: false };
   }
+  
+  console.log(`[NOTIFY] markAllAsRead query:`, JSON.stringify(query, null, 2));
   const res = await Notification.updateMany(query, { $set: { read: true } });
+  console.log(`[NOTIFY] markAllAsRead result:`, res);
   return res;
 }
 
@@ -469,12 +477,13 @@ export async function countUnread({
   // Normalize recipientType
   const normalizedRecipientType = recipientType ? String(recipientType).toLowerCase() : null;
 
-  let query = { read: { $ne: true } };
+  // IMPORTANT: Use read: false (not $ne: true) to match markAllAsRead query
+  let query = { read: false };
   if (normalizedRecipientType && recipientId) {
     // Normalize recipientId to string for consistent comparison
     const normalizedRecipientId = String(recipientId);
     query = {
-      read: { $ne: true },
+      read: false,
       $or: [
         { recipientType: normalizedRecipientType, recipientId: normalizedRecipientId }, // Specific to this user
         { recipientType: normalizedRecipientType, recipientId: null }, // Broadcast to all users of this type
@@ -482,9 +491,12 @@ export async function countUnread({
     };
   } else if (normalizedRecipientType) {
     query = {
-      read: { $ne: true },
+      read: false,
       recipientType: normalizedRecipientType, // All notifications for this type (both specific and broadcast, but not global)
     };
+  } else {
+    // No recipient type specified - count ALL unread (for admin)
+    query = { read: false };
   }
   return Notification.countDocuments(query);
 }
