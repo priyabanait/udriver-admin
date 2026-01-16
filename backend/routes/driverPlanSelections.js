@@ -558,6 +558,187 @@ router.get("/by-manager/:manager", async (req, res) => {
       });
   }
 });
+
+// Search driver plan selections with server-side filtering
+router.get("/search", async (req, res) => {
+  try {
+    const term = (req.query.term || "").trim();
+    const status = req.query.status || "all";
+    const mode = req.query.mode || "all";
+    const from = req.query.from || null;
+    const to = req.query.to || null;
+    const managerParam = req.query.manager?.trim();
+
+    const page = Math.max(1, parseInt(req.query.page) || 1);
+    const requestedLimit = parseInt(req.query.limit) || 50;
+    const MIN_LIMIT = 5;
+    const MAX_LIMIT = 200;
+    const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+    const skip = (page - 1) * limit;
+
+    const sortBy = req.query.sortBy || "selectedDate";
+    const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
+
+    const paymentQuery = { $and: [] };
+
+    // Term search across driverUsername, driverMobile, planName
+    if (term) {
+      const safe = term.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+      const re = new RegExp(safe, "i");
+      paymentQuery.$and.push({
+        $or: [
+          { driverUsername: re },
+          { driverMobile: re },
+          { planName: re },
+        ],
+      });
+    }
+
+    if (mode && mode !== "all") {
+      paymentQuery.$and.push({ paymentMode: mode });
+    }
+
+    if (status && status !== "all" && status !== "unpaid") {
+      paymentQuery.$and.push({ paymentStatus: status });
+    }
+
+    if (from || to) {
+      const dateQuery = {};
+      if (from) dateQuery.$gte = new Date(from);
+      if (to) {
+        const d = new Date(to);
+        d.setHours(23, 59, 59, 999);
+        dateQuery.$lte = d;
+      }
+      paymentQuery.$and.push({ paymentDate: dateQuery });
+    }
+
+    // If manager filter provided, narrow down by drivers assigned to manager (re-use logic)
+    if (managerParam) {
+      const Manager = (await import("../models/manager.js")).default;
+      let managerIdentifiers = [managerParam];
+      if (mongoose.Types.ObjectId.isValid(managerParam)) {
+        const mgrDoc = await Manager.findById(managerParam).lean();
+        if (mgrDoc) {
+          if (mgrDoc.name) managerIdentifiers.push(mgrDoc.name.trim());
+          if (mgrDoc.username) managerIdentifiers.push(mgrDoc.username.trim());
+          if (mgrDoc.email) managerIdentifiers.push(mgrDoc.email.trim());
+        }
+      } else if (managerParam.includes("@")) {
+        const mgrDoc = await Manager.findOne({ email: managerParam }).lean();
+        if (mgrDoc) {
+          if (mgrDoc._id) managerIdentifiers.push(mgrDoc._id.toString());
+          if (mgrDoc.name) managerIdentifiers.push(mgrDoc.name.trim());
+          if (mgrDoc.username) managerIdentifiers.push(mgrDoc.username.trim());
+        }
+      }
+
+      const vehicleQuery = {
+        $or: [
+          { assignedManager: managerParam },
+          { assignedManager: managerParam.toString() },
+          { assignedManager: { $in: managerIdentifiers.map((id) => new RegExp(`^${id}$`, "i")) } },
+        ],
+      };
+      const vehicles = await Vehicle.find(vehicleQuery).lean();
+      const assignedDriverIds = vehicles.map((v) => v.assignedDriver).filter(Boolean).map((id) => id.toString().trim());
+
+      // If we have assigned drivers, match payments to those drivers/signup ids/usernames/mobiles
+      if (assignedDriverIds.length > 0) {
+        const validObjectIds = assignedDriverIds
+          .filter((id) => mongoose.Types.ObjectId.isValid(id))
+          .map((id) => new mongoose.Types.ObjectId(id));
+
+        const drivers =
+          validObjectIds.length > 0
+            ? await Driver.find({ _id: { $in: validObjectIds } }).lean()
+            : [];
+
+        const driverMobiles = drivers.map((d) => d.mobile).filter(Boolean);
+        const driverUsernames = drivers.map((d) => d.username).filter(Boolean);
+        const driverPhones = drivers.map((d) => d.phone).filter(Boolean);
+
+        const driverSignupQuery = { $or: [] };
+        if (driverMobiles.length > 0) driverSignupQuery.$or.push({ mobile: { $in: driverMobiles } });
+        if (driverUsernames.length > 0) driverSignupQuery.$or.push({ username: { $in: driverUsernames } });
+        if (driverPhones.length > 0) driverSignupQuery.$or.push({ phone: { $in: driverPhones } });
+
+        const driverSignups =
+          driverSignupQuery.$or.length > 0
+            ? await DriverSignup.find(driverSignupQuery).lean()
+            : [];
+
+        const driverSignupIds = driverSignups.map((d) => d._id);
+        const signupUsernames = driverSignups.map((d) => d.username).filter(Boolean);
+        const signupMobiles = driverSignups.map((d) => d.mobile).filter(Boolean);
+
+        const allUsernames = [
+          ...new Set([
+            ...signupUsernames,
+            ...driverUsernames,
+            ...assignedDriverIds.filter((id) => !mongoose.Types.ObjectId.isValid(id)),
+          ]),
+        ];
+
+        const allMobiles = [
+          ...new Set([
+            ...signupMobiles,
+            ...driverMobiles,
+            ...driverPhones,
+            ...assignedDriverIds.filter((id) => !mongoose.Types.ObjectId.isValid(id)),
+          ]),
+        ];
+
+        const mgrConditions = { $or: [] };
+        if (driverSignupIds.length > 0) mgrConditions.$or.push({ driverSignupId: { $in: driverSignupIds } });
+        if (allUsernames.length > 0) mgrConditions.$or.push({ driverUsername: { $in: allUsernames.map((u) => new RegExp(`^${u}$`, "i")) } });
+        if (allMobiles.length > 0) mgrConditions.$or.push({ driverMobile: { $in: allMobiles.map((m) => new RegExp(`^${m}$`, "i")) } });
+
+        if (mgrConditions.$or.length > 0) {
+          paymentQuery.$and.push(mgrConditions);
+        } else {
+          // If no driver identifiers could be resolved, return empty
+          return res.json({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+        }
+      } else {
+        return res.json({ data: [], pagination: { total: 0, page, limit, totalPages: 0 } });
+      }
+    }
+
+    const finalQuery = (paymentQuery.$and && paymentQuery.$and.length > 0) ? { $and: paymentQuery.$and } : {};
+
+    const selections = await DriverPlanSelection.find(finalQuery)
+      .sort({ [sortBy]: sortOrder })
+      .skip(skip)
+      .limit(limit)
+      .lean();
+
+    // Compute payment details and optionally filter unpaid
+    let selectionsWithDetails = selections.map((s) => ({ ...s, paymentDetails: calculatePaymentDetails(s) }));
+    if (status === "unpaid") {
+      selectionsWithDetails = selectionsWithDetails.filter((s) => (s.paymentDetails?.totalPayable || 0) > 0);
+    }
+
+    // Fetch vehicles to augment results
+    const vehicleIds = [...new Set(selectionsWithDetails.map((s) => s.vehicleId).filter(Boolean))];
+    const vehicles = await Vehicle.find({ vehicleId: { $in: vehicleIds } }).lean();
+    const vehicleMap = {};
+    vehicles.forEach((v) => { vehicleMap[v.vehicleId] = v; });
+
+    const results = selectionsWithDetails.map((s) => ({
+      ...s,
+      vehicleStatus: s.vehicleId ? vehicleMap[s.vehicleId]?.status || null : null,
+      vehicleRegistrationNumber: s.vehicleId ? vehicleMap[s.vehicleId]?.registrationNumber || null : null,
+    }));
+
+    const total = await DriverPlanSelection.countDocuments(finalQuery);
+
+    res.json({ data: results, pagination: { total, page, limit, totalPages: Math.ceil(total / limit) } });
+  } catch (err) {
+    console.error("Search driver plan selections error:", err);
+    res.status(500).json({ message: "Failed to search plan selections", error: err.message });
+  }
+});
 // Middleware to verify driver JWT token
 const authenticateDriver = (req, res, next) => {
   const authHeader = req.headers["authorization"];

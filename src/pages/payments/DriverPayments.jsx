@@ -29,6 +29,9 @@ export default function DriverPayments() {
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [openDropdown, setOpenDropdown] = useState(null);
   const [rentSummaries, setRentSummaries] = useState({});
+  // Pagination state (moved up so effects can reset page when filters/search change)
+  const rowsPerPage = 5;
+  const [currentPage, setCurrentPage] = useState(1);
   // Vehicles & Plans for assignment
   const [vehicles, setVehicles] = useState([]);
   const [weeklyPlans, setWeeklyPlans] = useState([]);
@@ -319,8 +322,36 @@ export default function DriverPayments() {
           throw new Error(errorData.message || 'Failed to delete record');
         }
         toast.success('Payment record deleted');
-        // Remove from local state
-        setSelections(prev => prev.filter(s => s._id !== selectionId));
+        // Remove deleted selection from grouped local state
+        setSelections(prev => {
+          // prev is an array of groups (arrays). Remove the selection from each group.
+          const updated = prev
+            .map(group => group.filter(item => item._id !== selectionId))
+            .filter(group => group.length > 0);
+          return updated;
+        });
+
+        // Clean up any input state related to this selection
+        setExtraInputs(prev => {
+          const next = { ...prev };
+          delete next[selectionId];
+          return next;
+        });
+        setAdjustmentInputs(prev => {
+          const next = { ...prev };
+          delete next[selectionId];
+          return next;
+        });
+        setAdminPaidInputs(prev => {
+          const next = { ...prev };
+          delete next[selectionId];
+          return next;
+        });
+        setRentSummaries(prev => {
+          const next = { ...prev };
+          delete next[selectionId];
+          return next;
+        });
       } catch (e) {
         console.error('Delete error:', e);
         toast.error(e.message || 'Failed to delete record');
@@ -376,71 +407,89 @@ export default function DriverPayments() {
     };
 
   useEffect(() => {
-    const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-    // If logged-in user is a manager, use their email/ID, otherwise use selected manager filter
-    const managerFilter = isManager ? (user?.email || user?.id) : (selectedManagers?.filter || '');
-    
-    // Fetch managers for dropdown (only if not a manager user)
-    if (!isManager) {
-      (async () => {
+    // moved fetching logic below (mirrors DriversList pattern)
+  }, []);
+
+  // Fetch payments from server (supports filters and pagination)
+  const fetchPayments = async (page = 1) => {
+    setLoading(true);
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const managerFilter = isManager ? (user?.email || user?.id) : (selectedManagers?.filter || '');
+
+      // Fetch managers for dropdown (only if not a manager user)
+      if (!isManager && managers.length === 0) {
         try {
-            const res = await fetch(`${API_BASE}/api/managers?page=1&limit=100`);
-        } catch (err) {
-          console.error('Error loading managers:', err);
-          setManagers([]);
+          const token = localStorage.getItem('token');
+          const mgrRes = await fetch(`${API_BASE}/api/managers?page=1&limit=100`, {
+            headers: token ? { Authorization: `Bearer ${token}` } : undefined
+          });
+          if (mgrRes.ok) {
+            const mr = await mgrRes.json();
+            const md = mr.data || mr;
+            setManagers(Array.isArray(md) ? md : []);
+          }
+        } catch (e) {
+          console.error('Error loading managers:', e);
         }
-      })();
-    }
-
-    // Fetch payments by manager if selected, else fetch all
-    const fetchPayments = async () => {
-      setLoading(true);
-      try {
-        let url = `${API_BASE}/api/driver-plan-selections?page=1&limit=100`;
-        if (managerFilter) {
-          url = `${API_BASE}/api/driver-plan-selections/by-manager/${encodeURIComponent(managerFilter)}?page=1&limit=100`;
-          console.log('Fetching payments for manager:', managerFilter, 'URL:', url);
-        } else {
-          console.log('Fetching all payments');
-        }
-        const res = await fetch(url);
-        if (!res.ok) {
-          const errorData = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
-          throw new Error(errorData.message || `Failed to load payments: ${res.status}`);
-        }
-        const result = await res.json();
-        const data = result.data || result;
-        console.log('Payments data received:', Array.isArray(data) ? data.length : 0, 'records');
-        
-        // Include selections where payment has been made or is pending, or where vehicle assignment/rent has started.
-        // Previously we only showed records with a vehicleId or rentStartDate which hid newly selected plans (paymentStatus: 'pending').
-        const assignedDriverRecords = (Array.isArray(data) ? data : []).filter(s => {
-          // Always include pending or completed payments (booked plans or paid plans)
-          if (s.paymentStatus === 'pending' || s.paymentStatus === 'completed') return true;
-          // Otherwise include if driver is assigned (vehicleId) or rent has started
-          return !!(s.vehicleId || s.rentStartDate);
-        });
-
-        console.log('Filtered to relevant driver plan selections:', assignedDriverRecords.length, 'records');
-        
-        // Group by driverMobile or driverUsername
-        const grouped = {};
-        assignedDriverRecords.forEach(s => {
-          const key = s.driverMobile || s.driverUsername || s._id;
-          if (!grouped[key]) grouped[key] = [];
-          grouped[key].push(s);
-        });
-        setSelections(Object.values(grouped));
-      } catch (err) {
-        console.error('Error loading payments:', err);
-        toast.error(err.message || 'Failed to load payments');
-        setSelections([]);
-      } finally {
-        setLoading(false);
       }
-    };
-    fetchPayments();
-  }, [selectedManagers?.filter, isManager, user?.email, user?.id]);
+
+      const params = new URLSearchParams();
+      if (searchTerm) params.append('term', searchTerm);
+      if (statusFilter) params.append('status', statusFilter);
+      if (modeFilter) params.append('mode', modeFilter);
+      if (fromDate) params.append('from', fromDate);
+      if (toDate) params.append('to', toDate);
+      if (managerFilter) params.append('manager', managerFilter);
+      params.append('page', String(page));
+      params.append('limit', '100');
+
+      const url = `${API_BASE}/api/driver-plan-selections/search?${params.toString()}`;
+      console.log('Fetching payments (search):', url);
+      const res = await fetch(url);
+      if (!res.ok) {
+        const errorData = await res.json().catch(() => ({ message: `HTTP ${res.status}` }));
+        throw new Error(errorData.message || `Failed to load payments: ${res.status}`);
+      }
+      const result = await res.json();
+      const data = result.data || result;
+
+      // Include selections where payment has been made or is pending, or where vehicle assignment/rent has started.
+      const assignedDriverRecords = (Array.isArray(data) ? data : []).filter(s => {
+        if (s.paymentStatus === 'pending' || s.paymentStatus === 'completed') return true;
+        return !!(s.vehicleId || s.rentStartDate);
+      });
+
+      // Group by driverMobile or driverUsername
+      const grouped = {};
+      assignedDriverRecords.forEach(s => {
+        const key = s.driverMobile || s.driverUsername || s._id;
+        if (!grouped[key]) grouped[key] = [];
+        grouped[key].push(s);
+      });
+      setSelections(Object.values(grouped));
+    } catch (err) {
+      console.error('Error loading payments:', err);
+      toast.error(err.message || 'Failed to load payments');
+      setSelections([]);
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Call once on mount
+  useEffect(() => {
+    fetchPayments(1);
+  }, [isManager, user?.email, user?.id]);
+
+  // Debounced refetch when filters/search change
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setCurrentPage(1);
+      fetchPayments(1);
+    }, 1000);
+    return () => clearTimeout(timer);
+  }, [searchTerm, statusFilter, modeFilter, fromDate, toDate, selectedManagers?.filter, isManager, user?.email, user?.id]);
 
   // Debug: log selections after fetch
  useEffect(() => {
@@ -564,13 +613,9 @@ export default function DriverPayments() {
   };
 
  const filtered = useMemo(() => {
+  // Server handles search; frontend only groups selections returned from server.
   return selections.filter(s => {
     return s.some(tx => {
-      const matchesSearch =
-        tx.driverUsername?.toLowerCase().includes(searchTerm.toLowerCase()) ||
-        tx.driverMobile?.includes(searchTerm) ||
-        tx.planName?.toLowerCase().includes(searchTerm.toLowerCase());
-
       let matchesStatus = false;
       const totalPayable = tx.paymentDetails?.totalPayable || 0;
 
@@ -584,8 +629,7 @@ export default function DriverPayments() {
         matchesStatus = tx.paymentStatus === statusFilter;
       }
 
-      const matchesMode =
-        modeFilter === 'all' || tx.paymentMode === modeFilter;
+      const matchesMode = modeFilter === 'all' || tx.paymentMode === modeFilter;
 
       let matchesDate = true;
       if (fromDate) {
@@ -597,22 +641,12 @@ export default function DriverPayments() {
         matchesDate = matchesDate && (txDate ? txDate <= new Date(toDate) : false);
       }
 
-      return matchesSearch && matchesStatus && matchesMode && matchesDate;
+      return matchesStatus && matchesMode && matchesDate;
     });
   });
-}, [
-  selections,
-  searchTerm,
-  statusFilter,
-  modeFilter,
-  fromDate,
-  toDate
-]);
+}, [selections, statusFilter, modeFilter, fromDate, toDate]);
 
-  const rowsPerPage = 5;
-const [currentPage, setCurrentPage] = useState(1);
-
-const totalPages = Math.ceil(filtered.length / rowsPerPage);
+  const totalPages = Math.ceil(filtered.length / rowsPerPage);
 
 const paginatedFiltered = useMemo(() => {
   return filtered.slice(
@@ -805,7 +839,8 @@ const paginatedFiltered = useMemo(() => {
     console.log('Payment completed, refreshing data...', response);
     toast.success('Payment recorded successfully');
     // Refresh the payments list
-    fetchSelections();
+    setCurrentPage(1);
+    fetchPayments(1);
   };
 
   const handleStatusChange = async (selectionId, newStatus) => {
@@ -874,7 +909,7 @@ const paginatedFiltered = useMemo(() => {
           </p>
         </div>
         <PermissionGuard permission={PERMISSIONS.REPORTS_EXPORT}>
-          <button onClick={handleExport} className="btn btn-secondary mt-4 sm:mt-0 flex items-center gap-2">
+          <button type="button" onClick={handleExport} className="btn btn-secondary mt-4 sm:mt-0 flex items-center gap-2">
             <Download className="h-4 w-4" />
             Export CSV
           </button>
@@ -951,6 +986,7 @@ const paginatedFiltered = useMemo(() => {
       placeholder="Search by driver or plan..."
       value={searchTerm}
       onChange={(e) => setSearchTerm(e.target.value)}
+      onKeyDown={(e) => { if (e.key === 'Enter') e.preventDefault(); }}
       className="
         w-full pl-10 pr-3 py-2
         border border-gray-300 rounded-md 
@@ -1034,7 +1070,7 @@ const paginatedFiltered = useMemo(() => {
             )}
             {/* Clear Filters Button */}
             <div>
-              <button
+              <button type="button"
                 onClick={() => {
                   setSearchTerm('');
                   setStatusFilter('all');
@@ -1042,6 +1078,7 @@ const paginatedFiltered = useMemo(() => {
                   setFromDate('');
                   setToDate('');
                   setSelectedManagers(prev => ({ ...prev, filter: '' }));
+                  setCurrentPage(1);
                 }}
                 className="btn btn-secondary w-full"
               >
@@ -1437,7 +1474,7 @@ const paginatedFiltered = useMemo(() => {
                                           <Eye className="h-4 w-4" />
                                           View
                                         </button> */}
-                                        <button
+                                        <button type="button"
                                           onClick={() => handleDelete(s._id)}
                                           className="text-red-600 hover:text-red-700 flex items-center gap-1 text-sm font-medium border border-red-200 rounded px-2 py-1"
                                           title="Delete payment record"
@@ -1468,7 +1505,7 @@ const paginatedFiltered = useMemo(() => {
     </div>
 
     <div className="flex items-center gap-2">
-      <button
+      <button type="button"
         disabled={currentPage === 1}
         onClick={() => setCurrentPage(p => p - 1)}
         className="px-3 py-1 border rounded disabled:opacity-50"
@@ -1480,7 +1517,7 @@ const paginatedFiltered = useMemo(() => {
         Page {currentPage} of {totalPages}
       </span>
 
-      <button
+      <button type="button"
         disabled={currentPage === totalPages}
         onClick={() => setCurrentPage(p => p + 1)}
         className="px-3 py-1 border rounded disabled:opacity-50"

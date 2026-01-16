@@ -4,7 +4,7 @@ import {
   Users, 
   Car, 
   TrendingUp, 
-  DollarSign, 
+  IndianRupee , 
   AlertTriangle,
   CheckCircle,
   Clock,
@@ -552,7 +552,7 @@ export default function SuperAdminDashboard() {
                 onClick={() => navigate('/payments/drivers')}
                 className="btn btn-outline flex flex-col items-center p-4 hover:text-black hover:bg-emerald-50 transition-colors"
               >
-                <DollarSign className="h-6 w-6 mb-2 text-emerald-600" />
+                < IndianRupee  className="h-6 w-6 mb-2 text-emerald-600" />
                 <span className="text-sm font-medium">Payments</span>
                 <span className="text-xs text-gray-500 mt-1">Process payments</span>
               </button>
