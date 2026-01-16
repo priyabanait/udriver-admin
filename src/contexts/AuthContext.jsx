@@ -150,7 +150,6 @@ export function AuthProvider({ children }) {
         localStorage.setItem('udriver_user', JSON.stringify(userWithoutPassword));
         // Also mirror token to the legacy 'token' key used by some components
         localStorage.setItem('token', 'mock');
-        toast.success(`Welcome back, ${userWithoutPassword.name}!`);
         setLoading(false);
         return { success: true };
       }
@@ -199,7 +198,6 @@ export function AuthProvider({ children }) {
       localStorage.setItem('udriver_user', JSON.stringify(userWithoutPassword));
       // Persist token separately for code that reads localStorage.getItem('token')
       if (userWithoutPassword.token) localStorage.setItem('token', userWithoutPassword.token);
-      toast.success(`Welcome back, ${userWithoutPassword.name}!`);
       setLoading(false);
       return { success: true }; 
     } catch (error) {
@@ -229,7 +227,6 @@ export function AuthProvider({ children }) {
     setUser(null);
     localStorage.removeItem('udriver_user');
     localStorage.removeItem('token');
-    toast.success('Logged out successfully');
   };
 
   const forgotPassword = async (email) => {

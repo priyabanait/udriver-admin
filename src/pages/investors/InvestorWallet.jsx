@@ -116,7 +116,7 @@ export default function AddWalletAmount() {
   return (
     <div className="min-h-screen bg-gray-100 p-6 flex justify-center">
       <div className="w-full max-w-xl bg-white shadow-lg rounded-2xl p-8">
-        <h1 className="text-2xl font-bold mb-6">Addsd Wallet Amount</h1>
+        <h1 className="text-2xl font-bold mb-6">Add Wallet Amount</h1>
 
         <form className="space-y-5" onSubmit={handleSubmit}>
           {/* INVESTOR SEARCH */}
