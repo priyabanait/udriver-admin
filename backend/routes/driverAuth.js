@@ -104,23 +104,23 @@ router.post("/login", async (req, res) => {
         .json({ message: "Username and password required." });
     }
 
-    // Find driver signup by username
-    const driverSignup = await DriverSignup.findOne({ username });
-    if (!driverSignup) {
+    // Find driver by username in Driver collection
+    const driver = await Driver.findOne({ username });
+    if (!driver) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
     // Verify password (plain text comparison)
-    if (driverSignup.password !== password) {
+    if (driver.password !== password) {
       return res.status(401).json({ message: "Invalid credentials." });
     }
 
     // Generate JWT token
     const token = jwt.sign(
       {
-        id: driverSignup._id,
-        username: driverSignup.username,
-        mobile: driverSignup.mobile,
+        id: driver._id,
+        username: driver.username,
+        mobile: driver.mobile,
         type: "driver",
       },
       SECRET,
@@ -131,10 +131,9 @@ router.post("/login", async (req, res) => {
       message: "Login successful.",
       token,
       driver: {
-        id: driverSignup._id,
-        username: driverSignup.username,
-        mobile: driverSignup.mobile,
-        registrationCompleted: driverSignup.registrationCompleted || false,
+        id: driver._id,
+        username: driver.username,
+        mobile: driver.mobile,
       },
     });
   } catch (error) {

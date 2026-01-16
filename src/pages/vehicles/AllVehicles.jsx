@@ -452,8 +452,17 @@ export default function VehiclesList() {
     }catch(err){ console.error(err); toast.error(err.message||'Failed to update KYC status'); }
   };
 
-  const handleExport = () => {
+  const handleExport = async () => {
     try{
+      toast.loading('Exporting all vehicles...');
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      
+      // Fetch ALL vehicles using the /all endpoint with unlimited=true
+      const res = await fetch(`${API_BASE}/api/vehicles/all?limit=all`);
+      if (!res.ok) throw new Error('Failed to fetch vehicles for export');
+      const result = await res.json();
+      const allVehicles = result.data || result;
+      
       const headers = [
         'Registration Number', 'Category', 'Brand', 'Model', 'Car Name',
         'Owner Name', 'Owner Phone', 'Investor ID', 'Investor Name',
@@ -467,7 +476,7 @@ export default function VehiclesList() {
         'Car Front Photo', 'Car Left Photo', 'Car Right Photo', 'Car Back Photo', 'Car Full Photo'
       ];
       const escape = v => v==null? '': `"${String(v).replace(/"/g,'""')}"`;
-      const rows = vehiclesData.map(v => [
+      const rows = allVehicles.map(v => [
         v.registrationNumber || '',
         v.category || '',
         v.brand || v.make || '',
@@ -509,8 +518,13 @@ export default function VehiclesList() {
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
       const url = URL.createObjectURL(blob);
       const a = document.createElement('a'); a.href = url; a.download = `vehicles_complete_${new Date().toISOString().slice(0,10)}.csv`; document.body.appendChild(a); a.click(); document.body.removeChild(a); URL.revokeObjectURL(url);
-      toast.success(`Exported ${vehiclesData.length} vehicles with complete details`);
-    }catch(err){ console.error(err); toast.error('Failed to export vehicles'); }
+      toast.dismiss();
+      toast.success(`Exported ${allVehicles.length} total vehicles to CSV`);
+    }catch(err){ 
+      console.error(err); 
+      toast.dismiss();
+      toast.error('Failed to export vehicles'); 
+    }
   };
 
  

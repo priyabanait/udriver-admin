@@ -75,7 +75,7 @@ export default function SuperAdminDashboard() {
           ticketsRes,
           employeesRes,
           investorsRes,
-          investorSignupRes,
+        investorSignupRes,
           investmentFDRes
         ] = await Promise.all([
           fetch(`${API_BASE}/api/drivers/all?unlimited=true`),

@@ -1063,8 +1063,23 @@ router.post("/", async (req, res) => {
 
 router.put("/:id", async (req, res) => {
   try {
-    const id = Number(req.params.id);
+    const paramId = req.params.id;
     const fields = stripAuthFields(req.body);
+
+    // Try to find by MongoDB _id first, then by numeric id
+    let query;
+    if (paramId.match(/^[0-9a-fA-F]{24}$/)) {
+      // Valid MongoDB ObjectId
+      query = { _id: paramId };
+    } else {
+      // Try as numeric id
+      const numId = Number(paramId);
+      if (!isNaN(numId)) {
+        query = { id: numId };
+      } else {
+        return res.status(400).json({ message: "Invalid driver ID format" });
+      }
+    }
 
     // If signature or document fields are missing, try to copy from corresponding DriverSignup
     const documentFields = [
@@ -1096,7 +1111,7 @@ router.put("/:id", async (req, res) => {
         try {
           const result = await uploadToCloudinary(
             fields[field],
-            `drivers/${id}/${field}`
+            `drivers/${paramId}/${field}`
           );
           uploadedDocs[field] = result.secure_url;
         } catch (uploadErr) {
@@ -1125,7 +1140,7 @@ router.put("/:id", async (req, res) => {
     // Normalize joinDate if present
     if (updateData.joinDate) updateData.joinDate = normalizeToDateOnly(updateData.joinDate) || updateData.joinDate;
 
-    const updated = await Driver.findOneAndUpdate({ id }, updateData, {
+    const updated = await Driver.findOneAndUpdate(query, updateData, {
       new: true,
     }).lean();
 
@@ -1143,9 +1158,33 @@ router.put("/:id", async (req, res) => {
 });
 
 router.delete("/:id", async (req, res) => {
-  const id = Number(req.params.id);
-  await Driver.deleteOne({ id });
-  res.json({ message: "Deleted" });
+  try {
+    const paramId = req.params.id;
+    
+    // Try to find by MongoDB _id first, then by numeric id
+    let query;
+    if (paramId.match(/^[0-9a-fA-F]{24}$/)) {
+      // Valid MongoDB ObjectId
+      query = { _id: paramId };
+    } else {
+      // Try as numeric id
+      const numId = Number(paramId);
+      if (!isNaN(numId)) {
+        query = { id: numId };
+      } else {
+        return res.status(400).json({ message: "Invalid driver ID format" });
+      }
+    }
+    
+    const deleted = await Driver.findOneAndDelete(query);
+    if (!deleted) {
+      return res.status(404).json({ message: "Driver not found" });
+    }
+    res.json({ message: "Deleted", driver: deleted });
+  } catch (err) {
+    console.error("Driver delete error:", err);
+    res.status(500).json({ message: "Failed to delete driver", error: err.message });
+  }
 });
 
 // GET driver earnings summary

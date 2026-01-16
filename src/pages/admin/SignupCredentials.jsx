@@ -68,7 +68,7 @@ function SignupEditModalManager({ children }) {
       const id = updated._id || updated.id;
       if (!id) throw new Error('Missing record ID');
       const url = modal.type === 'driver'
-        ? `${API_BASE}/api/drivers/signup/credentials/${id}`
+        ? `${API_BASE}/api/drivers/${id}`
         : `${API_BASE}/api/investors/signup/credentials/${id}`;
       const res = await fetch(url, {
         method: 'PUT',
@@ -96,7 +96,7 @@ async function handleDelete(type, user) {
   if (!window.confirm('Are you sure you want to delete this record?')) return;
   try {
     const url = type === 'driver'
-      ? `${API_BASE}/api/drivers/signup/credentials/${user._id || user.id}`
+      ? `${API_BASE}/api/drivers/${user._id || user.id}`
       : `${API_BASE}/api/investors/signup/credentials/${user._id || user.id}`;
     const res = await fetch(url, { method: 'DELETE' });
     if (!res.ok) throw new Error('Failed to delete');
@@ -141,10 +141,10 @@ export default function SignupCredentials() {
       }
       
       const [dRes, iRes] = await Promise.all([
-        fetch(`${API_BASE}/api/drivers/signup/credentials?${driverParams.toString()}`),
+        fetch(`${API_BASE}/api/drivers?${driverParams.toString()}`),
         fetch(`${API_BASE}/api/investors/signup/credentials?${investorParams.toString()}`)
       ]);
-      if (!dRes.ok) throw new Error('Failed to load driver signups');
+      if (!dRes.ok) throw new Error('Failed to load drivers');
       if (!iRes.ok) throw new Error('Failed to load investor signups');
       const [dResult, iResult] = await Promise.all([dRes.json(), iRes.json()]);
       const dData = dResult.data || dResult;

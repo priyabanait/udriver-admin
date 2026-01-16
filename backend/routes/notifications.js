@@ -39,6 +39,54 @@ router.get("/debug/all", async (req, res) => {
   }
 });
 
+/**
+ * Get unread notification count
+ * GET /api/notifications/count/unread
+ */
+router.get("/count/unread", async (req, res) => {
+  try {
+    const { driverId, investorId, recipientType, recipientId } = req.query;
+    
+    let query = { read: false };
+    
+    if (driverId) {
+      const normalizedDriverId = String(driverId);
+      query = {
+        read: false,
+        $or: [
+          { recipientType: "driver", recipientId: normalizedDriverId },
+          { recipientType: "driver", recipientId: null },
+        ],
+      };
+    } else if (investorId) {
+      const normalizedInvestorId = String(investorId);
+      query = {
+        read: false,
+        $or: [
+          { recipientType: "investor", recipientId: normalizedInvestorId },
+          { recipientType: "investor", recipientId: null },
+        ],
+      };
+    } else if (recipientType && recipientId) {
+      const normalizedRecipientType = String(recipientType).toLowerCase();
+      const normalizedRecipientId = String(recipientId);
+      query = {
+        read: false,
+        $or: [
+          { recipientType: normalizedRecipientType, recipientId: normalizedRecipientId },
+          { recipientType: normalizedRecipientType, recipientId: null },
+        ],
+      };
+    }
+    
+    const unreadCount = await Notification.countDocuments(query);
+    res.json({ unreadCount });
+  } catch (err) {
+    console.error("Error fetching unread count:", err);
+    res.status(500).json({ message: "Failed to fetch unread count", error: err.message });
+  }
+});
+
 router.get("/", async (req, res) => {
   try {
     const page = parseInt(req.query.page) || 1;

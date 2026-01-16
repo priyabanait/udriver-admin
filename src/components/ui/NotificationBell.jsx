@@ -3,7 +3,7 @@ import { Bell, Check } from 'lucide-react';
 import useNotifications from '../../hooks/useNotifications';
 
 export default function NotificationBell() {
-  const { notifications, unreadCount, markAsRead } = useNotifications();
+  const { notifications, unreadCount, markAsRead, loadMore, hasMore, loading } = useNotifications();
   const [open, setOpen] = useState(false);
   const dropdownRef = useRef(null);
 
@@ -91,6 +91,17 @@ export default function NotificationBell() {
                   </div>
                 </div>
               ))}
+              {hasMore && (
+                <div className="border-t px-4 py-2 text-center">
+                  <button
+                    onClick={loadMore}
+                    disabled={loading}
+                    className="text-xs text-primary-600 hover:underline disabled:opacity-50"
+                  >
+                    {loading ? 'Loading...' : 'Load More'}
+                  </button>
+                </div>
+              )}
             </div>
            
           </div>

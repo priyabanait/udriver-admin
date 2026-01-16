@@ -9,60 +9,86 @@ export default function useNotifications(options = {}) {
   const { recipientType: optRecipientType, recipientId: optRecipientId } = options || {};
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(0);
+  const [loading, setLoading] = useState(false);
   const socketRef = useRef(null);
   const reconnectTimeoutRef = useRef(null);
 
   const { user: auth } = useAuth();
 
+  const loadNotifications = async (pageNum = 1) => {
+    setLoading(true);
+    try {
+      const token = auth?.token || localStorage.getItem('token');
+      const headers = token ? { Authorization: `Bearer ${token}` } : {};
+      const params = { limit: 100, page: pageNum };
+
+      // Prefer explicit options, otherwise infer from auth when possible
+      if (optRecipientType && optRecipientId) {
+        if (optRecipientType === 'driver') params.driverId = optRecipientId;
+        else if (optRecipientType === 'investor') params.investorId = optRecipientId;
+        else { params.recipientType = optRecipientType; params.recipientId = optRecipientId; }
+      } else if (auth) {
+        // For admin users (super_admin, admin, fleet_manager), fetch all notifications
+        const isAdmin = auth.role === 'super_admin' || auth.role === 'admin' || auth.role === 'fleet_manager';
+        if (isAdmin) {
+          // Don't set any filters - fetch all notifications
+          console.log('Admin user detected, fetching all notifications');
+        } else {
+          // Heuristic: if auth token represents an investor (type or role), request investor notifications
+          if (auth.type === 'investor' || auth.role === 'investor') {
+            if (auth.id) params.investorId = auth.id;
+          }
+          // Heuristic: driver role
+          if (auth.role === 'driver' || auth.type === 'driver') {
+            if (auth.id) params.driverId = auth.id;
+          }
+        }
+      }
+
+      const res = await axios.get(`${API_BASE}/api/notifications`, { headers, params });
+      
+      // API returns { items, pagination }
+      const arr = Array.isArray(res.data) ? res.data : (res.data.items || []);
+      const pagination = res.data.pagination || {};
+      
+      console.log('Loaded notifications from API:', arr.length, 'notifications');
+      console.log('Pagination:', pagination);
+      console.log('Notification params used:', params);
+      
+      // Append notifications if loading more pages
+      if (pageNum === 1) {
+        setNotifications(arr);
+      } else {
+        setNotifications(prev => [...prev, ...arr]);
+      }
+      
+      setPage(pageNum);
+      setTotalPages(pagination.totalPages || 0);
+      
+      // Get real unread count from dedicated endpoint
+      const countRes = await axios.get(`${API_BASE}/api/notifications/count/unread`, { headers, params });
+      const realUnreadCount = countRes.data?.unreadCount || 0;
+      console.log('Real unread notifications:', realUnreadCount);
+      setUnreadCount(realUnreadCount);
+    } catch (err) {
+      console.warn('Failed to load notifications', err.message);
+      if (pageNum === 1) {
+        setNotifications([]);
+        setUnreadCount(0);
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   useEffect(() => {
     let mounted = true;
 
     async function load() {
-      try {
-        const token = auth?.token || localStorage.getItem('token');
-        const headers = token ? { Authorization: `Bearer ${token}` } : {};
-        const params = { limit: 20, page: 1 };
-
-        // Prefer explicit options, otherwise infer from auth when possible
-        if (optRecipientType && optRecipientId) {
-          if (optRecipientType === 'driver') params.driverId = optRecipientId;
-          else if (optRecipientType === 'investor') params.investorId = optRecipientId;
-          else { params.recipientType = optRecipientType; params.recipientId = optRecipientId; }
-        } else if (auth) {
-          // For admin users (super_admin, admin, fleet_manager), fetch all notifications
-          const isAdmin = auth.role === 'super_admin' || auth.role === 'admin' || auth.role === 'fleet_manager';
-          if (isAdmin) {
-            // Don't set any filters - fetch all notifications
-            console.log('Admin user detected, fetching all notifications');
-          } else {
-            // Heuristic: if auth token represents an investor (type or role), request investor notifications
-            if (auth.type === 'investor' || auth.role === 'investor') {
-              if (auth.id) params.investorId = auth.id;
-            }
-            // Heuristic: driver role
-            if (auth.role === 'driver' || auth.type === 'driver') {
-              if (auth.id) params.driverId = auth.id;
-            }
-          }
-        }
-
-        const res = await axios.get(`${API_BASE}/api/notifications`, { headers, params });
-        if (!mounted) return;
-        // API returns { items, pagination }
-        const arr = Array.isArray(res.data) ? res.data : (res.data.items || []);
-        console.log('Loaded notifications from API:', arr.length, 'notifications');
-        console.log('Notification params used:', params);
-        setNotifications(arr);
-        const unread = (arr || []).filter(n => !n.read).length;
-        console.log('Unread notifications:', unread);
-        setUnreadCount(unread);
-      } catch (err) {
-        console.warn('Failed to load notifications', err.message);
-        // Set empty state on error to prevent UI issues
-        if (mounted) {
-          setNotifications([]);
-          setUnreadCount(0);
-        }
+      if (mounted) {
+        await loadNotifications(1);
       }
     }
 
@@ -178,5 +204,5 @@ export default function useNotifications(options = {}) {
     }
   }
 
-  return { notifications, unreadCount, markAsRead };
+  return { notifications, unreadCount, markAsRead, loadMore: () => loadNotifications(page + 1), hasMore: page < totalPages, loading };
 }

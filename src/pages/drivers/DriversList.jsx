@@ -792,8 +792,17 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
 
   // Permissions can be referenced directly via <PermissionGuard>, so local vars are not needed
 
-  const handleExportToCSV = () => {
+  const handleExportToCSV = async () => {
     try {
+      toast.loading('Exporting all drivers...');
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      
+      // Fetch ALL drivers using the /all endpoint with unlimited=true
+      const res = await fetch(`${API_BASE}/api/drivers/all?unlimited=true`);
+      if (!res.ok) throw new Error('Failed to fetch drivers for export');
+      const result = await res.json();
+      const allDrivers = result.data || result;
+      
       // Prepare CSV data with ALL fields from Driver model
       const headers = [
          'Username', 'Password', 'Name', 'Email', 'Phone No.', 'Alternate No.',
@@ -812,7 +821,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         'Join Date'
       ];
       
-      const csvData = driversData.map(driver => [
+      const csvData = allDrivers.map(driver => [
         // driver.id || driver._id || '',
         driver.username || '',
         driver.password || '',
@@ -881,9 +890,11 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       link.click();
       document.body.removeChild(link);
       
-      toast.success(`Exported ${driversData.length} drivers from current page to CSV`);
+      toast.dismiss();
+      toast.success(`Exported ${allDrivers.length} total drivers to CSV`);
     } catch (err) {
       console.error('Export error:', err);
+      toast.dismiss();
       toast.error('Failed to export drivers');
     }
   };
