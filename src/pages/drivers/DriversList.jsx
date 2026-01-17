@@ -78,6 +78,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
   const fetchDrivers = async (page = 1) => {
     setLoading(true);
     setError(null);
+    setDriversData([]); // Clear old data when fetching new page
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
 
@@ -116,7 +117,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       const res = await fetch(endpoint);
       if (!res.ok) throw new Error(`Failed to load drivers: ${res.status}`);
       const result = await res.json();
-      const data = result.data || result;
+      const data = Array.isArray(result.data) ? result.data : (Array.isArray(result) ? result : []);
       setDriversData(data);
       
       // Store pagination info
@@ -1096,24 +1097,18 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         </CardContent>
       </Card>
 
-     
+      
 
-      {/* Drivers Table */}
-      <Card>
-        <CardHeader>
-          <CardTitle>Drivers List ({driversData.length} on page / {paginationInfo.total || 0} total)</CardTitle>
-        </CardHeader>
-        <CardContent className="p-0">
-          {loading && (
-            <div className="p-4 text-center text-sm text-gray-600">Loading drivers...</div>
-          )}
-          {error && (
-            <div className="p-4 text-center text-sm text-red-600">{error}</div>
-          )}
-          {!loading && !error && driversData.length === 0 && (
-            <div className="p-6 text-center text-sm text-gray-600">No drivers found for the current search or filters.</div>
-          )}
-          {driversData.length > 0 && (
+      {/* Drivers Table - Only show if there are drivers */}
+      {driversData && driversData.length > 0 && (
+        <Card>
+          <CardHeader>
+            <CardTitle>Drivers List ({driversData.length} on page / {paginationInfo.total || 0} total)</CardTitle>
+          </CardHeader>
+          <CardContent className="p-0">
+            {error && (
+              <div className="p-4 text-center text-sm text-red-600">{error}</div>
+            )}
             <Table>
               <TableHeader>
                 <TableRow>
@@ -1131,8 +1126,15 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                 </TableRow>
               </TableHeader>
               <TableBody>
-                {driversData.map((driver,index) => (
-                  <TableRow key={index}>
+                {loading ? (
+                  <TableRow>
+                    <TableCell colSpan={8} className="p-4 text-center text-sm text-gray-600">
+                      Loading drivers...
+                    </TableCell>
+                  </TableRow>
+                ) : driversData && driversData.length > 0 ? (
+                    driversData.map((driver,index) => (
+                    <TableRow key={index}>
                     <TableCell>
                       <div>
                         <div className="font-medium text-gray-900">{driver.name}</div>
@@ -1422,44 +1424,59 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                       </div>
                     </TableCell>
                   </TableRow>
-                ))}
+                      ))
+                    ) : (
+                      <TableRow>
+                        <TableCell colSpan={8} className="p-4 text-center text-sm text-gray-600">
+                          No drivers found. Please complete driver registrations to see them here.
+                        </TableCell>
+                      </TableRow>
+                    )}
               </TableBody>
             </Table>
-        
-          )}
-        </CardContent>
             {paginationInfo.totalPages > 1 && (
-  <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
-    <div className="text-gray-600">
-      Showing {(currentPage - 1) * pageSize + 1} –
-      {Math.min(currentPage * pageSize, paginationInfo.total)} of {paginationInfo.total}
-    </div>
+              <div className="flex items-center justify-between px-4 py-3 border-t text-sm">
+                <div className="text-gray-600">
+                  Showing {(currentPage - 1) * pageSize + 1} –
+                  {Math.min(currentPage * pageSize, paginationInfo.total)} of {paginationInfo.total}
+                </div>
 
-    <div className="flex items-center gap-2">
-      <button
-        disabled={currentPage === 1}
-        onClick={() => fetchDrivers(currentPage - 1)}
-        className="px-3 py-1 border rounded disabled:opacity-50"
-      >
-        Prev
-      </button>
+                <div className="flex items-center gap-2">
+                  <button
+                    disabled={currentPage === 1}
+                    onClick={() => fetchDrivers(currentPage - 1)}
+                    className="px-3 py-1 border rounded disabled:opacity-50"
+                  >
+                    Prev
+                  </button>
 
-      <span className="px-2">
-        Page {currentPage} of {paginationInfo.totalPages}
-      </span>
+                  <span className="px-2">
+                    Page {currentPage} of {paginationInfo.totalPages}
+                  </span>
 
-      <button
-        disabled={currentPage === paginationInfo.totalPages}
-        onClick={() => fetchDrivers(currentPage + 1)}
-        className="px-3 py-1 border rounded disabled:opacity-50"
-      >
-        Next
-      </button>
-    </div>
-  </div>
-)}
+                  <button
+                    disabled={currentPage === paginationInfo.totalPages}
+                    onClick={() => fetchDrivers(currentPage + 1)}
+                    className="px-3 py-1 border rounded disabled:opacity-50"
+                  >
+                    Next
+                  </button>
+                </div>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      )}
 
-      </Card>
+      {/* No drivers message */}
+      {!loading && !error && (!driversData || driversData.length === 0) && (
+        <Card>
+          <CardContent className="p-6 text-center text-gray-600">
+            <p className="text-lg">No drivers found</p>
+            <p className="text-sm text-gray-500 mt-2">Complete driver registration to see them in this list.</p>
+          </CardContent>
+        </Card>
+      )}
 
       {/* Driver Modal */}
       {/* Driver Modal */}

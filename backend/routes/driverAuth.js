@@ -2,6 +2,15 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import Driver from "../models/driver.js";
+import DriverEnrollment from "../models/driverEnrollment.js";
+import DriverWallet from "../models/driverWallet.js";
+import DriverWalletMessage from "../models/driverWalletMessage.js";
+import DriverPlanSelection from "../models/driverPlanSelection.js";
+import DeviceToken from "../models/deviceToken.js";
+import Transaction from "../models/transaction.js";
+import Ticket from "../models/ticket.js";
+import Expense from "../models/expense.js";
+import Notification from "../models/notification.js";
 import { authenticateToken } from "./middleware.js";
 
 dotenv.config();
@@ -325,6 +334,29 @@ router.delete("/delete-account", authenticateToken, async (req, res) => {
     if (!deleted) {
       return res.status(404).json({ message: "Driver account not found." });
     }
+
+    // Cascade delete all related driver data
+    const driverId = deleted._id.toString();
+    const driverMobile = deleted.mobile;
+    
+    // Delete enrollments
+    await DriverEnrollment.deleteMany({ driverId });
+    // Delete wallet records
+    await DriverWallet.deleteMany({ phone: driverMobile });
+    // Delete wallet messages
+    await DriverWalletMessage.deleteMany({ phone: driverMobile });
+    // Delete plan selections
+    await DriverPlanSelection.deleteMany({ driverId });
+    // Delete device tokens
+    await DeviceToken.deleteMany({ userId: driverId, userType: 'driver' });
+    // Delete transactions
+    await Transaction.deleteMany({ $or: [{ driverId }, { driverId: deleted.id }] });
+    // Delete tickets
+    await Ticket.deleteMany({ driverId: deleted.id });
+    // Delete expenses
+    await Expense.deleteMany({ $or: [{ driverId }, { driverId: deleted.id }] });
+    // Delete notifications
+    await Notification.deleteMany({ recipientId: driverId, recipientType: 'driver' });
 
     // Note: with stateless JWT tokens it's not possible to revoke issued tokens here.
     return res.json({
