@@ -107,7 +107,6 @@ router.post('/', authenticateToken, async (req, res) => {
   try {
     const { createAndEmitNotification } = await import('../lib/notify.js');
     const Driver = (await import('../models/driver.js')).default;
-    const DriverSignup = (await import('../models/driverSignup.js')).default;
     const Investor = (await import('../models/investor.js')).default;
     const InvestorSignup = (await import('../models/investorSignup.js')).default;
     
@@ -141,11 +140,9 @@ router.post('/', authenticateToken, async (req, res) => {
       try {
         let driver = await Driver.findById(String(tx.driverId)).lean();
         if (!driver) {
-          const driverSignup = await DriverSignup.findById(String(tx.driverId)).lean();
-          if (driverSignup && driverSignup.mobile) {
-            driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
-            if (driver) driverRecipientId = String(driver._id);
-          }
+          driver = null;
+        } else {
+          driverRecipientId = String(driver._id);
         }
       } catch (e) {
         console.warn('[TRANSACTION] Driver lookup failed:', e.message);

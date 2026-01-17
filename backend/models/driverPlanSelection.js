@@ -6,9 +6,9 @@ const DriverPlanSelectionSchema = new mongoose.Schema({
     required: false,
     ref: 'Vehicle'
   },
-  driverSignupId: { 
+  driverId: { 
     type: mongoose.Schema.Types.ObjectId, 
-    ref: 'DriverSignup', 
+    ref: 'Driver', 
     required: false 
   },
   driverUsername: { type: String },
@@ -117,7 +117,7 @@ const DriverPlanSelectionSchema = new mongoose.Schema({
 }, { timestamps: true });
 
 // Index for faster queries
-DriverPlanSelectionSchema.index({ driverSignupId: 1 });
+DriverPlanSelectionSchema.index({ driverId: 1 });
 DriverPlanSelectionSchema.index({ driverMobile: 1 });
 
 export default mongoose.models.DriverPlanSelection || mongoose.model('DriverPlanSelection', DriverPlanSelectionSchema);

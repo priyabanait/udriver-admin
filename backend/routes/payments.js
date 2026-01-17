@@ -6,7 +6,6 @@ import PaymentGatewayConfig from '../models/paymentGatewayConfig.js';
 import Transaction from '../models/transaction.js';
 import DriverPlanSelection from '../models/driverPlanSelection.js';
 import Driver from '../models/driver.js';
-import DriverSignup from '../models/driverSignup.js';
 
 const router = express.Router();
 
@@ -316,23 +315,10 @@ router.post('/zwitch/create-token', async (req, res) => {
     }).lean();
     
     if (!driver) {
-      // Try DriverSignup collection
-      const driverSignup = await DriverSignup.findOne({ mobile: driverMobile }).lean();
-      if (!driverSignup) {
-        return res.status(404).json({
-          success: false,
-          message: `Driver not found with mobile number: ${driverMobile}`
-        });
-      }
-      // Use driverSignup data
-      driver = {
-        _id: driverSignup._id,
-        id: driverSignup._id?.toString(),
-        mobile: driverSignup.mobile,
-        phone: driverSignup.phone || driverSignup.mobile,
-        name: driverSignup.name,
-        email: driverSignup.email
-      };
+      return res.status(404).json({
+        success: false,
+        message: `Driver not found with mobile number: ${driverMobile}`
+      });
     }
 
     // Prepare payment data

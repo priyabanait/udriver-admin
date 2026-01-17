@@ -92,7 +92,7 @@ export default function DriverPayments() {
         const mapped = paymentsData.map((t) => {
           return {
             id: t._id,
-            driverId: t.driverSignupId,
+            driverId: t.driverId,
             driverName: t.driverUsername || 'Unknown',
             amount: t.paidAmount || 0,
             type: t.planType || 'weekly_payout',

@@ -475,7 +475,7 @@ export default function Sidebar({ collapsed }) {
       className="flex items-center cursor-pointer"
       onClick={() => navigate("/")}
     >
-      <img src="udrive logo.jpeg" alt="UDrive Logo" className="w-20 h-12 mr-3" />
+      <img src="/udrive logo.jpeg" alt="UDrive Logo" className="w-20 h-12 mr-3" />
      
   </div>
         )}

@@ -6,7 +6,6 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import DriverPlanSelection from "../models/driverPlanSelection.js";
-import DriverSignup from "../models/driverSignup.js";
 import Driver from "../models/driver.js";
 import mongoose from "mongoose";
 
@@ -430,36 +429,12 @@ router.get("/by-manager/:manager", async (req, res) => {
     console.log("Driver mobiles from Driver collection:", driverMobiles);
     console.log("Driver usernames from Driver collection:", driverUsernames);
 
-    // Now look up DriverSignup documents by mobile/username (DriverSignup is used for payments)
-    const driverSignupQuery = {
-      $or: [],
-    };
-
-    if (driverMobiles.length > 0) {
-      driverSignupQuery.$or.push({ mobile: { $in: driverMobiles } });
-    }
-    if (driverUsernames.length > 0) {
-      driverSignupQuery.$or.push({ username: { $in: driverUsernames } });
-    }
-    if (driverPhones.length > 0) {
-      driverSignupQuery.$or.push({ phone: { $in: driverPhones } });
-    }
-
-    const driverSignups =
-      driverSignupQuery.$or.length > 0
-        ? await DriverSignup.find(driverSignupQuery).lean()
-        : [];
-
-    console.log(
-      `Found ${driverSignups.length} driver signups matching Driver records`
-    );
-
-    // Collect all identifiers: ObjectIds, usernames, and mobiles
-    const driverSignupIds = driverSignups.map((d) => d._id);
-    const signupUsernames = driverSignups
+    // Collect all identifiers from the drivers already found
+    const driverSignupIds = drivers.map((d) => d._id);
+    const signupUsernames = drivers
       .map((d) => d.username)
       .filter(Boolean);
-    const signupMobiles = driverSignups.map((d) => d.mobile).filter(Boolean);
+    const signupMobiles = drivers.map((d) => d.mobile).filter(Boolean);
 
     console.log("DriverSignup IDs:", driverSignupIds);
     console.log("DriverSignup usernames:", signupUsernames);
@@ -491,9 +466,9 @@ router.get("/by-manager/:manager", async (req, res) => {
       $or: [],
     };
 
-    // Match by driverSignupId (most reliable)
+    // Match by driverId (most reliable)
     if (driverSignupIds.length > 0) {
-      paymentQuery.$or.push({ driverSignupId: { $in: driverSignupIds } });
+      paymentQuery.$or.push({ driverId: { $in: driverSignupIds } });
     }
 
     // Match by username (case-insensitive)
@@ -663,18 +638,9 @@ router.get("/search", async (req, res) => {
         if (driverUsernames.length > 0) driverSignupQuery.$or.push({ username: { $in: driverUsernames } });
         if (driverPhones.length > 0) driverSignupQuery.$or.push({ phone: { $in: driverPhones } });
 
-        const driverSignups =
-          driverSignupQuery.$or.length > 0
-            ? await DriverSignup.find(driverSignupQuery).lean()
-            : [];
-
-        const driverSignupIds = driverSignups.map((d) => d._id);
-        const signupUsernames = driverSignups.map((d) => d.username).filter(Boolean);
-        const signupMobiles = driverSignups.map((d) => d.mobile).filter(Boolean);
-
+        // All identifiers are already in driverSignupIds from the drivers we found
         const allUsernames = [
           ...new Set([
-            ...signupUsernames,
             ...driverUsernames,
             ...assignedDriverIds.filter((id) => !mongoose.Types.ObjectId.isValid(id)),
           ]),
@@ -682,7 +648,6 @@ router.get("/search", async (req, res) => {
 
         const allMobiles = [
           ...new Set([
-            ...signupMobiles,
             ...driverMobiles,
             ...driverPhones,
             ...assignedDriverIds.filter((id) => !mongoose.Types.ObjectId.isValid(id)),
@@ -690,7 +655,7 @@ router.get("/search", async (req, res) => {
         ];
 
         const mgrConditions = { $or: [] };
-        if (driverSignupIds.length > 0) mgrConditions.$or.push({ driverSignupId: { $in: driverSignupIds } });
+        if (driverSignupIds.length > 0) mgrConditions.$or.push({ driverId: { $in: driverSignupIds } });
         if (allUsernames.length > 0) mgrConditions.$or.push({ driverUsername: { $in: allUsernames.map((u) => new RegExp(`^${u}$`, "i")) } });
         if (allMobiles.length > 0) mgrConditions.$or.push({ driverMobile: { $in: allMobiles.map((m) => new RegExp(`^${m}$`, "i")) } });
 
@@ -958,13 +923,13 @@ router.post("/public", async (req, res) => {
 
     const mobile = driverMobile.toString().trim();
 
-    // Try to find existing signup by mobile
-    const driverSignup = await DriverSignup.findOne({ mobile });
+    // Try to find existing driver by mobile
+    const driver = await Driver.findOne({ mobile });
 
-    // Check if driver already has an active selection (by signupId if available, otherwise by mobile)
-    const existingSelection = driverSignup
+    // Check if driver already has an active selection
+    const existingSelection = driver
       ? await DriverPlanSelection.findOne({
-          driverSignupId: driverSignup._id,
+          driverId: driver._id,
           status: "active",
         })
       : await DriverPlanSelection.findOne({
@@ -991,10 +956,10 @@ router.post("/public", async (req, res) => {
     const rentPerDay = typeof slab.rentDay === "number" ? slab.rentDay : 0;
 
     const selection = new DriverPlanSelection({
-      driverSignupId: driverSignup ? driverSignup._id : null,
+      driverId: driver ? driver._id : null,
       driverUsername:
-        driverSignup && driverSignup.username
-          ? driverSignup.username
+        driver && driver.username
+          ? driver.username
           : driverUsername || "",
       driverMobile: mobile,
       planName,
@@ -1020,42 +985,28 @@ router.post("/public", async (req, res) => {
       const { createAndEmitNotification } = await import("../lib/notify.js");
       const amount = selection.calculatedTotal || 0;
       
-      // Convert driverSignupId to Driver._id for FCM notification
-      let driverRecipientId = String(selection.driverSignupId || "");
+      // Use driver._id directly for FCM notification
+      const driverRecipientId = driver ? String(driver._id) : "";
       
-      if (driverSignup && driverSignup._id) {
-        try {
-          if (driverSignup.mobile) {
-            const driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
-            if (driver && driver._id) {
-              driverRecipientId = String(driver._id);
-              console.log(`[PUBLIC PLAN BOOKING] Using Driver._id ${driverRecipientId} for notification (from driverSignupId ${selection.driverSignupId})`);
-            }
-          }
-        } catch (lookupErr) {
-          console.warn('[PUBLIC PLAN BOOKING] Driver lookup failed:', lookupErr.message);
-        }
-        
-        // Notify driver (use "driver" recipientType, not "driver_signup")
-        if (driverRecipientId) {
-          await createAndEmitNotification({
-            type: "driver_booking",
-            title: `Plan booked: ${selection.planName}`,
-            message: `You have successfully booked ${
-              selection.planName
-            }. Total ₹${amount.toLocaleString("en-IN")}`,
-            data: {
-              selectionId: String(selection._id),
-              planName: selection.planName,
-              amount: String(amount),
-            },
-            recipientType: "driver",
-            recipientId: driverRecipientId,
-          });
-          console.log(`✅ Public plan booking notification sent to driver ${driverRecipientId}`);
-        } else {
-          console.log('⚠️ Skipping public plan booking notification - no valid driver found');
-        }
+      // Notify driver
+      if (driverRecipientId) {
+        await createAndEmitNotification({
+          type: "driver_booking",
+          title: `Plan booked: ${selection.planName}`,
+          message: `You have successfully booked ${
+            selection.planName
+          }. Total ₹${amount.toLocaleString("en-IN")}`,
+          data: {
+            selectionId: String(selection._id),
+            planName: selection.planName,
+            amount: String(amount),
+          },
+          recipientType: "driver",
+          recipientId: driverRecipientId,
+        });
+        console.log(`✅ Public plan booking notification sent to driver ${driverRecipientId}`);
+      } else {
+        console.log('⚠️ Skipping public plan booking notification - no valid driver found');
       }
       
       // Also create a global/admin notification so admins see new bookings
@@ -1067,9 +1018,7 @@ router.post("/public", async (req, res) => {
         } booked ${selection.planName} (₹${amount.toLocaleString("en-IN")})`,
         data: {
           selectionId: String(selection._id),
-          driverSignupId: selection.driverSignupId
-            ? String(selection.driverSignupId)
-            : null,
+          driverId: selection.driverId ? String(selection.driverId) : null,
           amount: String(amount),
         },
         recipientType: "admin",
@@ -1101,14 +1050,14 @@ router.post("/", authenticateDriver, async (req, res) => {
     }
 
     // Get driver info
-    const driver = await DriverSignup.findById(req.driver.id);
+    const driver = await Driver.findById(req.driver.id);
     if (!driver) {
       return res.status(404).json({ message: "Driver not found" });
     }
 
     // Check if driver already has an active selection
     const existingSelection = await DriverPlanSelection.findOne({
-      driverSignupId: req.driver.id,
+      driverId: req.driver.id,
       status: "active",
     });
 
@@ -1134,7 +1083,7 @@ router.post("/", authenticateDriver, async (req, res) => {
 
     // Create new selection with calculated values
     const selection = new DriverPlanSelection({
-      driverSignupId: req.driver.id,
+      driverId: req.driver.id,
       driverUsername: driver.username,
       driverMobile: driver.mobile,
       planName,
@@ -1162,25 +1111,10 @@ router.post("/", authenticateDriver, async (req, res) => {
       const { createAndEmitNotification } = await import("../lib/notify.js");
       const amount = selection.calculatedTotal || 0;
       
-      // Convert driverSignupId to Driver._id for FCM notification
-      let driverRecipientId = String(selection.driverSignupId || "");
+      // Use driver._id directly for FCM notification
+      const driverRecipientId = String(driver._id);
       
-      if (selection.driverSignupId) {
-        try {
-          const driverSignup = await DriverSignup.findById(selection.driverSignupId).lean();
-          if (driverSignup && driverSignup.mobile) {
-            const driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
-            if (driver && driver._id) {
-              driverRecipientId = String(driver._id);
-              console.log(`[PLAN BOOKING] Using Driver._id ${driverRecipientId} for notification (from driverSignupId ${selection.driverSignupId})`);
-            }
-          }
-        } catch (lookupErr) {
-          console.warn('[PLAN BOOKING] Driver lookup failed:', lookupErr.message);
-        }
-      }
-      
-      // Notify driver (use "driver" recipientType, not "driver_signup")
+      // Notify driver (use "driver" recipientType)
       if (driverRecipientId) {
         await createAndEmitNotification({
           type: "driver_booking",
@@ -1197,8 +1131,6 @@ router.post("/", authenticateDriver, async (req, res) => {
           recipientId: driverRecipientId,
         });
         console.log(`✅ Plan booking notification sent to driver ${driverRecipientId}`);
-      } else {
-        console.log('⚠️ Skipping plan booking notification - no valid driver found');
       }
       
       // Also create a global/admin notification so admins see new bookings
@@ -1210,7 +1142,7 @@ router.post("/", authenticateDriver, async (req, res) => {
         } booked ${selection.planName} (₹${amount.toLocaleString("en-IN")})`,
         data: {
           selectionId: String(selection._id),
-          driverSignupId: String(selection.driverSignupId || ""),
+          driverId: String(driver._id),
           amount: String(amount),
         },
         recipientType: "admin",

@@ -619,6 +619,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     try {
       const driverData = {
         ...formData,
+        mobile: formData.phone, // Map phone to mobile for backend
         id: driver?.id || Date.now(),
         joinDate: formData.joinDate || driver?.joinDate || new Date().toISOString().split('T')[0],
         lastActive: new Date().toISOString(),
@@ -768,271 +769,49 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     <p className="mt-1 text-sm text-red-600">{errors.phone}</p>
   )}
 </div>
- <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Alternate Phone
-                </label>
-                <input
-                  type="tel"
-                  value={formData.mobile || ''}
-                  onChange={(e) => handleInputChange('alternateNo', e.target.value)}
-                  className="input"
-                  placeholder="Alternate contact number"
-                />
-              </div>
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Alternate Phone
+  </label>
+  <input
+    type="tel"
+    value={formData.alternateNo || ''}
+    onChange={(e) => handleInputChange('alternateNo', e.target.value)}
+    className="input"
+    placeholder="+91 98765 43210"
+  />
+</div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Date of Birth *
-                </label>
-                <input
-                  type="date"
-                  value={formData.dateOfBirth}
-                  onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
-                  className={`input ${errors.dateOfBirth ? 'border-red-300' : ''}`}
-                />
-                {errors.dateOfBirth && <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth}</p>}
-              </div>
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Date of Birth *
+  </label>
+  <input
+    type="date"
+    value={formData.dateOfBirth}
+    onChange={(e) => handleInputChange('dateOfBirth', e.target.value)}
+    className={`input ${errors.dateOfBirth ? 'border-red-300' : ''}`}
+  />
+  {errors.dateOfBirth && (
+    <p className="mt-1 text-sm text-red-600">{errors.dateOfBirth}</p>
+  )}
+</div>
 
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Join Date
-                </label>
-                <input
-                  type="date"
-                  value={formData.joinDate}
-                  onChange={(e) => handleInputChange('joinDate', e.target.value)}
-                  className={`input ${errors.joinDate ? 'border-red-300' : ''}`}
-                />
-                {errors.joinDate && <p className="mt-1 text-sm text-red-600">{errors.joinDate}</p>}
-              </div>
-               {/* <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Employee ID
-                </label>
-                <input
-                  type="text"
-                  value={formData.employeeId}
-                  onChange={(e) => handleInputChange('employeeId', e.target.value)}
-                  className="input"
-                  placeholder="Enter employee ID"
-                />
-              </div> */}
+<div>
+  <label className="block text-sm font-medium text-gray-700 mb-2">
+    Join Date
+  </label>
+  <input
+    type="date"
+    value={formData.joinDate}
+    onChange={(e) => handleInputChange('joinDate', e.target.value)}
+    className={`input ${errors.joinDate ? 'border-red-300' : ''}`}
+  />
+  {errors.joinDate && (
+    <p className="mt-1 text-sm text-red-600">{errors.joinDate}</p>
+  )}
+</div>   </div>
 
-            
-
-              {/* <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Driver No
-                </label>
-                <input
-                  type="text"
-                  value={formData.driverNo}
-                  onChange={(e) => handleInputChange('driverNo', e.target.value)}
-                  className="input"
-                  placeholder="Driver number"
-                />
-              </div> */}
-
-             
-
-              {/* <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Deposit
-                </label>
-                <input
-                  type="number"
-                  value={formData.deposit}
-                  onChange={(e) => handleInputChange('deposit', e.target.value)}
-                  className="input"
-                  placeholder="Deposit amount"
-                />
-              </div> */}
-
-              <div className="md:col-span-2">
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Address *
-                </label>
-                <textarea
-                  value={formData.address}
-                  onChange={(e) => handleInputChange('address', e.target.value)}
-                  className={`input ${errors.address ? 'border-red-300' : ''}`}
-                  rows={3}
-                  placeholder="Enter complete address"
-                />
-                {errors.address && <p className="mt-1 text-sm text-red-600">{errors.address}</p>}
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Latitude
-                </label>
-                <input
-                  type="text"
-                  value={formData.latitude}
-                  onChange={(e) => handleInputChange('latitude', e.target.value)}
-                  className="input"
-                  placeholder="Enter latitude"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Longitude
-                </label>
-                <input
-                  type="text"
-                  value={formData.longitude}
-                  onChange={(e) => handleInputChange('longitude', e.target.value)}
-                  className="input"
-                  placeholder="Enter longitude"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  City
-                </label>
-                <input
-                  type="text"
-                  value={formData.city}
-                  onChange={(e) => handleInputChange('city', e.target.value)}
-                  className="input"
-                  placeholder="Enter city"
-                />
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  State
-                </label>
-                <select
-                  value={formData.state}
-                  onChange={(e) => handleInputChange('state', e.target.value)}
-                  className="input"
-                >
-                  <option value="">Select State</option>
-                  <option value="Karnataka">Karnataka</option>
-                  <option value="Tamil Nadu">Tamil Nadu</option>
-                  <option value="Kerala">Kerala</option>
-                  <option value="Andhra Pradesh">Andhra Pradesh</option>
-                  <option value="Telangana">Telangana</option>
-                  <option value="Maharashtra">Maharashtra</option>
-                  <option value="Delhi">Delhi</option>
-                  {/* Add more states */}
-                </select>
-              </div>
-
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Pincode *
-                </label>
-                <input
-                  type="text"
-                  value={formData.pincode}
-                  onChange={(e) => handleInputChange('pincode', e.target.value)}
-                  className={`input ${errors.pincode ? 'border-red-300' : ''}`}
-                  placeholder="Enter pincode"
-                />
-                {errors.pincode && <p className="mt-1 text-sm text-red-600">{errors.pincode}</p>}
-              </div>
-  <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  UDB ID
-                </label>
-                <div className="flex items-center space-x-2">
-                  <input
-                    type="text"
-                    value={formData.udbId}
-                    onChange={(e) => handleInputChange('udbId', e.target.value)}
-                    className="input flex-1"
-                    placeholder="UDB ID"
-                  />
-                  <button
-                    type="button"
-                    onClick={handleGenerateUdb}
-                    className="btn btn-secondary"
-                  >
-                    Generate
-                  </button>
-                </div>
-                {formData.udbId && formData.udbId.startsWith('UDB') && (
-                  <p className="mt-1 text-xs text-gray-500">Generated UDB ID — click Generate to increment</p>
-                )}
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Emergency Contact Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.emergencyContact}
-                  onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
-                  className="input"
-                  placeholder="Emergency contact name"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Secondary Emergency Contact Name
-                </label>
-                <input
-                  type="text"
-                  value={formData.emergencyContactSecondary}
-                  onChange={(e) => handleInputChange('emergencyContactSecondary', e.target.value)}
-                  className="input"
-                  placeholder="Secondary emergency contact name"
-                />
-              </div>
-             
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Relation Reference 1
-                </label>
-                <input
-                  type="text"
-                  value={formData.emergencyRelation}
-                  onChange={(e) => handleInputChange('emergencyRelation', e.target.value)}
-                  className="input"
-                  placeholder="Type of relation (e.g. spouse, parent)"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                 Reference 1 Contact No.
-                </label>
-                <input
-                  type="tel"
-                  value={formData.emergencyPhone}
-                  onChange={(e) => handleInputChange('emergencyPhone', e.target.value)}
-                  className="input"
-                  placeholder="+91 98765 43210"
-                />
-              </div>
-               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Relation Reference 2
-                </label>
-                <input
-                  type="text"
-                  value={formData.emergencyRelationSecondary}
-                  onChange={(e) => handleInputChange('emergencyRelationSecondary', e.target.value)}
-                  className="input"
-                  placeholder="Type of relation (e.g. spouse, parent)"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium text-gray-700 mb-2">
-                 Reference 2 Contact No.
-                </label>
-                <input
-                  type="tel"
-                  value={formData.emergencyPhoneSecondary}
-                  onChange={(e) => handleInputChange('emergencyPhoneSecondary', e.target.value)}
-                  className="input"
-                  placeholder="+91 98765 43210"
-                />
-              </div>
-            </div>
           </div>
         );
 

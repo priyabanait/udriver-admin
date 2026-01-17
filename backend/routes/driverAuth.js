@@ -2,7 +2,6 @@ import express from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
 import Driver from "../models/driver.js";
-import DriverSignup from "../models/driverSignup.js";
 import { authenticateToken } from "./middleware.js";
 
 dotenv.config();
@@ -20,14 +19,14 @@ router.post("/signup", async (req, res) => {
         .json({ message: "Username, mobile and password required." });
     }
 
-    // Check for duplicate username in DriverSignup collection
-    const existingUsername = await DriverSignup.findOne({ username });
+    // Check for duplicate username in Driver collection
+    const existingUsername = await Driver.findOne({ username });
     if (existingUsername) {
       return res.status(400).json({ message: "Username already exists." });
     }
 
-    // Check for duplicate mobile in DriverSignup collection
-    const existingMobile = await DriverSignup.findOne({ mobile });
+    // Check for duplicate mobile in Driver collection
+    const existingMobile = await Driver.findOne({ mobile });
     if (existingMobile) {
       return res
         .status(400)
@@ -35,7 +34,7 @@ router.post("/signup", async (req, res) => {
     }
 
     // Create new driver signup (password stored in plain text)
-    const driverSignup = new DriverSignup({
+    const driverSignup = new Driver({
       username,
       mobile,
       password,
@@ -150,8 +149,8 @@ router.post("/signup-otp", async (req, res) => {
       return res.status(400).json({ message: "Mobile and OTP required." });
     }
 
-    // Check for duplicate mobile in DriverSignup collection
-    const existingMobile = await DriverSignup.findOne({ mobile });
+    // Check for duplicate mobile in Driver collection
+    const existingMobile = await Driver.findOne({ mobile });
     if (existingMobile) {
       return res
         .status(400)
@@ -159,7 +158,7 @@ router.post("/signup-otp", async (req, res) => {
     }
 
     // Create new driver signup with OTP as password (plain text)
-    const driverSignup = new DriverSignup({
+    const driverSignup = new Driver({
       username: username || undefined,
       mobile,
       password: otp,
@@ -220,28 +219,38 @@ router.post("/signup-otp", async (req, res) => {
 
 router.post("/login-otp", async (req, res) => {
   try {
-    const { mobile, otp } = req.body;
-    if (!mobile || !otp) {
-      return res.status(400).json({ message: "Mobile and OTP required." });
+    const { mobile, username, otp } = req.body;
+    
+    // Either mobile or username must be provided along with otp
+    if ((!mobile && !username) || !otp) {
+      return res.status(400).json({ message: "Mobile or username and OTP required." });
     }
 
-    // Find driver signup by mobile
-    const driverSignup = await DriverSignup.findOne({ mobile });
-    if (!driverSignup) {
-      return res.status(401).json({ message: "Invalid mobile number or OTP." });
+    // Find driver by mobile or username
+    let driver;
+    if (mobile) {
+      driver = await Driver.findOne({ mobile });
+      if (!driver) {
+        return res.status(401).json({ message: "Invalid mobile number or OTP." });
+      }
+    } else if (username) {
+      driver = await Driver.findOne({ username });
+      if (!driver) {
+        return res.status(401).json({ message: "Invalid username or OTP." });
+      }
     }
 
     // Verify OTP matches the password stored during signup (plain text comparison)
-    if (driverSignup.password !== otp) {
-      return res.status(401).json({ message: "Invalid mobile number or OTP." });
+    if (driver.password !== otp) {
+      return res.status(401).json({ message: "Invalid OTP." });
     }
 
     // Generate JWT token
     const token = jwt.sign(
       {
-        id: driverSignup._id,
-        username: driverSignup.username,
-        mobile: driverSignup.mobile,
+        id: driver._id,
+        username: driver.username,
+        mobile: driver.mobile,
         type: "driver",
       },
       SECRET,
@@ -252,10 +261,10 @@ router.post("/login-otp", async (req, res) => {
       message: "Login successful.",
       token,
       driver: {
-        id: driverSignup._id,
-        username: driverSignup.username,
-        mobile: driverSignup.mobile,
-        registrationCompleted: driverSignup.registrationCompleted || false,
+        id: driver._id,
+        username: driver.username,
+        mobile: driver.mobile,
+        registrationCompleted: driver.registrationCompleted || false,
       },
     });
   } catch (error) {
@@ -277,23 +286,23 @@ router.post("/forgot-password", async (req, res) => {
     }
 
     // Find driver by mobile number
-    const driverSignup = await DriverSignup.findOne({ mobile });
-    if (!driverSignup) {
+    const driver = await Driver.findOne({ mobile });
+    if (!driver) {
       return res
         .status(404)
         .json({ message: "Driver not found with this mobile number." });
     }
 
     // Update password (plain text)
-    driverSignup.password = newPassword;
-    await driverSignup.save();
+    driver.password = newPassword;
+    await driver.save();
 
     return res.json({
       message: "Password updated successfully.",
       driver: {
-        id: driverSignup._id,
-        username: driverSignup.username,
-        mobile: driverSignup.mobile,
+        id: driver._id,
+        username: driver.username,
+        mobile: driver.mobile,
       },
     });
   } catch (error) {
@@ -312,7 +321,7 @@ router.delete("/delete-account", authenticateToken, async (req, res) => {
     if (!id)
       return res.status(401).json({ message: "Authentication required." });
 
-    const deleted = await DriverSignup.findByIdAndDelete(id);
+    const deleted = await Driver.findByIdAndDelete(id);
     if (!deleted) {
       return res.status(404).json({ message: "Driver account not found." });
     }

@@ -4,7 +4,6 @@ import { sendPushToTokens } from "./firebaseAdmin.js";
 import DeviceToken from "../models/deviceToken.js";
 import Driver from "../models/driver.js";
 import Investor from "../models/investor.js";
-import DriverSignup from "../models/driverSignup.js";
 import InvestorSignup from "../models/investorSignup.js";
 
 export async function createAndEmitNotification({
@@ -105,15 +104,8 @@ export async function createAndEmitNotification({
               // First, try to find Driver by _id
               let driver = await Driver.findById(String(normalizedRecipientId)).lean();
               
-              // If not found, it might be a DriverSignup ID - try to find Driver by mobile
               if (!driver) {
-                const driverSignup = await DriverSignup.findById(String(normalizedRecipientId)).lean();
-                if (driverSignup && driverSignup.mobile) {
-                  driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
-                  if (driver) {
-                    actualUserId = String(driver._id);
-                  }
-                }
+                driver = null;
               } else {
                 actualUserId = String(driver._id);
               }
@@ -181,8 +173,7 @@ export async function createAndEmitNotification({
           tokens = [];
         } else {
           // Verify that the target user exists before sending push to avoid cross-app or stale tokens
-          // For drivers, we need to handle the case where recipientId might be a DriverSignup ID
-          // Device tokens are registered with Driver._id, not DriverSignup._id
+          // For drivers, we need to look up the Device tokens using Driver._id
           let actualUserId = normalizedRecipientId;
           let targetExists = true;
           
@@ -191,18 +182,8 @@ export async function createAndEmitNotification({
               // First, try to find Driver by _id
               let driver = await Driver.findById(String(normalizedRecipientId)).lean();
               
-              // If not found, it might be a DriverSignup ID - try to find Driver by mobile
               if (!driver) {
-                console.log(`[NOTIFY] Driver not found by _id, checking if it's a DriverSignup ID: ${normalizedRecipientId}`);
-                const driverSignup = await DriverSignup.findById(String(normalizedRecipientId)).lean();
-                if (driverSignup && driverSignup.mobile) {
-                  console.log(`[NOTIFY] Found DriverSignup, looking up Driver by mobile: ${driverSignup.mobile}`);
-                  driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
-                  if (driver) {
-                    actualUserId = String(driver._id);
-                    console.log(`[NOTIFY] Found Driver by mobile, using Driver._id: ${actualUserId}`);
-                  }
-                }
+                driver = null;
               } else {
                 actualUserId = String(driver._id);
               }
@@ -576,22 +557,13 @@ export async function sendNotificationToSpecificUsers({
           }
 
           // Send push notification via FCM (run even if socket errors)
-          // Handle case where driverId might be a DriverSignup ID
           try {
             let actualDriverId = String(driverId);
             // Check if driverId is a Driver ID
             let driver = await Driver.findById(String(driverId)).lean();
             
-            // If not found, it might be a DriverSignup ID - try to find Driver by mobile
             if (!driver) {
-              const driverSignup = await DriverSignup.findById(String(driverId)).lean();
-              if (driverSignup && driverSignup.mobile) {
-                driver = await Driver.findOne({ mobile: driverSignup.mobile }).lean();
-                if (driver) {
-                  actualDriverId = String(driver._id);
-                  console.log(`[NOTIFY] Converted DriverSignup ID ${driverId} to Driver ID ${actualDriverId}`);
-                }
-              }
+              driver = null;
             } else {
               actualDriverId = String(driver._id);
             }

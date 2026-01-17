@@ -2,7 +2,6 @@ import express from "express";
 import multer from "multer";
 import xlsx from "xlsx";
 import Driver from "../models/driver.js";
-import DriverSignup from "../models/driverSignup.js";
 // auth middleware not applied; token used only for login
 import { uploadToCloudinary } from "../lib/cloudinary.js";
 import { normalizeToDateOnly } from "../lib/dateUtils.js";
@@ -15,7 +14,7 @@ const router = express.Router();
 router.put("/signup/credentials/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const updated = await DriverSignup.findByIdAndUpdate(id, req.body, {
+    const updated = await Driver.findByIdAndUpdate(id, req.body, {
       new: true,
       runValidators: true,
     });
@@ -35,7 +34,7 @@ router.put("/signup/credentials/:id", async (req, res) => {
 router.delete("/signup/credentials/:id", async (req, res) => {
   try {
     const { id } = req.params;
-    const deleted = await DriverSignup.findByIdAndDelete(id);
+    const deleted = await Driver.findByIdAndDelete(id);
     if (!deleted) {
       return res.status(404).json({ message: "Driver signup not found" });
     }
@@ -434,8 +433,8 @@ router.get("/signup/credentials", async (req, res) => {
       }
     }
 
-    const total = await DriverSignup.countDocuments(filter);
-    const list = await DriverSignup.find(filter)
+    const total = await Driver.countDocuments(filter);
+    const list = await Driver.find(filter)
       .select(
         "username mobile password status kycStatus signupDate registrationCompleted name profilePhoto signature licenseDocument aadharDocument aadharDocumentBack panDocument bankDocument electricBillDocument"
       )
@@ -926,15 +925,19 @@ router.post("/", async (req, res) => {
       emergencyPhoneSecondary: fields.emergencyPhoneSecondary || "",
     };
 
-    // If there is a DriverSignup for this mobile, mark registration complete there and copy any missing docs
+    // If there is a Driver for this mobile, mark registration complete there and copy any missing docs
     let signupDoc = null;
     if (baseData.mobile) {
-      signupDoc = await DriverSignup.findOneAndUpdate(
+      signupDoc = await Driver.findOneAndUpdate(
         { mobile: baseData.mobile },
         { registrationCompleted: true, status: "active" },
         { new: true }
       ).lean();
       if (signupDoc) {
+        // Copy password from driver if not already in baseData
+        if (!baseData.password && signupDoc.password) {
+          baseData.password = signupDoc.password;
+        }
         for (const f of documentFields) {
           if (!baseData[f] && signupDoc[f]) baseData[f] = signupDoc[f];
         }
@@ -1081,7 +1084,7 @@ router.put("/:id", async (req, res) => {
       }
     }
 
-    // If signature or document fields are missing, try to copy from corresponding DriverSignup
+    // If signature or document fields are missing, try to copy from corresponding Driver
     const documentFields = [
       "profilePhoto",
       "signature",
@@ -1093,10 +1096,14 @@ router.put("/:id", async (req, res) => {
       "electricBillDocument",
     ];
     if (fields.mobile) {
-      const signup = await DriverSignup.findOne({
+      const signup = await Driver.findOne({
         mobile: fields.mobile,
       }).lean();
       if (signup) {
+        // Copy password from driver if not already in fields
+        if (!fields.password && signup.password) {
+          fields.password = signup.password;
+        }
         for (const f of documentFields) {
           if (!fields[f] && signup[f]) fields[f] = signup[f];
         }
