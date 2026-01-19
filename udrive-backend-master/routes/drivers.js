@@ -307,19 +307,16 @@ router.get("/all", async (req, res) => {
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const manualOnly = req.query.manualOnly === "true";
-
-    // ✅ UPDATED FILTER (registrationCompleted removed)
-    const filter = {
-      name: { $exists: true, $ne: null, $ne: "" }
-    };
-
+    // Filter to only show drivers with completed registration AND with a name
+    const filter = { registrationCompleted: true, name: { $exists: true, $ne: null, $ne: '' } };
     if (manualOnly) {
       filter.isManualEntry = true;
     }
 
     const total = await Driver.countDocuments(filter);
 
-    let query = Driver.find(filter).sort({ [sortBy]: sortOrder });
+    let query = Driver.find(filter)
+      .sort({ [sortBy]: sortOrder });
 
     if (!unlimited) {
       query = query.skip(skip).limit(limit);
@@ -360,7 +357,6 @@ router.get("/all", async (req, res) => {
   }
 });
 
-
 router.get("/", async (req, res) => {
   try {
     // Enforce pagination - no unlimited option to prevent loading all data
@@ -371,28 +367,25 @@ router.get("/", async (req, res) => {
 
     // Ensure limit is between MIN and MAX
     const limit = Math.min(Math.max(requestedLimit, MIN_LIMIT), MAX_LIMIT);
+
     const skip = (page - 1) * limit;
 
     const sortBy = req.query.sortBy || "createdAt";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
     const manualOnly = req.query.manualOnly === "true";
-
-    // ✅ UPDATED FILTER (registrationCompleted removed)
-    const filter = {
-      name: { $exists: true, $ne: null, $ne: "" }
-    };
-
+    // Filter to only show drivers with completed registration AND with a name
+    const filter = { registrationCompleted: true, name: { $exists: true, $ne: null, $ne: '' } };
     if (manualOnly) {
       filter.isManualEntry = true;
     }
 
-    // Search support
+    // Add search support to main GET endpoint
     if (req.query.q && req.query.q.trim()) {
-      const searchRegex = new RegExp(req.query.q.trim(), "i");
-      const normalized = String(req.query.q).replace(/\D/g, "").trim();
+      const searchRegex = new RegExp(req.query.q.trim(), 'i');
+      const normalized = String(req.query.q).replace(/\D/g, '').trim();
       const last10 = normalized.slice(-10);
-
+      
       const searchFilter = {
         $or: [
           { name: searchRegex },
@@ -403,17 +396,16 @@ router.get("/", async (req, res) => {
           { employeeId: searchRegex }
         ]
       };
-
+      
       if (normalized) {
         searchFilter.$or.push({ mobile: normalized });
         searchFilter.$or.push({ phone: normalized });
-
         if (last10.length >= 6) {
           searchFilter.$or.push({ mobile: { $regex: `${last10}$` } });
           searchFilter.$or.push({ phone: { $regex: `${last10}$` } });
         }
       }
-
+      
       filter.$and = filter.$and || [];
       filter.$and.push(searchFilter);
     }
@@ -455,21 +447,17 @@ router.get("/", async (req, res) => {
 });
 
 
-
-
 // GET signup drivers (self-registered with username/mobile/password)
 router.get("/signup/credentials", async (req, res) => {
   try {
     // Pagination parameters
     const page = parseInt(req.query.page) || 1;
-    const requestedLimit = parseInt(req.query.limit) || 10;
-    const MAX_LIMIT = 5000; // Increased max limit to show all drivers
-    const limit = Math.min(requestedLimit, MAX_LIMIT);
+    const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
     const sortBy = req.query.sortBy || "signupDate";
     const sortOrder = req.query.sortOrder === "asc" ? 1 : -1;
 
-    // Add search support - NO filter for registrationCompleted, show all drivers
+    // Add search support
     const filter = {};
     if (req.query.q && req.query.q.trim()) {
       const searchRegex = new RegExp(req.query.q.trim(), 'i');
@@ -513,36 +501,13 @@ router.get("/signup/credentials", async (req, res) => {
   }
 });
 
-import mongoose from "mongoose";
-
 router.get("/:id", async (req, res) => {
-  try {
-    const { id } = req.params;
-
-    // ✅ Validate ObjectId
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({ message: "Invalid driver ID" });
-    }
-
-    const item = await Driver.findById(id).lean();
-
-    if (!item) {
-      return res.status(404).json({ message: "Driver not found" });
-    }
-
-    item.joinDate =
-      normalizeToDateOnly(item.joinDate) ||
-      (item.createdAt
-        ? new Date(item.createdAt).toISOString().split("T")[0]
-        : undefined);
-
-    res.json(item);
-  } catch (error) {
-    console.error("Error fetching driver details:", error);
-    res.status(500).json({ message: "Failed to fetch driver details" });
-  }
+  const id = Number(req.params.id);
+  const item = await Driver.findOne({ id }).lean();
+  if (!item) return res.status(404).json({ message: "Driver not found" });
+  item.joinDate = normalizeToDateOnly(item.joinDate) || (item.createdAt ? new Date(item.createdAt).toISOString().split('T')[0] : undefined);
+  res.json(item);
 });
-
 
 // Return the next UDB number to use (e.g., { next: 31, nextUdb: 'UDB0031' })
 router.get('/udb/next', async (req, res) => {
@@ -1243,75 +1208,57 @@ router.put("/:id", async (req, res) => {
 
 router.delete("/:id", async (req, res) => {
   try {
-    const { id } = req.params;
-
-    let deleted;
-
-    // Prefer MongoDB _id
-    if (mongoose.Types.ObjectId.isValid(id)) {
-      deleted = await Driver.findByIdAndDelete(id);
+    const paramId = req.params.id;
+    
+    // Try to find by MongoDB _id first, then by numeric id
+    let query;
+    if (paramId.match(/^[0-9a-fA-F]{24}$/)) {
+      // Valid MongoDB ObjectId
+      query = { _id: paramId };
     } else {
-      // fallback for legacy numeric id
-      const numId = Number(id);
-      if (isNaN(numId)) {
+      // Try as numeric id
+      const numId = Number(paramId);
+      if (!isNaN(numId)) {
+        query = { id: numId };
+      } else {
         return res.status(400).json({ message: "Invalid driver ID format" });
       }
-      deleted = await Driver.findOneAndDelete({ id: numId });
     }
-
+    
+    const deleted = await Driver.findOneAndDelete(query);
     if (!deleted) {
       return res.status(404).json({ message: "Driver not found" });
     }
-
-    const mongoDriverId = deleted._id.toString();
-    const numericDriverId = deleted.id; // ⚠️ VERY IMPORTANT
-    const mobile = deleted.mobile;
-
-    const deletes = [];
-
-    // Uses Mongo ObjectId (string)
-    deletes.push(
-      DriverEnrollment.deleteMany({ driverId: mongoDriverId }),
-      DriverPlanSelection.deleteMany({ driverId: mongoDriverId }),
-      DeviceToken.deleteMany({ userId: mongoDriverId, userType: "driver" }),
-      Notification.deleteMany({
-        recipientId: mongoDriverId,
-        recipientType: "driver",
-      })
-    );
-
-    // Uses mobile number
-    if (mobile) {
-      deletes.push(
-        DriverWallet.deleteMany({ phone: mobile }),
-        DriverWalletMessage.deleteMany({ phone: mobile })
-      );
-    }
-
-    // Uses NUMERIC driverId
-    if (typeof numericDriverId === "number") {
-      deletes.push(
-        Transaction.deleteMany({ driverId: numericDriverId }),
-        Ticket.deleteMany({ driverId: numericDriverId }),
-        Expense.deleteMany({ driverId: numericDriverId })
-      );
-    }
-
-    await Promise.all(deletes);
-
-    res.json({
-      message: "Driver deleted successfully",
-      driver: deleted,
-    });
+    
+    // Cascade delete all related driver data
+    const driverId = deleted._id.toString();
+    const driverMobile = deleted.mobile;
+    
+    // Delete enrollments
+    await DriverEnrollment.deleteMany({ driverId });
+    // Delete wallet records
+    await DriverWallet.deleteMany({ phone: driverMobile });
+    // Delete wallet messages
+    await DriverWalletMessage.deleteMany({ phone: driverMobile });
+    // Delete plan selections
+    await DriverPlanSelection.deleteMany({ driverId });
+    // Delete device tokens
+    await DeviceToken.deleteMany({ userId: driverId, userType: 'driver' });
+    // Delete transactions
+    await Transaction.deleteMany({ $or: [{ driverId }, { driverId: deleted.id }] });
+    // Delete tickets
+    await Ticket.deleteMany({ driverId: deleted.id });
+    // Delete expenses
+    await Expense.deleteMany({ $or: [{ driverId }, { driverId: deleted.id }] });
+    // Delete notifications
+    await Notification.deleteMany({ recipientId: driverId, recipientType: 'driver' });
+    
+    res.json({ message: "Deleted", driver: deleted });
   } catch (err) {
     console.error("Driver delete error:", err);
-    res.status(500).json({
-      message: "Failed to delete driver",
-      error: err.message,
-    });
+    res.status(500).json({ message: "Failed to delete driver", error: err.message });
   }
 });
-
 
 // GET driver earnings summary
 router.get("/earnings/summary", async (req, res) => {

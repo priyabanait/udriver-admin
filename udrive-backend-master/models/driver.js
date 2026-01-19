@@ -4,7 +4,7 @@ import { normalizeToDateOnly } from '../lib/dateUtils.js';
 const DriverSchema = new mongoose.Schema({
   id: Number,
   username: { type: String, unique: true, sparse: true },
- mobile: { type: String, required: true, unique: true, sparse: true },
+  mobile: { type: String, required: true, unique: true },
   password: { type: String, required: true },
   status: { type: String, default: 'pending', enum: ['pending', 'active', 'inactive', 'suspended'] },
   kycStatus: { type: String, default: 'pending', enum: ['pending', 'verified', 'rejected', 'incomplete'] },

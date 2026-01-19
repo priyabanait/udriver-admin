@@ -128,12 +128,12 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       setCurrentPage(page);
 
       // Fetch signup credentials with pagination
-      const credRes = await fetch(`${API_BASE}/api/drivers/signup/credentials?page=1&limit=100`);
-      if (credRes.ok) {
-        const credResult = await credRes.json();
-        const credData = credResult.data || credResult;
-        setSignupCredentials(credData);
-      }
+      // const credRes = await fetch(`${API_BASE}/api/drivers/signup/credentials?page=1&limit=100`);
+      // if (credRes.ok) {
+      //   const credResult = await credRes.json();
+      //   const credData = credResult.data || credResult;
+      //   setSignupCredentials(credData);
+      // }
 
       // Fetch daily rent plans for assigning to drivers
       try {
@@ -405,7 +405,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       // Fetch complete driver data from the backend
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
       const token = localStorage.getItem('udriver_token');
-      const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
+      const res = await fetch(`${API_BASE}/api/drivers/${driver._id}`, {
         headers: token ? { 'Authorization': `Bearer ${token}` } : {}
       });
 
@@ -426,119 +426,146 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
   };
 // Filter change effect is now handled by the debounced search effect above
   const handleSaveDriver = async (driverData) => {
-    try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-      const token = localStorage.getItem('udriver_token');
-      
-      if (selectedDriver) {
-        // Update existing driver
-        const res = await fetch(`${API_BASE}/api/drivers/${selectedDriver.id}`, {
-          method: 'PUT',
-        headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
-          },
-          body: JSON.stringify(driverData)
-        });
+  try {
+    const API_BASE =
+      import.meta.env.VITE_API_BASE || "http://localhost:4000";
+    const token = localStorage.getItem("udriver_token");
 
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
-          throw new Error(`Failed to update driver: ${res.status}`);
-        }
-
-        const updatedDriver = await res.json();
-        setDriversData(prev => prev.map(driver => 
-          driver.id === selectedDriver.id ? updatedDriver : driver
-        ));
-        toast.success('Driver updated successfully');
-      } else {
-        // Add new driver
-        const res = await fetch(`${API_BASE}/api/drivers`, {
-          method: 'POST',
+    if (selectedDriver) {
+      // ✅ UPDATE
+      const res = await fetch(
+        `${API_BASE}/api/drivers/${selectedDriver._id}`,
+        {
+          method: "PUT",
           headers: {
-            'Content-Type': 'application/json',
-            ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+            "Content-Type": "application/json",
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
           },
-          body: JSON.stringify(driverData)
-        });
-
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
-          throw new Error(`Failed to create driver: ${res.status}`);
+          body: JSON.stringify(driverData),
         }
+      );
 
-        const newDriver = await res.json();
-        setDriversData(prev => [...prev, newDriver]);
-        toast.success('Driver created successfully');
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem("udriver_token");
+          navigate("/login");
+          return;
+        }
+        throw new Error(`Failed to update driver: ${res.status}`);
       }
-      setShowDriverModal(false);
-      setSelectedDriver(null);
-    } catch (err) {
-      console.error(err);
-      toast.error(err.message || 'Failed to save driver');
+
+      const updatedDriver = await res.json();
+
+      setDriversData((prev) =>
+        prev.map((driver) =>
+          driver._id === selectedDriver._id ? updatedDriver : driver
+        )
+      );
+
+      toast.success("Driver updated successfully");
+    } else {
+      // ✅ CREATE
+      const res = await fetch(`${API_BASE}/api/drivers`, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          ...(token ? { Authorization: `Bearer ${token}` } : {}),
+        },
+        body: JSON.stringify(driverData),
+      });
+
+      if (!res.ok) {
+        if (res.status === 401 || res.status === 403) {
+          localStorage.removeItem("udriver_token");
+          navigate("/login");
+          return;
+        }
+        throw new Error(`Failed to create driver: ${res.status}`);
+      }
+
+      const newDriver = await res.json();
+      setDriversData((prev) => [...prev, newDriver]);
+      toast.success("Driver created successfully");
     }
-  };
+
+    setShowDriverModal(false);
+    setSelectedDriver(null);
+  } catch (err) {
+    console.error(err);
+    toast.error(err.message || "Failed to save driver");
+  }
+};
+
 
   // Use backend pagination - no longer need client-side slicing
   const paginatedDrivers = driversData;
 
-  const handleDeleteDriver = (driverId) => {
-    if (window.confirm('Are you sure you want to delete this driver?')) {
-      (async () => {
-        try {
-          const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-          const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
-            method: 'DELETE'
-          });
+ const handleDeleteDriver = (driverId) => {
+  if (window.confirm("Are you sure you want to delete this driver?")) {
+    (async () => {
+      try {
+        const API_BASE =
+          import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
-          if (!res.ok) {
-            let msg = `Failed to delete driver: ${res.status}`;
-            try {
-              const body = await res.json();
-              if (body && body.message) msg = body.message;
-          } catch { /* ignore parse error */ }
-            toast.error(msg);
-            return;
+        const res = await fetch(
+          `${API_BASE}/api/drivers/${driverId}`,
+          { method: "DELETE" }
+        );
+
+        if (!res.ok) {
+          let msg = `Failed to delete driver: ${res.status}`;
+          try {
+            const body = await res.json();
+            if (body?.message) msg = body.message;
+          } catch {
+            /* ignore */
           }
-
-          // Remove from local state after successful deletion
-          setDriversData(prev => prev.filter(driver => driver.id !== driverId));
-          toast.success('Driver deleted successfully');
-        } catch (err) {
-          console.error(err);
-          toast.error('Failed to delete driver');
+          toast.error(msg);
+          return;
         }
-      })();
-    }
-  };
+
+        // ✅ FIXED
+        setDriversData((prev) =>
+          prev.filter((driver) => driver._id !== driverId)
+        );
+
+        toast.success("Driver deleted successfully");
+      } catch (err) {
+        console.error(err);
+        toast.error("Failed to delete driver");
+      }
+    })();
+  }
+};
+
 
   // Legacy quick-action handler (replaced by dropdown). Keep a no-op to avoid usage.
   // const handleKycAction = undefined;
 
   // const handleStatusToggle = undefined;
 
-  const handleChangeDriverStatus = async (driverId, newStatus) => {
-    try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'||'http://localhost:4000';
-      const token = localStorage.getItem('udriver_token');
-      const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
-        body: JSON.stringify({ status: newStatus })
-      });
-      if (!res.ok) {
-        let msg = `Failed to update status: ${res.status}`;
-        try { const b = await res.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
-        throw new Error(msg);
-      }
-      const updated = await res.json();
-      setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
-      toast.success('Driver status updated');
-    } catch(err) {
-      console.error(err);
-      toast.error(err.message || 'Failed to update status');
-    }
-  };
+  // const handleChangeDriverStatus = async (driverId, newStatus) => {
+  //   try {
+  //     const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'||'http://localhost:4000';
+  //     const token = localStorage.getItem('udriver_token');
+  //     const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+  //       method: 'PUT',
+  //       headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
+  //       body: JSON.stringify({ status: newStatus })
+  //     });
+  //     if (!res.ok) {
+  //       let msg = `Failed to update status: ${res.status}`;
+  //       try { const b = await res.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
+  //       throw new Error(msg);
+  //     }
+  //     const updated = await res.json();
+  //     setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+  //     toast.success('Driver status updated');
+  //   } catch(err) {
+  //     console.error(err);
+  //     toast.error(err.message || 'Failed to update status');
+  //   }
+  // };
 
   const handleChangeDriverKyc = async (driverId, newKyc) => {
     try {
@@ -1352,28 +1379,32 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                     </TableCell> */}
                     <TableCell>
                       <div className="flex items-center space-x-2">
-                        <button
-                          onClick={async () => {
-                            try {
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-                              const token = localStorage.getItem('udriver_token');
-                              const res = await fetch(`${API_BASE}/api/drivers/${driver.id}`, {
-                                headers: token ? { 'Authorization': `Bearer ${token}` } : {}
-                              });
-                              if (!res.ok) throw new Error('Failed to fetch driver details');
-                              const driverDetails = await res.json();
-                              setSelectedViewDriver(driverDetails);
-                              setShowDetailModal(true);
-                            } catch (err) {
-                              console.error(err);
-                              toast.error('Failed to load driver details');
-                            }
-                          }}
-                          className="p-1 text-gray-400 hover:text-blue-600"
-                          title="View Details"
-                        >
-                          <Eye className="h-4 w-4" />
-                        </button>
+                   <button
+  onClick={async () => {
+    try {
+      const API_BASE =
+        import.meta.env.VITE_API_BASE || "http://localhost:4000";
+
+      const res = await fetch(
+        `${API_BASE}/api/drivers/${driver._id}`
+      );
+
+      if (!res.ok) throw new Error("Failed to fetch driver details");
+
+      const driverDetails = await res.json();
+      setSelectedViewDriver(driverDetails);
+      setShowDetailModal(true);
+    } catch (err) {
+      console.error(err);
+      toast.error("Failed to load driver details");
+    }
+  }}
+  className="p-1 text-gray-400 hover:text-blue-600"
+  title="View Details"
+>
+  <Eye className="h-4 w-4" />
+</button>
+
                         
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
                           <button

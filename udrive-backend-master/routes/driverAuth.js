@@ -1,4 +1,3 @@
-/* global process */
 import express from "express";
 import jwt from "jsonwebtoken";
 import dotenv from "dotenv";
@@ -12,34 +11,12 @@ import Transaction from "../models/transaction.js";
 import Ticket from "../models/ticket.js";
 import Expense from "../models/expense.js";
 import Notification from "../models/notification.js";
-import Vehicle from "../models/vehicle.js";
+import { authenticateToken } from "./middleware.js";
 
 dotenv.config();
 
 const router = express.Router();
 const SECRET = process.env.JWT_SECRET || "dev_secret";
-
-// Middleware to verify driver JWT token
-const authenticateDriver = (req, res, next) => {
-  const authHeader = req.headers["authorization"];
-  const token = authHeader && authHeader.split(" ")[1];
-
-  if (!token) {
-    return res.status(401).json({ message: "Authentication required." });
-  }
-
-  jwt.verify(token, SECRET, (err, user) => {
-    if (err) {
-      return res.status(403).json({ message: "Invalid token" });
-    }
-    // Check if token is for a driver
-    if (user.type !== "driver") {
-      return res.status(403).json({ message: "Invalid token type. Driver token required." });
-    }
-    req.user = user;
-    next();
-  });
-};
 
 // Signup (username/password)
 router.post("/signup", async (req, res) => {
@@ -346,7 +323,7 @@ router.post("/forgot-password", async (req, res) => {
 });
 
 // Delete own account (driver) — authenticated route
-router.delete("/delete-account", authenticateDriver, async (req, res) => {
+router.delete("/delete-account", authenticateToken, async (req, res) => {
   try {
     const user = req.user;
     const id = user && user.id;
@@ -361,35 +338,6 @@ router.delete("/delete-account", authenticateDriver, async (req, res) => {
     // Cascade delete all related driver data
     const driverId = deleted._id.toString();
     const driverMobile = deleted.mobile;
-    const driverUsername = deleted.username;
-    const driverNumericId = deleted.id;
-    
-    // Build query conditions for driver identifiers (handles both string and number types)
-    const driverIdConditions = [];
-    if (driverId) driverIdConditions.push({ driverId: driverId });
-    if (driverNumericId != null) {
-      driverIdConditions.push({ driverId: driverNumericId });
-      driverIdConditions.push({ driverId: String(driverNumericId) });
-    }
-    if (driverMobile) driverIdConditions.push({ driverId: driverMobile });
-    if (driverUsername) driverIdConditions.push({ driverId: driverUsername });
-    
-    // Build vehicle assignment conditions
-    const vehicleAssignmentConditions = [];
-    if (driverId) vehicleAssignmentConditions.push({ assignedDriver: driverId });
-    if (driverNumericId != null) {
-      vehicleAssignmentConditions.push({ assignedDriver: String(driverNumericId) });
-    }
-    if (driverMobile) vehicleAssignmentConditions.push({ assignedDriver: driverMobile });
-    if (driverUsername) vehicleAssignmentConditions.push({ assignedDriver: driverUsername });
-    
-    // Clear vehicle assignments (vehicles assigned to this driver)
-    if (vehicleAssignmentConditions.length > 0) {
-      await Vehicle.updateMany(
-        { $or: vehicleAssignmentConditions },
-        { $set: { assignedDriver: '' } }
-      );
-    }
     
     // Delete enrollments
     await DriverEnrollment.deleteMany({ driverId });
@@ -401,18 +349,12 @@ router.delete("/delete-account", authenticateDriver, async (req, res) => {
     await DriverPlanSelection.deleteMany({ driverId });
     // Delete device tokens
     await DeviceToken.deleteMany({ userId: driverId, userType: 'driver' });
-    // Delete transactions (handle both String and Number driverId types)
-    if (driverIdConditions.length > 0) {
-      await Transaction.deleteMany({ $or: driverIdConditions });
-    }
-    // Delete tickets (handle both String and Number driverId types)
-    if (driverIdConditions.length > 0) {
-      await Ticket.deleteMany({ $or: driverIdConditions });
-    }
-    // Delete expenses (handle both String and Number driverId types)
-    if (driverIdConditions.length > 0) {
-      await Expense.deleteMany({ $or: driverIdConditions });
-    }
+    // Delete transactions
+    await Transaction.deleteMany({ $or: [{ driverId }, { driverId: deleted.id }] });
+    // Delete tickets
+    await Ticket.deleteMany({ driverId: deleted.id });
+    // Delete expenses
+    await Expense.deleteMany({ $or: [{ driverId }, { driverId: deleted.id }] });
     // Delete notifications
     await Notification.deleteMany({ recipientId: driverId, recipientType: 'driver' });
 

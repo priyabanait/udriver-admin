@@ -58,6 +58,7 @@ function EditCredentialModal({ open, type, user, onClose, onSave }) {
 
 
 // --- Edit Modal Logic ---
+// eslint-disable-next-line no-unused-vars
 const [editModal, setEditModal] = typeof window !== 'undefined' && window.__SIGNUP_EDIT_MODAL_STATE__ ? window.__SIGNUP_EDIT_MODAL_STATE__ : [null, () => {}];
 
 function SignupEditModalManager({ children }) {
@@ -108,7 +109,7 @@ async function handleDelete(type, user) {
 }
 import { useEffect, useState } from 'react';
 import { Card, CardHeader, CardTitle, CardContent } from '../../components/ui/Card';
-import { Search, Users, Shield, Edit, Trash2 } from 'lucide-react';
+import { Search, Users, Shield, Edit, Trash2, TestTube } from 'lucide-react';
 import { formatDate } from '../../utils';
 import toast from 'react-hot-toast';
 
@@ -120,6 +121,8 @@ export default function SignupCredentials() {
   const [investors, setInvestors] = useState([]);
   const [loading, setLoading] = useState(true);
   const [search, setSearch] = useState('');
+  const [testToken, setTestToken] = useState('');
+  const [isDeleting, setIsDeleting] = useState(false);
 
   const loadAll = async () => {
     try {
@@ -128,7 +131,7 @@ export default function SignupCredentials() {
       // Build query params with search
       let driverParams = new URLSearchParams({
         page: '1',
-        limit: '100'
+        limit: '2000' // Increased limit to show all drivers
       });
       let investorParams = new URLSearchParams({
         page: '1',
@@ -163,6 +166,7 @@ export default function SignupCredentials() {
 
   useEffect(() => {
     loadAll();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
 
   // Refetch when search changes (with debounce)
@@ -172,6 +176,7 @@ export default function SignupCredentials() {
     }, search ? 500 : 0); // Debounce search by 500ms
     
     return () => clearTimeout(timeoutId);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [search]);
 
   // Server-side filtering is now used via API, so we just use the data directly
@@ -195,6 +200,114 @@ const paginatedData = data.slice((currentPage - 1) * rowsPerPage, currentPage * 
           <p className="text-gray-600">View driver and investor signup records</p>
         </div>
       </div>
+
+      {/* Test Delete Account API Section */}
+       {/* <Card>
+        <CardContent className="p-6">
+          <div className="bg-yellow-50 border border-yellow-200 rounded-lg p-4">
+            <div className="flex items-start gap-3">
+              <TestTube className="h-5 w-5 text-yellow-600 mt-0.5" />
+              <div className="flex-1">
+                <h3 className="text-lg font-semibold text-yellow-900 mb-2">
+                  Test Delete Account API
+                </h3>
+                <p className="text-sm text-yellow-700 mb-4">
+                  Enter a driver authentication token to test the delete account API endpoint.
+                  This will permanently delete the driver account and all related data.
+                </p>
+                <div className="flex gap-2">
+                  <input
+                    type="text"
+                    value={testToken}
+                    onChange={(e) => setTestToken(e.target.value)}
+                    placeholder="Enter driver JWT token for testing..."
+                    className="flex-1 px-3 py-2 border border-yellow-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-yellow-500"
+                  />
+                  <button
+                    onClick={async () => {
+                      if (!testToken.trim()) {
+                        toast.error('Please enter a driver token');
+                        return;
+                      }
+
+                      const confirmed = window.confirm(
+                        '⚠️ WARNING: This will permanently delete the driver account and all related data!\n\n' +
+                        'This includes:\n' +
+                        '- Driver account\n' +
+                        '- All enrollments\n' +
+                        '- Wallet records and messages\n' +
+                        '- Plan selections\n' +
+                        '- Transactions\n' +
+                        '- Tickets\n' +
+                        '- Expenses\n' +
+                        '- Notifications\n' +
+                        '- Vehicle assignments will be cleared\n\n' +
+                        'Are you absolutely sure you want to proceed?'
+                      );
+                      
+                      if (!confirmed) return;
+
+                      const doubleConfirm = window.confirm(
+                        'This is your last chance to cancel. Type "DELETE" in the next prompt to confirm.'
+                      );
+                      
+                      if (!doubleConfirm) return;
+
+                      const finalConfirm = window.prompt(
+                        'Type "DELETE" to confirm account deletion:'
+                      );
+
+                      if (finalConfirm !== 'DELETE') {
+                        toast.error('Account deletion cancelled');
+                        return;
+                      }
+
+                      setIsDeleting(true);
+                      try {
+                        const res = await fetch(`${API_BASE}/api/driver-auth/delete-account`, {
+                          method: 'DELETE',
+                          headers: {
+                            'Content-Type': 'application/json',
+                            'Authorization': `Bearer ${testToken.trim()}`
+                          }
+                        });
+
+                        const data = await res.json();
+
+                        if (!res.ok) {
+                          throw new Error(data.message || `Failed to delete account: ${res.status}`);
+                        }
+
+                        toast.success(data.message || 'Account deleted successfully');
+                        setTestToken('');
+                        
+                        // Reload the page to refresh the driver list
+                        setTimeout(() => {
+                          loadAll();
+                        }, 1000);
+
+                      } catch (error) {
+                        console.error('Delete account error:', error);
+                        toast.error(error.message || 'Failed to delete account. Please check the token and try again.');
+                      } finally {
+                        setIsDeleting(false);
+                      }
+                    }}
+                    disabled={isDeleting || !testToken.trim()}
+                    className="px-4 py-2 bg-red-600 text-white rounded-md hover:bg-red-700 disabled:bg-red-400 disabled:cursor-not-allowed transition-colors flex items-center gap-2 text-sm font-medium"
+                  >
+                    <Trash2 className="h-4 w-4" />
+                    {isDeleting ? 'Deleting...' : 'Test Delete Account'}
+                  </button>
+                </div>
+                <p className="text-xs text-yellow-600 mt-2">
+                  💡 Tip: Get the token from driver login response or localStorage
+                </p>
+              </div>
+            </div>
+          </div>
+        </CardContent>
+      </Card>  */}
 
       <Card>
         <CardContent className="p-6">
