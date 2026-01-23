@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { 
   Search, 
@@ -45,6 +45,12 @@ export default function VehiclesList() {
   const [pageSize] = useState(10);
   const [paginationInfo, setPaginationInfo] = useState({});
   const [totalVehicles, setTotalVehicles] = useState(0);
+  const fileInputRef = useRef();
+  const previewMode = useRef(false);
+  const [importing, setImporting] = useState(false);
+  const [previewing, setPreviewing] = useState(false);
+  const [previewResults, setPreviewResults] = useState(null);
+  const [showPreviewModal, setShowPreviewModal] = useState(false);
   
   // Server-side filtering is now used via API, so we just use vehiclesData directly
   // The filtered logic has been moved to the backend search endpoint
@@ -452,6 +458,49 @@ export default function VehiclesList() {
     }catch(err){ console.error(err); toast.error(err.message||'Failed to update KYC status'); }
   };
 
+  const handleImportClick = () => { previewMode.current = false; if (fileInputRef.current) fileInputRef.current.click(); };
+  const handlePreviewClick = () => { previewMode.current = true; if (fileInputRef.current) fileInputRef.current.click(); };
+
+  const handleFileChange = async (e) => {
+    const file = e.target.files && e.target.files[0];
+    if (!file) return;
+    const isPreview = !!previewMode.current;
+    try {
+      if (isPreview) setPreviewing(true); else setImporting(true);
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const token = localStorage.getItem('udriver_token');
+      const fd = new FormData();
+      fd.append('file', file);
+      const url = isPreview ? `${API_BASE}/api/vehicles/import?preview=true` : `${API_BASE}/api/vehicles/import`;
+      const res = await fetch(url, {
+        method: 'POST',
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+        body: fd
+      });
+      const body = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        throw new Error(body && body.message ? body.message : `Import failed: ${res.status}`);
+      }
+
+      if (isPreview) {
+        setPreviewResults(body);
+        setShowPreviewModal(true);
+        toast.success(`Preview completed — rows: ${body.results ? body.results.length : 0}`);
+      } else {
+        toast.success(`Import completed — created ${body.created}, updated ${body.updated}, skipped ${body.skipped}`);
+        await fetchAll();
+      }
+    } catch (err) {
+      console.error(err);
+      toast.error(err.message || 'Import failed');
+    } finally {
+      setPreviewing(false);
+      setImporting(false);
+      previewMode.current = false;
+      if (fileInputRef.current) fileInputRef.current.value = null;
+    }
+  };
+
   const handleExport = async () => {
     try{
       toast.loading('Exporting all vehicles...');
@@ -464,27 +513,28 @@ export default function VehiclesList() {
       const allVehicles = result.data || result;
       
       const headers = [
-        'Registration Number', 'Category', 'Brand', 'Model', 'Car Name',
-        'Owner Name', 'Owner Phone', 'Investor ID', 'Investor Name',
+        'Vehicle Number', 'Category', 'Brand', 'Car Name',
+        'Owner Name', 'Owner Phone', 'Investor Name',
         'Manufacture Year', 'Color', 'Fuel Type',
-        'Registration Date', 'RC Expiry Date', 'Road Tax Date', 'Road Tax Number',
-        'Insurance Date', 'Permit Date', 'Emission Date', 'PUC Number',
-        'Traffic Fine', 'Traffic Fine Date',
+        'Registration Date', 'FC Expiry Date', 'Road Tax Date', 'Road Tax Number',
+        'Insurance Expiry Date', 'Permit Expiry Date', 'Car Submit Date', 'PUC Number',
+        
         'Assigned Driver', 'Assigned Manager',
         'KYC Status', 'Status', 'Remarks',
         'Registration Card Photo', 'Road Tax Photo', 'PUC Photo', 'Permit Photo',
-        'Car Front Photo', 'Car Left Photo', 'Car Right Photo', 'Car Back Photo', 'Car Full Photo'
+        'Car Front Photo', 'Car Left Photo', 'Car Right Photo', 'Car Back Photo', 'Car Full Photo',
+        'Insurance Photo', 'FC Photo', 'Interior Photo', 'Speedometer Photo'
       ];
       const escape = v => v==null? '': `"${String(v).replace(/"/g,'""')}"`;
       const rows = allVehicles.map(v => [
         v.registrationNumber || '',
         v.category || '',
         v.brand || v.make || '',
-        v.model || '',
+      
         v.carName || '',
         v.ownerName || '',
         v.ownerPhone || '',
-        v.investorId?._id || v.investorId || '',
+       
         v.investorId?.investorName || v.investorId?.name || '',
         v.year || '',
         v.color || '',
@@ -497,8 +547,7 @@ export default function VehiclesList() {
         formatDate(v.permitDate) || '',
         formatDate(v.emissionDate) || '',
         v.pucNumber || '',
-        v.trafficFine || '',
-        formatDate(v.trafficFineDate) || '',
+       
         v.assignedDriver || '',
         v.assignedManager || '',
         v.kycStatus || '',
@@ -512,7 +561,11 @@ export default function VehiclesList() {
         v.carLeftPhoto || '',
         v.carRightPhoto || '',
         v.carBackPhoto || '',
-        v.carFullPhoto || ''
+        v.carFullPhoto || '',
+        v.insurancePhoto || '',
+        v.fcPhoto || '',
+        v.interiorPhoto || '',
+        v.speedometerPhoto || ''
       ].map(escape));
       const csv = [headers.map(escape).join(','), ...rows.map(r=>r.join(','))].join('\n');
       const blob = new Blob([csv], { type: 'text/csv;charset=utf-8;' });
@@ -544,6 +597,26 @@ export default function VehiclesList() {
           <p className="text-gray-600">Manage all vehicles</p>
         </div>
         <div className="mt-4 sm:mt-0 flex space-x-3">
+          <input ref={fileInputRef} type="file" accept=".csv,.xlsx,.xls" onChange={handleFileChange} style={{ display: 'none' }} />
+          <button
+            onClick={() => {
+              const link = document.createElement('a');
+              link.href = '/vehicle-dummy.csv';
+              link.setAttribute('download', 'vehicle-dummy.csv');
+              document.body.appendChild(link);
+              link.click();
+              document.body.removeChild(link);
+            }}
+            className="btn btn-secondary flex items-center"
+          >
+            <Download className="h-4 w-4 mr-2" />
+            Download Reference CSV
+          </button>
+          <PermissionGuard permission={PERMISSIONS.VEHICLES_CREATE}>
+            <button onClick={() => fileInputRef.current && fileInputRef.current.click()} className="btn btn-outline flex items-center" disabled={importing}>
+              <Download className="h-4 w-4 mr-2" />{importing ? 'Importing...' : 'Import'}
+            </button>
+          </PermissionGuard>
           <PermissionGuard permission={PERMISSIONS.REPORTS_EXPORT}>
             <button onClick={handleExport} className="btn btn-secondary flex items-center"><Download className="h-4 w-4 mr-2"/>Export</button>
           </PermissionGuard>

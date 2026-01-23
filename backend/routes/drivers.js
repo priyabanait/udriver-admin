@@ -180,8 +180,33 @@ router.get("/search", async (req, res) => {
       state
     } = req.query;
 
-    // Filter to only show drivers with completed registration AND with a name
-    const filter = { registrationCompleted: true, name: { $exists: true, $ne: null, $ne: '' } };
+    // Filter to show drivers with a name (both completed and imported drivers without name should have some searchable data)
+    // Imported drivers may not have registrationCompleted: true, so we include them if they have name or other identifying info
+    const filter = {};
+    
+    // If searching, include drivers with name or identifying fields
+    // Otherwise, require registrationCompleted: true to show in list
+    const hasSearchCriteria = q || name || email || phone || mobile || username || driverNo || udbId || employeeId || aadharNumber || panNumber || city || state;
+    
+    if (!hasSearchCriteria) {
+      // For general list view without search, require completed registration and a name
+      filter.registrationCompleted = true;
+      filter.name = { $exists: true, $ne: null, $ne: '' };
+    } else {
+      // For search queries, be more inclusive - include drivers with any identifying data
+      // This allows both completed and imported drivers to be found
+      const baseOr = [
+        { name: { $exists: true, $ne: null, $ne: '' } },
+        { mobile: { $exists: true, $ne: null, $ne: '' } },
+        { phone: { $exists: true, $ne: null, $ne: '' } },
+        { email: { $exists: true, $ne: null, $ne: '' } },
+        { driverNo: { $exists: true, $ne: null, $ne: '' } },
+        { udbId: { $exists: true, $ne: null, $ne: '' } },
+        { aadharNumber: { $exists: true, $ne: null, $ne: '' } },
+        { panNumber: { $exists: true, $ne: null, $ne: '' } }
+      ];
+      filter.$and = [{ $or: baseOr }];
+    }
 
     // General search across multiple fields
     if (q && q.trim()) {
@@ -190,7 +215,7 @@ router.get("/search", async (req, res) => {
       const normalized = String(q).replace(/\D/g, '').trim();
       const last10 = normalized.slice(-10);
       
-      filter.$or = [
+      const searchOr = [
         { name: searchRegex },
         { email: searchRegex },
         { username: searchRegex },
@@ -203,45 +228,131 @@ router.get("/search", async (req, res) => {
       
       // Phone number searches
       if (normalized) {
-        filter.$or.push({ mobile: normalized });
-        filter.$or.push({ phone: normalized });
+        searchOr.push({ mobile: normalized });
+        searchOr.push({ phone: normalized });
         if (last10.length >= 6) {
-          filter.$or.push({ mobile: { $regex: `${last10}$` } });
-          filter.$or.push({ phone: { $regex: `${last10}$` } });
+          searchOr.push({ mobile: { $regex: `${last10}$` } });
+          searchOr.push({ phone: { $regex: `${last10}$` } });
         }
+      }
+      
+      if (filter.$and) {
+        filter.$and.push({ $or: searchOr });
+      } else {
+        filter.$or = searchOr;
       }
     }
 
-    // Specific field filters
-    if (name) filter.name = new RegExp(name, 'i');
-    if (email) filter.email = new RegExp(email, 'i');
+    // Specific field filters - these add AND conditions
+    if (name) {
+      if (filter.$and) {
+        filter.$and.push({ name: new RegExp(name, 'i') });
+      } else {
+        filter.name = new RegExp(name, 'i');
+      }
+    }
+    if (email) {
+      if (filter.$and) {
+        filter.$and.push({ email: new RegExp(email, 'i') });
+      } else {
+        filter.email = new RegExp(email, 'i');
+      }
+    }
     if (phone) {
       const normalized = String(phone).replace(/\D/g, '');
-      if (!filter.$or) filter.$or = [];
-      filter.$or.push({ phone: normalized });
-      filter.$or.push({ mobile: normalized });
+      const phoneOr = [{ phone: normalized }, { mobile: normalized }];
+      if (filter.$and) {
+        filter.$and.push({ $or: phoneOr });
+      } else {
+        filter.$or = phoneOr;
+      }
     }
     if (mobile) {
       const normalized = String(mobile).replace(/\D/g, '');
-      if (!filter.$or) filter.$or = [];
-      if (!filter.$or.some(item => item.mobile === normalized)) {
-        filter.$or.push({ mobile: normalized });
-      }
-      if (!filter.$or.some(item => item.phone === normalized)) {
-        filter.$or.push({ phone: normalized });
+      const mobileOr = [{ mobile: normalized }, { phone: normalized }];
+      if (filter.$and) {
+        filter.$and.push({ $or: mobileOr });
+      } else {
+        filter.$or = mobileOr;
       }
     }
-    if (username) filter.username = new RegExp(username, 'i');
-    if (driverNo) filter.driverNo = new RegExp(driverNo, 'i');
-    if (udbId) filter.udbId = new RegExp(udbId, 'i');
-    if (employeeId) filter.employeeId = new RegExp(employeeId, 'i');
-    if (aadharNumber) filter.aadharNumber = new RegExp(aadharNumber, 'i');
-    if (panNumber) filter.panNumber = panNumber.toUpperCase();
-    if (status) filter.status = status;
-    if (planType) filter.planType = new RegExp(planType, 'i');
-    if (kycStatus) filter.kycStatus = kycStatus;
-    if (city) filter.city = new RegExp(city, 'i');
-    if (state) filter.state = new RegExp(state, 'i');
+    if (username) {
+      if (filter.$and) {
+        filter.$and.push({ username: new RegExp(username, 'i') });
+      } else {
+        filter.username = new RegExp(username, 'i');
+      }
+    }
+    if (driverNo) {
+      if (filter.$and) {
+        filter.$and.push({ driverNo: new RegExp(driverNo, 'i') });
+      } else {
+        filter.driverNo = new RegExp(driverNo, 'i');
+      }
+    }
+    if (udbId) {
+      if (filter.$and) {
+        filter.$and.push({ udbId: new RegExp(udbId, 'i') });
+      } else {
+        filter.udbId = new RegExp(udbId, 'i');
+      }
+    }
+    if (employeeId) {
+      if (filter.$and) {
+        filter.$and.push({ employeeId: new RegExp(employeeId, 'i') });
+      } else {
+        filter.employeeId = new RegExp(employeeId, 'i');
+      }
+    }
+    if (aadharNumber) {
+      if (filter.$and) {
+        filter.$and.push({ aadharNumber: new RegExp(aadharNumber, 'i') });
+      } else {
+        filter.aadharNumber = new RegExp(aadharNumber, 'i');
+      }
+    }
+    if (panNumber) {
+      if (filter.$and) {
+        filter.$and.push({ panNumber: panNumber.toUpperCase() });
+      } else {
+        filter.panNumber = panNumber.toUpperCase();
+      }
+    }
+    if (status) {
+      if (filter.$and) {
+        filter.$and.push({ status: status });
+      } else {
+        filter.status = status;
+      }
+    }
+    if (planType) {
+      if (filter.$and) {
+        filter.$and.push({ planType: new RegExp(planType, 'i') });
+      } else {
+        filter.planType = new RegExp(planType, 'i');
+      }
+    }
+    if (kycStatus) {
+      if (filter.$and) {
+        filter.$and.push({ kycStatus: kycStatus });
+      } else {
+        filter.kycStatus = kycStatus;
+      }
+    }
+    if (city) {
+      if (filter.$and) {
+        filter.$and.push({ city: new RegExp(city, 'i') });
+      } else {
+        filter.city = new RegExp(city, 'i');
+      }
+    }
+    if (state) {
+      if (filter.$and) {
+        filter.$and.push({ state: new RegExp(state, 'i') });
+      } else {
+        filter.state = new RegExp(state, 'i');
+      }
+    }
 
     // Pagination
     const page = Math.max(1, parseInt(req.query.page) || 1);

@@ -158,9 +158,9 @@ export default function VehicleDetailModal({ isOpen, onClose, vehicle = null, dr
                   { label: 'Permit', url: v.permitPhoto || v.permitDoc },
                   { label: 'PUC', url: v.pucPhoto || v.pollutionDoc },
                   { label: 'Road Tax', url: v.roadTaxPhoto },
-                  { label: 'Insurance', url: v.insuranceDoc },
+                  // { label: 'Insurance', url: v.insuranceDoc },
                   { label: 'FC Photo', url: v.fcPhoto },
-                  { label: 'Fitness', url: v.fitnessDoc }
+                  // { label: 'Fitness', url: v.fitnessDoc }
                 ].map((d, i) => (
                   <div key={i} className="border rounded p-2">
                     <p className="text-xs text-gray-500 mb-1">{d.label}</p>

@@ -1,7 +1,11 @@
 import express from 'express';
+import multer from 'multer';
+import xlsx from 'xlsx';
 import Vehicle from '../models/vehicle.js';
 // auth middleware not applied; token used only for login
 import { uploadToCloudinary } from '../lib/cloudinary.js';
+
+const upload = multer({ storage: multer.memoryStorage() });
 
 const router = express.Router();
 
@@ -201,6 +205,348 @@ router.get('/search', async (req, res) => {
   } catch (err) {
     console.error('Error searching vehicles:', err);
     res.status(500).json({ message: 'Failed to search vehicles' });
+  }
+});
+
+// Import vehicles from a spreadsheet (Excel or CSV)
+router.post("/import", upload.single("file"), async (req, res) => {
+  try {
+    if (!req.file) return res.status(400).json({ message: "No file uploaded" });
+
+    const workbook = xlsx.read(req.file.buffer, { type: "buffer" });
+    const sheetNames = workbook.SheetNames || [];
+    let created = 0;
+    let updated = 0;
+    let skipped = 0;
+
+    const normalizeText = (t) =>
+      t === undefined || t === null ? undefined : String(t).toString().trim();
+
+    const preview = req.query && req.query.preview === "true";
+    const perRow = [];
+
+    for (const name of sheetNames) {
+      const sheet = workbook.Sheets[name];
+      if (!sheet) continue;
+
+      // Use header:1 to get raw arrays and detect header row flexibly
+      const rows = xlsx.utils.sheet_to_json(sheet, { header: 1, defval: "", raw: false, dateNF: 'dd-mmm-yy' });
+      if (!rows || rows.length === 0) continue;
+
+      // Find header row: first row with >=2 non-empty cells
+      let headerRowIndex = rows.findIndex(
+        (r) =>
+          Array.isArray(r) &&
+          r.filter((c) => String(c).trim() !== "").length >= 2
+      );
+      if (headerRowIndex < 0) {
+        skipped += rows.length;
+        continue;
+      }
+
+      const headers = rows[headerRowIndex].map((h) => String(h).trim());
+      const dataRows = rows.slice(headerRowIndex + 1);
+
+      const normalizeKey = (k) =>
+        String(k || "")
+          .trim()
+          .toLowerCase();
+
+      const makeMap = (row) => {
+        const map = {};
+        for (let i = 0; i < headers.length; i++) {
+          const hk = normalizeKey(headers[i]);
+          map[hk] = row[i] !== undefined && row[i] !== null ? row[i] : "";
+        }
+        return map;
+      };
+
+      const firstOf = (map, choices) => {
+        const keys = Object.keys(map || {});
+        for (const c of choices) {
+          const want = normalizeKey(c);
+          // direct key
+          if (map[want] !== undefined && String(map[want]).trim() !== "") return String(map[want]).trim();
+          // substring match
+          for (const hk of keys) {
+            if ((hk || "").includes(want) && map[hk] !== undefined && String(map[hk]).trim() !== "") {
+              return String(map[hk]).trim();
+            }
+          }
+        }
+        return undefined;
+      };
+
+      // Try to parse dates from strings or Date objects into YYYY-MM-DD
+      const parseDateValue = (v) => {
+        if (!v && v !== 0) return undefined;
+        
+        // Handle Date objects
+        if (v instanceof Date && !isNaN(v.getTime())) return v.toISOString().split('T')[0];
+        
+        // Handle Excel date serial numbers (numbers between 1 and 100000)
+        if (typeof v === 'number' && v > 0 && v < 100000) {
+          const date = xlsx.SSF.parse_date_code(v);
+          if (date) {
+            const year = date.y;
+            const month = String(date.m).padStart(2, '0');
+            const day = String(date.d).padStart(2, '0');
+            return `${year}-${month}-${day}`;
+          }
+        }
+        
+        const s = String(v).trim();
+        if (!s) return undefined;
+        
+        // Try direct Date parsing first
+        const d = new Date(s);
+        if (!isNaN(d.getTime())) return d.toISOString().split('T')[0];
+        
+        // Handle dd-mm-yyyy or dd/mm/yyyy format
+        const m1 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{4})$/);
+        if (m1) {
+          const [_, dd, mm, yyyy] = m1;
+          const dt = new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`);
+          if (!isNaN(dt.getTime())) return dt.toISOString().split('T')[0];
+        }
+        
+        // Handle dd-mm-yy or dd/mm/yy format (2-digit year)
+        const m2 = s.match(/^(\d{1,2})[\/\-](\d{1,2})[\/\-](\d{2})$/);
+        if (m2) {
+          const [_, dd, mm, yy] = m2;
+          const yyyy = parseInt(yy) < 50 ? `20${yy}` : `19${yy}`;
+          const dt = new Date(`${yyyy}-${mm.padStart(2,'0')}-${dd.padStart(2,'0')}`);
+          if (!isNaN(dt.getTime())) return dt.toISOString().split('T')[0];
+        }
+        
+        // Handle dd-MMM-yy or dd-MMM-yyyy format (e.g., "1-Jan-20" or "15-Mar-2024")
+        const m3 = s.match(/^(\d{1,2})[\/\-]([a-zA-Z]{3})[\/\-](\d{2,4})$/i);
+        if (m3) {
+          const [_, dd, mmm, yy] = m3;
+          const monthMap = {
+            jan: '01', feb: '02', mar: '03', apr: '04', may: '05', jun: '06',
+            jul: '07', aug: '08', sep: '09', oct: '10', nov: '11', dec: '12'
+          };
+          const mm = monthMap[mmm.toLowerCase()];
+          if (mm) {
+            const yyyy = yy.length === 2 ? (parseInt(yy) < 50 ? `20${yy}` : `19${yy}`) : yy;
+            const dt = new Date(`${yyyy}-${mm}-${dd.padStart(2,'0')}`);
+            if (!isNaN(dt.getTime())) return dt.toISOString().split('T')[0];
+          }
+        }
+        
+        return undefined;
+      };
+
+      // Map kycStatus values to valid enum values
+      const mapKycStatus = (value) => {
+        if (!value) return 'pending';
+        const normalized = String(value).toLowerCase().trim();
+        // Map common variations to valid enum values: active, inactive, pending
+        if (normalized === 'verified' || normalized === 'approved' || normalized === 'complete' || normalized === 'completed') return 'active';
+        if (normalized === 'rejected' || normalized === 'failed') return 'inactive';
+        if (normalized === 'pending' || normalized === 'incomplete' || normalized === 'processing') return 'pending';
+        // Default valid values
+        if (['active', 'inactive', 'pending'].includes(normalized)) return normalized;
+        return 'pending'; // fallback
+      };
+
+      // Map status values to valid enum values
+      const mapStatus = (value) => {
+        if (!value) return 'inactive';
+        const normalized = String(value).toLowerCase().trim();
+        // Valid enum values: active, inactive, pending, suspended
+        if (['active', 'inactive', 'pending', 'suspended'].includes(normalized)) return normalized;
+        return 'inactive'; // fallback
+      };
+
+      for (let rowIndex = 0; rowIndex < dataRows.length; rowIndex++) {
+        const r = dataRows[rowIndex];
+        if (!Array.isArray(r)) continue;
+        const rowMap = makeMap(r);
+
+        const registrationNumberV = firstOf(rowMap, ["registration number", "vehicle number", "reg no", "registration no"]);
+        const categoryV = firstOf(rowMap, ["category", "car category", "vehicle category"]);
+        const brandV = firstOf(rowMap, ["brand", "make", "manufacturer"]);
+        const modelV = firstOf(rowMap, ["model", "vehicle model"]);
+        const carNameV = firstOf(rowMap, ["car name", "vehicle name", "name"]);
+        const ownerNameV = firstOf(rowMap, ["owner name", "owner"]);
+        const ownerPhoneV = firstOf(rowMap, ["owner phone", "owner contact", "owner mobile"]);
+        const investorNameV = firstOf(rowMap, ["investor name"]);
+        const yearV = firstOf(rowMap, ["manufacture year", "year", "model year"]);
+        const colorV = firstOf(rowMap, ["color", "colour"]);
+        const fuelTypeV = firstOf(rowMap, ["fuel type", "fuel"]);
+        const registrationDateV = firstOf(rowMap, ["registration date", "reg date"]);
+        const rcExpiryDateV = firstOf(rowMap, ["rc expiry date", "rc expiry", "fc expiry date", "fc expiry"]);
+        const roadTaxDateV = firstOf(rowMap, ["road tax date", "tax date"]);
+        const roadTaxNumberV = firstOf(rowMap, ["road tax number", "tax number", "road tax no"]);
+        const insuranceDateV = firstOf(rowMap, ["insurance date", "insurance expiry", "insurance expiry date"]);
+        const permitDateV = firstOf(rowMap, ["permit date", "permit expiry", "permit expiry date"]);
+        const emissionDateV = firstOf(rowMap, ["emission date", "puc date", "emission", "car submit date"]);
+        const pucNumberV = firstOf(rowMap, ["puc number", "puc no"]);
+        const trafficFineV = firstOf(rowMap, ["traffic fine", "fine", "fine amount"]);
+        const trafficFineDateV = firstOf(rowMap, ["traffic fine date", "fine date"]);
+        const assignedDriverV = firstOf(rowMap, ["assigned driver", "driver"]);
+        const assignedManagerV = firstOf(rowMap, ["assigned manager", "manager"]);
+        const kycStatusV = firstOf(rowMap, ["kyc status", "kyc"]);
+        const statusV = firstOf(rowMap, ["status", "vehicle status"]);
+        const remarksV = firstOf(rowMap, ["remarks", "notes", "comments"]);
+
+        // Photo URLs
+        const registrationCardPhotoV = firstOf(rowMap, ["registration card photo", "registration card photo url", "rc photo"]);
+        const roadTaxPhotoV = firstOf(rowMap, ["road tax photo", "road tax photo url", "tax photo"]);
+        const pucPhotoV = firstOf(rowMap, ["puc photo", "puc photo url", "emission photo"]);
+        const permitPhotoV = firstOf(rowMap, ["permit photo", "permit photo url"]);
+        const carFrontPhotoV = firstOf(rowMap, ["car front photo", "car front photo url", "front photo"]);
+        const carLeftPhotoV = firstOf(rowMap, ["car left photo", "car left photo url", "left photo"]);
+        const carRightPhotoV = firstOf(rowMap, ["car right photo", "car right photo url", "right photo"]);
+        const carBackPhotoV = firstOf(rowMap, ["car back photo", "car back photo url", "back photo"]);
+        const carFullPhotoV = firstOf(rowMap, ["car full photo", "car full photo url", "full photo"]);
+        const insurancePhotoV = firstOf(rowMap, ["insurance photo", "insurance photo url"]);
+        const fcPhotoV = firstOf(rowMap, ["fc photo", "fc photo url", "fitness photo"]);
+        const interiorPhotoV = firstOf(rowMap, ["interior photo", "interior photo url"]);
+        const speedometerPhotoV = firstOf(rowMap, ["speedometer photo", "speedometer photo url"]);
+
+        if (!registrationNumberV && !carNameV && !brandV) {
+          skipped++;
+          perRow.push({ rowIndex, reason: "no identifiers" });
+          continue;
+        }
+
+        // Build search conditions
+        const conditions = [];
+        if (registrationNumberV) conditions.push({ registrationNumber: normalizeText(registrationNumberV) });
+
+        // Get next vehicleId
+        const max = await Vehicle.find().sort({ vehicleId: -1 }).limit(1).lean();
+        const nextId = (max[0]?.vehicleId || 0) + 1;
+
+        const rawPayload = {
+          registrationNumber: registrationNumberV ? normalizeText(registrationNumberV) : undefined,
+          category: categoryV ? normalizeText(categoryV) : undefined,
+          brand: brandV ? normalizeText(brandV) : undefined,
+          model: modelV ? normalizeText(modelV) : undefined,
+          carName: carNameV ? normalizeText(carNameV) : undefined,
+          ownerName: ownerNameV ? normalizeText(ownerNameV) : undefined,
+          ownerPhone: ownerPhoneV ? normalizeText(ownerPhoneV) : undefined,
+          year: yearV ? (Number(yearV) || undefined) : undefined,
+          color: colorV ? normalizeText(colorV) : undefined,
+          fuelType: fuelTypeV ? normalizeText(fuelTypeV) : undefined,
+          registrationDate: parseDateValue(registrationDateV),
+          rcExpiryDate: parseDateValue(rcExpiryDateV),
+          roadTaxDate: parseDateValue(roadTaxDateV),
+          roadTaxNumber: roadTaxNumberV ? normalizeText(roadTaxNumberV) : undefined,
+          insuranceDate: parseDateValue(insuranceDateV),
+          permitDate: parseDateValue(permitDateV),
+          emissionDate: parseDateValue(emissionDateV),
+          pucNumber: pucNumberV ? normalizeText(pucNumberV) : undefined,
+          trafficFine: trafficFineV ? (Number(String(trafficFineV).replace(/[^0-9\.-]+/g, '')) || undefined) : undefined,
+          trafficFineDate: parseDateValue(trafficFineDateV),
+          assignedDriver: assignedDriverV ? normalizeText(assignedDriverV) : undefined,
+          assignedManager: assignedManagerV ? normalizeText(assignedManagerV) : undefined,
+          kycStatus: mapKycStatus(kycStatusV),
+          status: mapStatus(statusV),
+          remarks: remarksV ? normalizeText(remarksV) : undefined,
+          
+          // Photo URLs
+          registrationCardPhoto: registrationCardPhotoV ? normalizeText(registrationCardPhotoV) : undefined,
+          roadTaxPhoto: roadTaxPhotoV ? normalizeText(roadTaxPhotoV) : undefined,
+          pucPhoto: pucPhotoV ? normalizeText(pucPhotoV) : undefined,
+          permitPhoto: permitPhotoV ? normalizeText(permitPhotoV) : undefined,
+          carFrontPhoto: carFrontPhotoV ? normalizeText(carFrontPhotoV) : undefined,
+          carLeftPhoto: carLeftPhotoV ? normalizeText(carLeftPhotoV) : undefined,
+          carRightPhoto: carRightPhotoV ? normalizeText(carRightPhotoV) : undefined,
+          carBackPhoto: carBackPhotoV ? normalizeText(carBackPhotoV) : undefined,
+          carFullPhoto: carFullPhotoV ? normalizeText(carFullPhotoV) : undefined,
+          insurancePhoto: insurancePhotoV ? normalizeText(insurancePhotoV) : undefined,
+          fcPhoto: fcPhotoV ? normalizeText(fcPhotoV) : undefined,
+          interiorPhoto: interiorPhotoV ? normalizeText(interiorPhotoV) : undefined,
+          speedometerPhoto: speedometerPhotoV ? normalizeText(speedometerPhotoV) : undefined,
+        };
+
+        // Remove undefined values to ensure they are saved/updated properly
+        const payload = Object.fromEntries(
+          Object.entries(rawPayload).filter(([_, v]) => v !== undefined)
+        );
+
+        // Try to find an existing vehicle using registration number
+        let existing = null;
+        if (conditions.length > 0) {
+          existing = await Vehicle.findOne({ $or: conditions }).lean();
+        }
+
+        const rowResult = {
+          rowIndex,
+          registrationNumber: payload.registrationNumber || null,
+          carName: payload.carName || null,
+          brand: payload.brand || null,
+          category: payload.category || null,
+        };
+
+        if (preview) {
+          rowResult.found = !!existing;
+          if (existing) {
+            rowResult.matchedBy = "registrationNumber";
+          }
+          perRow.push(rowResult);
+        } else {
+          if (existing) {
+            try {
+              await Vehicle.findByIdAndUpdate(
+                existing._id,
+                { $set: payload },
+                { new: true }
+              );
+              updated++;
+            } catch (err) {
+              console.warn("Failed to update vehicle", err.message);
+              skipped++;
+              rowResult.error = err.message;
+              perRow.push(rowResult);
+            }
+          } else {
+            const createPayload = { vehicleId: nextId, ...payload };
+            try {
+              await Vehicle.create(createPayload);
+              created++;
+              perRow.push({ ...rowResult, created: true });
+            } catch (err) {
+              console.warn("Failed to create vehicle for row", err.message);
+              skipped++;
+              rowResult.error = err.message;
+              perRow.push(rowResult);
+            }
+          }
+        }
+      }
+    }
+
+    if (preview) {
+      return res.json({
+        message: "Preview completed",
+        sheetNames,
+        results: perRow,
+        created,
+        updated,
+        skipped,
+      });
+    }
+
+    if (created === 0 && updated === 0 && skipped > 0) {
+      return res
+        .status(400)
+        .json({
+          message: "No parsable data found in file sheets",
+          sheetNames,
+          created,
+          updated,
+          skipped,
+        });
+    }
+    return res.json({ message: "Import completed", created, updated, skipped });
+  } catch (err) {
+    console.error("Import failed:", err);
+    res.status(500).json({ message: "Import failed", error: err.message });
   }
 });
 
