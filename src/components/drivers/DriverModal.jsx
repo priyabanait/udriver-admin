@@ -722,7 +722,24 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                 )}
 
               </div>
+ <div className="flex flex-col gap-3 max-w-sm">
+      {/* Input showing UDB ID */}
+      <input
+        type="text"
+        placeholder="UDB ID"
+        value={formData.udbId}
+        readOnly
+        className="border p-2 rounded"
+      />
 
+      {/* Button to generate next ID */}
+      <button
+        onClick={handleGenerateUdb}
+        className="bg-blue-600 text-white p-2 rounded hover:bg-blue-700"
+      >
+        Generate UDB ID
+      </button>
+    </div>
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Full Name *
@@ -737,6 +754,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                 {errors.name && <p className="mt-1 text-sm text-red-600">{errors.name}</p>}
               </div>
 
+   
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
                   Email Address *
