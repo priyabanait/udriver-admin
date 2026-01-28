@@ -58,7 +58,7 @@ export async function checkPayoutStatus(referenceId) {
   try {
     const token = localStorage.getItem('udriver_token') || 'mock';
     
-    const response = await fetch(`${API_BASE}/api/payments/zwitch/status/${referenceId}`, {
+    const response = await fetch(`${API_BASE}/api/payments/zwitch/payout-status/${referenceId}`, {
       method: 'GET',
       headers: {
         'Authorization': `Bearer ${token}`

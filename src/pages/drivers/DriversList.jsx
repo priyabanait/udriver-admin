@@ -55,8 +55,9 @@ export default function DriversList() {
   const [vehicles, setVehicles] = useState([]);
   const [vehicleOptions, setVehicleOptions] = useState([]);
   const [assigningVehicleFor, setAssigningVehicleFor] = useState(null);
-const [vehicleSearch, setVehicleSearch] = useState('');
-const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
+  const [vehicleSearchMap, setVehicleSearchMap] = useState({});
+  const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
+  const activeVehicleSearch = showVehicleDropdown ? vehicleSearchMap[showVehicleDropdown] || '' : '';
   const fileInputRef = useRef();
   const previewMode = useRef(false);
   const [importing, setImporting] = useState(false);
@@ -188,7 +189,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
     const timer = setTimeout(async () => {
       try {
         const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-        const q = vehicleSearch || '';
+        const q = activeVehicleSearch || '';
         // We only want inactive, KYC verified vehicles for assignment
         const url = `${API_BASE}/api/vehicles/search?q=${encodeURIComponent(q)}&limit=50&status=inactive&kycStatus=verified`;
         const res = await fetch(url, { signal: controller.signal });
@@ -209,7 +210,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       controller.abort();
       clearTimeout(timer);
     };
-  }, [vehicleSearch, showVehicleDropdown]);
+  }, [showVehicleDropdown, activeVehicleSearch]);
 
   const handleImportClick = () => { previewMode.current = false; if (fileInputRef.current) fileInputRef.current.click(); };
   const handlePreviewClick = () => { previewMode.current = true; if (fileInputRef.current) fileInputRef.current.click(); };
@@ -271,7 +272,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         const base64 = reader.result;
         const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
         const token = localStorage.getItem('udriver_token');
-        const res = await fetch(`${API_BASE}/api/drivers/${signingFor}`, {
+      const res = await fetch(`${API_BASE}/api/drivers/${signingFor}`, {
           method: 'PUT',
           headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
           body: JSON.stringify({ signature: base64, signedAt: new Date().toISOString() })
@@ -507,10 +508,9 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         const API_BASE =
           import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
-        const res = await fetch(
-          `${API_BASE}/api/drivers/${driverId}`,
-          { method: "DELETE" }
-        );
+        const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+          method: "DELETE",
+        });
 
         if (!res.ok) {
           let msg = `Failed to delete driver: ${res.status}`;
@@ -524,9 +524,10 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
           return;
         }
 
-        // ✅ FIXED
         setDriversData((prev) =>
-          prev.filter((driver) => driver._id !== driverId)
+          prev.filter(
+            (driver) => String(driver._id || driver.id) !== String(driverId)
+          )
         );
 
         toast.success("Driver deleted successfully");
@@ -582,7 +583,11 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         throw new Error(msg);
       }
       const updated = await res.json();
-      setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+      setDriversData(prev =>
+        prev.map(d =>
+          String(d._id || d.id) === String(updated._id || updated.id) ? updated : d
+        )
+      );
       toast.success('Driver KYC status updated');
     } catch(err) {
       console.error(err);
@@ -603,7 +608,11 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
         });
         if (!res.ok) throw new Error(`Failed to unassign plan: ${res.status}`);
         const updated = await res.json();
-        setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+        setDriversData(prev =>
+          prev.map(d =>
+            String(d._id || d.id) === String(updated._id || updated.id) ? updated : d
+          )
+        );
         toast.success('Plan unassigned');
         return;
       }
@@ -632,7 +641,11 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
       }
 
       const updated = await res.json();
-      setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+      setDriversData(prev =>
+        prev.map(d =>
+          String(d._id || d.id) === String(updated._id || updated.id) ? updated : d
+        )
+      );
       toast.success(`Assigned plan "${plan.name}" to driver`);
 
       // Create a DriverPlanSelection so plan selection works from admin UI
@@ -688,135 +701,189 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
   };
 
   // Assign or unassign vehicle for a driver
+  // NOTE: This endpoint is intentionally left without auth headers so
+  // that admins can assign vehicles without needing an API token.
   const handleAssignVehicle = async (driverId, vehicleId) => {
-    try {
-      if (!driverId) return;
-      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
-      const token = localStorage.getItem('udriver_token');
+  try {
+    if (!driverId) return;
 
-      // find driver object and previous assignment (if any)
-      const driverObj = driversData.find(d => d.id === driverId || String(d._id) === String(driverId));
-      const prevAssignment = driverObj ? driverObj.vehicleAssigned : null;
+    const API_BASE =
+      import.meta.env.VITE_API_BASE || "http://localhost:4000";
 
-      // Unassign
-      if (!vehicleId) {
-        setAssigningVehicleFor(driverId);
-        const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ vehicleAssigned: '' })
-        });
-        if (!res.ok) {
-          if (res.status === 401 || res.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
-          let msg = `Failed to unassign vehicle: ${res.status}`;
-          try { const b = await res.json(); if (b && b.message) msg = b.message; } catch {}
-          throw new Error(msg);
-        }
-        const updated = await res.json();
-        setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
+    setAssigningVehicleFor(driverId);
 
-        // Clear previous vehicle's assignedDriver if it exists
-        if (prevAssignment) {
-          const prevVehicle = vehicles.find(v => (v.registrationNumber === prevAssignment || String(v.vehicleId) === String(prevAssignment) || String(v._id) === String(prevAssignment) || v.vehicleNumber === prevAssignment));
-          if (prevVehicle) {
-            const prevApiId = resolveApiVehicleId(prevVehicle);
-            if (prevApiId != null) {
-              try {
-                const vr = await fetch(`${API_BASE}/api/vehicles/${prevApiId}`, {
-                  method: 'PUT',
-                  headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-                  body: JSON.stringify({ assignedDriver: '' })
-                });
-                if (vr.ok) {
-                  const vb = await vr.json();
-                  const newVehicle = normalizeVehicle(vb.vehicle || vb);
-                  setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === prevApiId ? newVehicle : v));
-                }
-              } catch (e) { console.warn('Failed to clear previous vehicle assignment', e); }
-            }
-          }
-        }
+    // 🔹 Find driver (support both numeric id and Mongo _id).
+    // For robustness, don't block assignment if it can't be found in local state.
+    const driverObj = driversData.find(d =>
+      String(d._id || d.id) === String(driverId)
+    );
 
-        toast.success('Vehicle unassigned');
-        return;
-      }
+    if (!driverObj) {
+      console.warn('handleAssignVehicle: driver not found in local state for id:', driverId);
+    }
 
-      // Find vehicle record from loaded vehicles list
-      const vehicle = vehicles.find(v => (v._id === vehicleId || String(v.vehicleId) === String(vehicleId) || v.registrationNumber === vehicleId || v.vehicleNumber === vehicleId));
-      if (!vehicle) throw new Error('Selected vehicle not found');
+    const prevAssignment = driverObj ? driverObj.vehicleAssigned || null : null;
 
-      const assignmentValue = vehicle.registrationNumber || vehicle.vehicleNumber || vehicle._id || vehicle.vehicleId;
-      setAssigningVehicleFor(driverId);
-
-      // Update driver record first
-      const drRes = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
-        method: 'PUT',
-        headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-        body: JSON.stringify({ vehicleAssigned: assignmentValue })
+    /* ================= UNASSIGN VEHICLE ================= */
+    if (!vehicleId) {
+      const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ vehicleAssigned: "" }),
       });
 
-      if (!drRes.ok) {
-        if (drRes.status === 401 || drRes.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
-        let msg = `Failed to assign vehicle: ${drRes.status}`;
-        try { const b = await drRes.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
-        throw new Error(msg);
+      const updatedDriver = await res.json();
+
+      if (!res.ok) {
+        throw new Error(updatedDriver?.message || "Failed to unassign vehicle");
       }
 
-      const updatedDriver = await drRes.json();
-      setDriversData(prev => prev.map(d => d.id === driverId ? updatedDriver : d));
+      // Update driver state
+      setDriversData(prev => {
+        const matchId = String(driverId);
+        return prev.map(d =>
+          String(d._id || d.id) === matchId ? updatedDriver : d
+        );
+      });
 
-      // Now update the vehicle record to reflect the assigned driver (use driver._id when available)
-      const apiId = resolveApiVehicleId(vehicle);
-      const driverIdForVehicle = driverObj?._id || updatedDriver._id || driverId;
-      if (apiId != null) {
-        const vr = await fetch(`${API_BASE}/api/vehicles/${apiId}`, {
-          method: 'PUT',
-          headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-          body: JSON.stringify({ assignedDriver: driverIdForVehicle })
-        });
-        if (!vr.ok) {
-          if (vr.status === 401 || vr.status === 403) { localStorage.removeItem('udriver_token'); navigate('/login'); return; }
-          let msg = `Failed to update vehicle: ${vr.status}`;
-          try { const b = await vr.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
-          throw new Error(msg);
-        }
-        const vb = await vr.json();
-        const updatedVehicle = normalizeVehicle(vb.vehicle || vb);
-        setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === apiId ? updatedVehicle : v));
-      }
+      // Clear previous vehicle assignment
+      if (prevAssignment) {
+        const prevVehicle = vehicles.find(
+          v =>
+            v.registrationNumber === prevAssignment ||
+            v.vehicleNumber === prevAssignment ||
+            String(v._id) === String(prevAssignment)
+        );
 
-      // If driver had a previous vehicle assigned which is different, clear it
-      if (prevAssignment && prevAssignment !== assignmentValue) {
-        const prevVehicle = vehicles.find(v => (v.registrationNumber === prevAssignment || String(v.vehicleId) === String(prevAssignment) || String(v._id) === String(prevAssignment) || v.vehicleNumber === prevAssignment));
         if (prevVehicle) {
           const prevApiId = resolveApiVehicleId(prevVehicle);
           if (prevApiId != null) {
-            try {
-              const vr2 = await fetch(`${API_BASE}/api/vehicles/${prevApiId}`, {
-                method: 'PUT',
-                headers: { 'Content-Type': 'application/json', ...(token ? { 'Authorization': `Bearer ${token}` } : {}) },
-                body: JSON.stringify({ assignedDriver: '' })
-              });
-              if (vr2.ok) {
-                const vb2 = await vr2.json();
-                const newVehicle2 = normalizeVehicle(vb2.vehicle || vb2);
-                setVehicles(prev => prev.map(v => resolveApiVehicleId(v) === prevApiId ? newVehicle2 : v));
-              }
-            } catch (e) { console.warn('Failed to clear previous vehicle assignment', e); }
+            const vr = await fetch(`${API_BASE}/api/vehicles/${prevApiId}`, {
+              method: "PUT",
+              headers: { "Content-Type": "application/json" },
+              body: JSON.stringify({ assignedDriver: "" }),
+            });
+
+            if (vr.ok) {
+              const vb = await vr.json();
+              const normalized = normalizeVehicle(vb.vehicle || vb);
+              setVehicles(prev =>
+                prev.map(v =>
+                  resolveApiVehicleId(v) === prevApiId ? normalized : v
+                )
+              );
+            }
           }
         }
       }
 
-      toast.success(`Assigned vehicle ${assignmentValue} to driver`);
-      // Notify other pages (Vehicles) that an assignment changed so they can refresh
-      try { window.dispatchEvent(new CustomEvent('vehicleAssigned', { detail: { vehicleId: apiId } })); } catch (e) { /* ignore */ }
-    } catch (err) {
-      console.error('Assign vehicle error:', err);
-      toast.error(err.message || 'Failed to assign vehicle');
-    } finally {
-      setAssigningVehicleFor(null);
+      toast.success("Vehicle unassigned");
+      return;
     }
-  };
+
+    /* ================= ASSIGN VEHICLE ================= */
+
+    const vehicle = vehicles.find(
+      v =>
+        String(v._id) === String(vehicleId) ||
+        String(v.vehicleId) === String(vehicleId) ||
+        v.registrationNumber === vehicleId ||
+        v.vehicleNumber === vehicleId
+    );
+
+    if (!vehicle) {
+      throw new Error("Selected vehicle not found");
+    }
+
+    const assignmentValue =
+      vehicle.registrationNumber ||
+      vehicle.vehicleNumber ||
+      vehicle._id ||
+      vehicle.vehicleId;
+
+    // 🔹 Update driver first
+    const drRes = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+      method: "PUT",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ vehicleAssigned: assignmentValue }),
+    });
+
+    const updatedDriver = await drRes.json();
+
+    if (!drRes.ok) {
+      throw new Error(updatedDriver?.message || "Failed to assign vehicle");
+    }
+
+    setDriversData(prev => {
+      const matchId = String(driverId);
+      return prev.map(d =>
+        String(d._id || d.id) === matchId ? updatedDriver : d
+      );
+    });
+
+    // 🔹 Update vehicle with assigned driver (_id)
+    const apiVehicleId = resolveApiVehicleId(vehicle);
+
+    if (apiVehicleId != null) {
+      const vr = await fetch(`${API_BASE}/api/vehicles/${apiVehicleId}`, {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ assignedDriver: updatedDriver._id }),
+      });
+
+      if (vr.ok) {
+        const vb = await vr.json();
+        const normalizedVehicle = normalizeVehicle(vb.vehicle || vb);
+        setVehicles(prev =>
+          prev.map(v =>
+            resolveApiVehicleId(v) === apiVehicleId
+              ? normalizedVehicle
+              : v
+          )
+        );
+      }
+    }
+
+    // 🔹 Clear old vehicle if different
+    if (prevAssignment && prevAssignment !== assignmentValue) {
+      const oldVehicle = vehicles.find(
+        v =>
+          v.registrationNumber === prevAssignment ||
+          v.vehicleNumber === prevAssignment ||
+          String(v._id) === String(prevAssignment)
+      );
+
+      if (oldVehicle) {
+        const oldApiId = resolveApiVehicleId(oldVehicle);
+        if (oldApiId != null) {
+          const vr2 = await fetch(`${API_BASE}/api/vehicles/${oldApiId}`, {
+            method: "PUT",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({ assignedDriver: "" }),
+          });
+
+          if (vr2.ok) {
+            const vb2 = await vr2.json();
+            const normalized2 = normalizeVehicle(vb2.vehicle || vb2);
+            setVehicles(prev =>
+              prev.map(v =>
+                resolveApiVehicleId(v) === oldApiId ? normalized2 : v
+              )
+            );
+          }
+        }
+      }
+    }
+
+    toast.success(`Vehicle assigned to driver`);
+  } catch (err) {
+    console.error("Assign vehicle error:", err);
+    toast.error(err.message || "Failed to assign vehicle");
+  } finally {
+    setAssigningVehicleFor(null);
+  }
+};
+
 
   // Permissions can be referenced directly via <PermissionGuard>, so local vars are not needed
 
@@ -1065,16 +1132,15 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
           <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between space-y-4 lg:space-y-0 lg:space-x-4">
             {/* Search */}
            <div className="relative flex-1 max-w-md">
-  <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
-  <input
-    type="text"
-    placeholder="Search drivers..."
-    value={searchTerm}
-    onChange={(e) => setSearchTerm(e.target.value)}
-    className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 bg-white"
-  />
-</div>
-
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-5 w-5 text-gray-400 pointer-events-none" />
+              <input
+                type="text"
+                placeholder="Search drivers..."
+                value={searchTerm}
+                onChange={(e) => setSearchTerm(e.target.value)}
+                className="w-full pl-10 pr-4 py-2 text-sm border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 placeholder-gray-400 bg-white"
+              />
+            </div>
 
             {/* Filters */}
             <div className="flex space-x-3">
@@ -1195,85 +1261,97 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                     <TableCell>
                       <div>
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
-                         <div className="relative" style={{ minWidth: '180px' }}>
-  <input
-    type="text"
-    className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
-    placeholder="Select Vehicle"
-    disabled={assigningVehicleFor === driver.id}
-    value={
-      vehicleSearch ||
-      (() => {
-        const v = vehicles.find(
-          v =>
-            v.registrationNumber === driver.vehicleAssigned ||
-            String(v.vehicleId) === String(driver.vehicleAssigned) ||
-            String(v._id) === String(driver.vehicleAssigned) ||
-            v.vehicleNumber === driver.vehicleAssigned
-        );
-        return v
-          ? `${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`
-          : '';
-      })()
-    }
-    onChange={(e) => {
-      setVehicleSearch(e.target.value);
-      setShowVehicleDropdown(driver.id);
-    }}
-    onFocus={() => setShowVehicleDropdown(driver.id)}
-  />
+                          <div className="relative" style={{ minWidth: '180px' }}>
+                            <input
+                              type="text"
+                              className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 w-full focus:outline-none focus:ring-2 focus:ring-blue-500"
+                              placeholder="Select Vehicle"
+                              disabled={assigningVehicleFor === (driver._id || driver.id)}
+                              value={(() => {
+                                const key = driver._id || driver.id;
+                                const searchValue = vehicleSearchMap[key];
+                                const assignedLabel = (() => {
+                                  const v = vehicles.find(
+                                    v =>
+                                      v.registrationNumber === driver.vehicleAssigned ||
+                                      String(v.vehicleId) === String(driver.vehicleAssigned) ||
+                                      String(v._id) === String(driver.vehicleAssigned) ||
+                                      v.vehicleNumber === driver.vehicleAssigned
+                                  );
+                                  return v
+                                    ? `${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`
+                                    : '';
+                                })();
+                                return searchValue ? searchValue : assignedLabel;
+                              })()}
+                              onChange={(e) => {
+                                const key = driver._id || driver.id;
+                                const next = e.target.value;
+                                setVehicleSearchMap(prev => ({ ...prev, [key]: next }));
+                                setShowVehicleDropdown(key);
+                              }}
+                              onFocus={() => {
+                                const key = driver._id || driver.id;
+                                setShowVehicleDropdown(key);
+                                setVehicleSearchMap(prev =>
+                                  Object.prototype.hasOwnProperty.call(prev, key)
+                                    ? prev
+                                    : { ...prev, [key]: '' }
+                                );
+                              }}
+                            />
 
-  {showVehicleDropdown === driver.id && (
-    <>
-      {/* click outside */}
-      <div
-        className="fixed inset-0 z-10"
-        onClick={() => setShowVehicleDropdown(null)}
-      />
+                            {showVehicleDropdown === (driver._id || driver.id) && (
+                              <>
+                                {/* click outside */}
+                                <div
+                                  className="fixed inset-0 z-10"
+                                  onClick={() => setShowVehicleDropdown(null)}
+                                />
 
-      <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto text-sm">
+                                <div className="absolute z-20 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-auto text-sm">
+                                  {/* clear */}
+                                  <div
+                                    className="px-2 py-1 text-gray-500 cursor-pointer hover:bg-gray-100"
+                                    onClick={() => {
+                                      const key = driver._id || driver.id;
+                                      handleAssignVehicle(key, '');
+                                      setVehicleSearchMap(prev => ({ ...prev, [key]: '' }));
+                                      setShowVehicleDropdown(null);
+                                    }}
+                                  >
+                                    Select Vehicle
+                                  </div>
 
-        {/* clear */}
-        <div
-          className="px-2 py-1 text-gray-500 cursor-pointer hover:bg-gray-100"
-          onClick={() => {
-            handleAssignVehicle(driver.id, '');
-            setVehicleSearch('');
-            setShowVehicleDropdown(null);
-          }}
-        >
-          Select Vehicle
-        </div>
+                                  {/* server-side vehicle options */}
+                                  {vehicleOptions.map(v => {
+                                    const value = v._id || v.vehicleId || v.registrationNumber;
+                                    return (
+                                      <div
+                                        key={value}
+                                        className="px-2 py-1 cursor-pointer hover:bg-blue-50"
+                                        onClick={() => {
+                                          const key = driver._id || driver.id;
+                                          handleAssignVehicle(key, value);
+                                          setVehicleSearchMap(prev => ({ ...prev, [key]: '' }));
+                                          setShowVehicleDropdown(null);
+                                        }}
+                                      >
+                                        {`${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`}
+                                      </div>
+                                    );
+                                  })}
 
-        {/* server-side vehicle options */}
-        {vehicleOptions.map(v => {
-          const value = v._id || v.vehicleId || v.registrationNumber;
-          return (
-            <div
-              key={value}
-              className="px-2 py-1 cursor-pointer hover:bg-blue-50"
-              onClick={() => {
-                handleAssignVehicle(driver.id, value);
-                setVehicleSearch('');
-                setShowVehicleDropdown(null);
-              }}
-            >
-              {`${v.registrationNumber || v.vehicleNumber}${v.carName ? ` — ${v.carName}` : v.model ? ` — ${v.model}` : ''}`}
-            </div>
-          );
-        })}
-
-        {/* empty */}
-        {vehicleOptions.length === 0 && (
-          <div className="px-2 py-1 text-gray-400">
-            No vehicles available
-          </div>
-        )}
-      </div>
-    </>
-  )}
-</div>
-
+                                  {/* empty */}
+                                  {vehicleOptions.length === 0 && (
+                                    <div className="px-2 py-1 text-gray-400">
+                                      No vehicles available
+                                    </div>
+                                  )}
+                                </div>
+                              </>
+                            )}
+                          </div>
                         </PermissionGuard>
 
                         {!driver.vehicleAssigned && (
@@ -1291,8 +1369,8 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
                           <select
                             value={(dailyPlans.find(p => p.name === driver.currentPlan)?._id) || ''}
-                            onChange={(e) => handleAssignPlan(driver.id, e.target.value)}
-                            disabled={assigningPlanFor === driver.id}
+                            onChange={(e) => handleAssignPlan(driver._id || driver.id, e.target.value)}
+                            disabled={String(assigningPlanFor) === String(driver._id || driver.id)}
                             className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                             style={{ minWidth: '160px' }}
                           >
@@ -1344,7 +1422,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                             <Badge variant="success" className="flex items-center"><CheckCircle className="h-3 w-3 mr-1" />Signed</Badge>
                             {/* Show daily agreement for drivers on daily plan, otherwise show default agreement */}
                             <a
-                              href={( (driver.planType || '').toString().toLowerCase().includes('daily') || dailyPlans.some(p => p.name === driver.currentPlan) ) ? `/driveragreement?driverId=${driver.id || driver._id}` : `/agreement?driverId=${driver.id || driver._id}`}
+                              href={( (driver.planType || '').toString().toLowerCase().includes('daily') || dailyPlans.some(p => p.name === driver.currentPlan) ) ? `/driveragreement?driverId=${driver._id || driver.id}` : `/agreement?driverId=${driver._id || driver.id}`}
                               target="_blank"
                               rel="noopener noreferrer"
                               className="text-blue-600 underline text-sm ml-2"
@@ -1355,8 +1433,18 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                         ) : (
                           <>
                             <span className="text-sm text-gray-500">Unsigned</span>
-                            <button onClick={() => handleStartSignatureUpload(driver.id)} className="text-sm text-blue-600 underline ml-2" disabled={updatingSignature && signingFor === driver.id}>
-                              {updatingSignature && signingFor === driver.id ? 'Uploading...' : 'Sign'}
+                            <button
+                              onClick={() => handleStartSignatureUpload(driver._id || driver.id)}
+                              className="text-sm text-blue-600 underline ml-2"
+                              disabled={
+                                updatingSignature &&
+                                String(signingFor) === String(driver._id || driver.id)
+                              }
+                            >
+                              {updatingSignature &&
+                              String(signingFor) === String(driver._id || driver.id)
+                                ? "Uploading..."
+                                : "Sign"}
                             </button>
                           </>
                         )}
@@ -1419,7 +1507,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_KYC}>
                           <select
                             value={driver.kycStatus || 'incomplete'}
-                            onChange={(e)=>handleChangeDriverKyc(driver.id, e.target.value)}
+                            onChange={(e)=>handleChangeDriverKyc(driver._id || driver.id, e.target.value)}
                             className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                             style={{ minWidth: '120px' }}
                           >
@@ -1445,7 +1533,7 @@ const [showVehicleDropdown, setShowVehicleDropdown] = useState(null);
 
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_DELETE}>
                           <button
-                            onClick={() => handleDeleteDriver(driver.id)}
+                            onClick={() => handleDeleteDriver(driver._id || driver.id)}
                             className="p-1 text-gray-400 hover:text-red-600"
                             title="Delete Driver"
                           >

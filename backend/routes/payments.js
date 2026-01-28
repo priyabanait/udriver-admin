@@ -296,8 +296,9 @@ router.post('/zwitch/create-token', async (req, res) => {
       });
     }
 
-    // Check amount limits (with defaults if settings not configured)
-    const minAmount = config.settings?.minAmount ?? 1;
+    // Check amount limits. Business rule: absolute minimum is ₹1,
+    // regardless of what is stored in config/settings.
+    const minAmount = 1;
     const maxAmount = config.settings?.maxAmount ?? 1000000;
     if (amount < minAmount || amount > maxAmount) {
       return res.status(400).json({
@@ -432,8 +433,8 @@ router.post('/zwitch/create-token-investor', async (req, res) => {
       });
     }
 
-    // Check amount limits
-    const minAmount = config.settings?.minAmount ?? 1;
+    // Check amount limits for investor collections. Absolute minimum is ₹1.
+    const minAmount = 1;
     const maxAmount = config.settings?.maxAmount ?? 1000000;
     if (amount < minAmount || amount > maxAmount) {
       return res.status(400).json({

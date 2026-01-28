@@ -109,10 +109,11 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
             paymentType: 'investment'
           }
         : (() => {
-            // For drivers include deposit/rent breakdown and set a sensible paymentType
+            // For drivers include deposit/rent breakdown.
+            // NOTE: Backend selection.paymentType only accepts 'rent' or 'security',
+            // so we keep this field limited and rely on depositAmount/rentAmount for split.
             let paymentTypeLocal = 'rent';
-            if (payDeposit > 0 && payRent > 0) paymentTypeLocal = 'mixed';
-            else if (payDeposit > 0) paymentTypeLocal = 'security';
+            if (payDeposit > 0 && payRent === 0) paymentTypeLocal = 'security';
 
             return {
               driverMobile: selection.driverMobile || selection.driver?.mobile,
@@ -144,7 +145,14 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
       console.log('Payment token created:', data.data.paymentToken);
       
       // Open Layer.js payment modal
-      openLayerCheckout(data.data.paymentToken, data.data.transactionId);
+      openLayerCheckout({
+        paymentToken: data.data.paymentToken,
+        transactionId: data.data.transactionId,
+        merchantOrderId: data.data.merchantOrderId,
+        computedTotal,
+        payDeposit,
+        payRent
+      });
 
     } catch (error) {
       console.error('Payment token creation error:', error);
@@ -153,7 +161,7 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
     }
   };
 
-  const openLayerCheckout = (paymentToken, transactionId) => {
+  const openLayerCheckout = ({ paymentToken, transactionId, merchantOrderId, computedTotal, payDeposit, payRent }) => {
     const accessKey = import.meta.env.VITE_ZWITCH_ACCESS_KEY || 'a55ad409-80be-4d64-b3bf-4df213e74c18';
     
     console.log('🔑 Opening Layer checkout with:');
@@ -176,15 +184,51 @@ export default function ZwitchPaymentModal({ isOpen, onClose, selection, onSucce
           error_color: '#EF4444'
         }
       },
-      function(response) {
+      async function(response) {
         console.log('Layer.js response:', response);
         
         if (response.status === 'captured') {
-          toast.success('Payment successful!');
-          // Ensure loading is cleared and propagate success
-          setLoading(false);
-          onSuccess({ transactionId, payment_id: response.payment_id, status: 'completed' });
-          onClose();
+          try {
+            // Record the payment against the plan selection so it shows on DriverPayments page
+            if (paymentFor === 'driver' && selection?._id) {
+              const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+              const token = localStorage.getItem('token');
+              const recordRes = await fetch(`${API_BASE}/api/driver-plan-selections/${selection._id}/online-payment`, {
+                method: 'POST',
+                headers: {
+                  'Content-Type': 'application/json',
+                  ...(token ? { Authorization: `Bearer ${token}` } : {})
+                },
+                body: JSON.stringify({
+                  paymentId: response.payment_id,
+                  amount: computedTotal,
+                  // Keep top-level paymentType constrained to 'rent' or 'security';
+                  // detailed split is sent via depositAmount/rentAmount.
+                  paymentType: payDeposit > 0 && payRent === 0 ? 'security' : 'rent',
+                  status: response.status,
+                  merchantOrderId,
+                  paymentToken,
+                  gateway: 'ZWITCH',
+                  depositAmount: payDeposit,
+                  rentAmount: payRent
+                })
+              });
+
+              const recordData = await recordRes.json().catch(() => null);
+              if (!recordRes.ok || !recordData?.success) {
+                throw new Error(recordData?.message || `Failed to record payment (HTTP ${recordRes.status})`);
+              }
+            }
+
+            toast.success('Payment successful!');
+            setLoading(false);
+            onSuccess({ transactionId, payment_id: response.payment_id, status: 'completed' });
+            onClose();
+          } catch (err) {
+            console.error('Failed to record online payment:', err);
+            toast.error(err.message || 'Payment succeeded but failed to record it. Please refresh.');
+            setLoading(false);
+          }
         } else if (response.status === 'failed') {
           toast.error('Payment failed. Please try again.');
           setLoading(false);

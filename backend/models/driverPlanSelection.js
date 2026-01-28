@@ -44,7 +44,8 @@ const DriverPlanSelectionSchema = new mongoose.Schema({
   },
   paymentMethod: {
     type: String,
-    enum: ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI'],
+    // Include ZWITCH so online gateway name can be stored safely
+    enum: ['Cash', 'Bank Transfer', 'Cheque', 'Online', 'UPI', 'ZWITCH'],
     default: 'Cash'
   },
   // Manual payment amount entered by driver (can differ from calculated total)
