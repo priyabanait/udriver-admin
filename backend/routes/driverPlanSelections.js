@@ -153,10 +153,19 @@ router.patch("/:id", async (req, res) => {
       adjustmentReason,
       adminPaidAmount,
       adminPaymentType,
+      paymentStatus,
     } = req.body;
     const selection = await DriverPlanSelection.findById(id);
     if (!selection) {
       return res.status(404).json({ message: "Plan selection not found" });
+    }
+
+    // Handle payment status change (admin only)
+    if (paymentStatus && ['pending', 'completed', 'failed'].includes(paymentStatus)) {
+      selection.paymentStatus = paymentStatus;
+      if (paymentStatus === 'completed') {
+        selection.paymentDate = new Date();
+      }
     }
 
     // Handle extra amount - add to cumulative total and push to array
@@ -277,6 +286,11 @@ router.patch("/:id", async (req, res) => {
         (selection.extraAmountPaid || 0) + extraAmountPaidNow;
       selection.accidentalCoverPaid =
         (selection.accidentalCoverPaid || 0) + accidentalCoverPaidNow;
+
+      // Set paymentDate when admin records payment (if not already set)
+      if (!selection.paymentDate) {
+        selection.paymentDate = new Date();
+      }
 
       console.log("Admin payment recorded:", {
         selectionId: selection._id,

@@ -545,28 +545,32 @@ export default function DriversList() {
 
   // const handleStatusToggle = undefined;
 
-  // const handleChangeDriverStatus = async (driverId, newStatus) => {
-  //   try {
-  //     const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000'||'http://localhost:4000';
-  //     const token = localStorage.getItem('udriver_token');
-  //     const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
-  //       method: 'PUT',
-  //       headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
-  //       body: JSON.stringify({ status: newStatus })
-  //     });
-  //     if (!res.ok) {
-  //       let msg = `Failed to update status: ${res.status}`;
-  //       try { const b = await res.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
-  //       throw new Error(msg);
-  //     }
-  //     const updated = await res.json();
-  //     setDriversData(prev => prev.map(d => d.id === driverId ? updated : d));
-  //     toast.success('Driver status updated');
-  //   } catch(err) {
-  //     console.error(err);
-  //     toast.error(err.message || 'Failed to update status');
-  //   }
-  // };
+  const handleChangeDriverStatus = async (driverId, newStatus) => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const token = localStorage.getItem('udriver_token');
+      const res = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+        method: 'PUT',
+        headers: { 'Content-Type':'application/json', ...(token?{ 'Authorization': `Bearer ${token}` }: {}) },
+        body: JSON.stringify({ status: newStatus })
+      });
+      if (!res.ok) {
+        let msg = `Failed to update status: ${res.status}`;
+        try { const b = await res.json(); if (b && b.message) msg = b.message; } catch { /* ignore */ }
+        throw new Error(msg);
+      }
+      const updated = await res.json();
+      setDriversData(prev =>
+        prev.map(d =>
+          String(d._id || d.id) === String(updated._id || updated.id) ? updated : d
+        )
+      );
+      toast.success('Driver status updated');
+    } catch(err) {
+      console.error(err);
+      toast.error(err.message || 'Failed to update status');
+    }
+  };
 
   const handleChangeDriverKyc = async (driverId, newKyc) => {
     try {
@@ -712,17 +716,22 @@ export default function DriversList() {
 
     setAssigningVehicleFor(driverId);
 
-    // 🔹 Find driver (support both numeric id and Mongo _id).
-    // For robustness, don't block assignment if it can't be found in local state.
-    const driverObj = driversData.find(d =>
-      String(d._id || d.id) === String(driverId)
-    );
+    // 🔹 Find driver - use same matching logic as delete function
+    // Support both MongoDB _id and numeric id
+    const driverObj = driversData.find(d => {
+      // Try exact matches on both id types
+      if (String(d._id) === String(driverId)) return true;
+      if (d.id && Number(d.id) === Number(driverId)) return true;
+      return false;
+    });
 
     if (!driverObj) {
       console.warn('handleAssignVehicle: driver not found in local state for id:', driverId);
     }
 
     const prevAssignment = driverObj ? driverObj.vehicleAssigned || null : null;
+    const driverMongoId = driverObj?._id;
+    const driverNumericId = driverObj?.id;
 
     /* ================= UNASSIGN VEHICLE ================= */
     if (!vehicleId) {
@@ -738,13 +747,14 @@ export default function DriversList() {
         throw new Error(updatedDriver?.message || "Failed to unassign vehicle");
       }
 
-      // Update driver state
-      setDriversData(prev => {
-        const matchId = String(driverId);
-        return prev.map(d =>
-          String(d._id || d.id) === matchId ? updatedDriver : d
-        );
-      });
+      // Update driver state - match both id types like delete does
+      setDriversData(prev =>
+        prev.map(d => {
+          if (String(d._id) === String(updatedDriver._id)) return updatedDriver;
+          if (d.id && driverNumericId && Number(d.id) === Number(driverNumericId)) return updatedDriver;
+          return d;
+        })
+      );
 
       // Clear previous vehicle assignment
       if (prevAssignment) {
@@ -752,7 +762,7 @@ export default function DriversList() {
           v =>
             v.registrationNumber === prevAssignment ||
             v.vehicleNumber === prevAssignment ||
-            String(v._id) === String(prevAssignment)
+            Number(v.vehicleId) === Number(prevAssignment)
         );
 
         if (prevVehicle) {
@@ -785,10 +795,10 @@ export default function DriversList() {
 
     const vehicle = vehicles.find(
       v =>
-        String(v._id) === String(vehicleId) ||
-        String(v.vehicleId) === String(vehicleId) ||
+        Number(v.vehicleId) === Number(vehicleId) ||
         v.registrationNumber === vehicleId ||
-        v.vehicleNumber === vehicleId
+        v.vehicleNumber === vehicleId ||
+        String(v._id) === String(vehicleId)
     );
 
     if (!vehicle) {
@@ -798,28 +808,30 @@ export default function DriversList() {
     const assignmentValue =
       vehicle.registrationNumber ||
       vehicle.vehicleNumber ||
-      vehicle._id ||
-      vehicle.vehicleId;
+      vehicle.vehicleId ||
+      vehicle._id;
 
-    // 🔹 Update driver first
-    const drRes = await fetch(`${API_BASE}/api/drivers/${driverId}`, {
+    // 🔹 Update driver first - use either _id or numeric id
+    const res = await fetch(`${API_BASE}/api/drivers/${driverMongoId || driverId}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ vehicleAssigned: assignmentValue }),
     });
 
-    const updatedDriver = await drRes.json();
+    const updatedDriver = await res.json();
 
-    if (!drRes.ok) {
+    if (!res.ok) {
       throw new Error(updatedDriver?.message || "Failed to assign vehicle");
     }
 
-    setDriversData(prev => {
-      const matchId = String(driverId);
-      return prev.map(d =>
-        String(d._id || d.id) === matchId ? updatedDriver : d
-      );
-    });
+    // Update driver state - match both id types
+    setDriversData(prev =>
+      prev.map(d => {
+        if (String(d._id) === String(updatedDriver._id)) return updatedDriver;
+        if (d.id && driverNumericId && Number(d.id) === Number(driverNumericId)) return updatedDriver;
+        return d;
+      })
+    );
 
     // 🔹 Update vehicle with assigned driver (_id)
     const apiVehicleId = resolveApiVehicleId(vehicle);
@@ -850,7 +862,7 @@ export default function DriversList() {
         v =>
           v.registrationNumber === prevAssignment ||
           v.vehicleNumber === prevAssignment ||
-          String(v._id) === String(prevAssignment)
+          Number(v.vehicleId) === Number(prevAssignment)
       );
 
       if (oldVehicle) {
@@ -1073,10 +1085,14 @@ export default function DriversList() {
               <div className="p-2 bg-green-100 rounded-lg">
                 <User className="h-6 w-6 text-green-600" />
               </div>
-            <div className="ml-4">
-              <p className="text-sm font-medium text-gray-600">Active Drivers</p>
-              <p className="text-2xl font-bold text-gray-900">{driversData.filter(d => d.status === 'active').length}</p>
-            </div>
+              <div className="ml-4">
+                <p className="text-sm font-medium text-gray-600">Active Drivers</p>
+                <p className="text-2xl font-bold text-gray-900">
+                  {
+                    driversData.filter(d => String(d.status || '').toLowerCase() === 'active').length
+                  }
+                </p>
+              </div>
             </div>
           </CardContent>
         </Card>
@@ -1144,7 +1160,7 @@ export default function DriversList() {
 
             {/* Filters */}
             <div className="flex space-x-3">
-              {/* <select
+              <select
                 value={statusFilter}
                 onChange={(e) => setStatusFilter(e.target.value)}
                 className="border border-gray-300 rounded-md text-sm py-2 px-3 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
@@ -1154,7 +1170,7 @@ export default function DriversList() {
                 <option value="active">Active</option>
                 <option value="inactive">Inactive</option>
                 <option value="pending">Pending</option>
-              </select> */}
+              </select>
 
               <select
                 value={planFilter}
@@ -1212,7 +1228,7 @@ export default function DriversList() {
                   <TableHead>KYC Status</TableHead>
                    <TableHead>Car Status</TableHead>
                    <TableHead>Agreement</TableHead>
-                  {/* <TableHead>Status</TableHead> */}
+                  <TableHead>Status</TableHead>
                   {/* <TableHead>Earnings</TableHead> */}
                   {/* <TableHead>Rating</TableHead> */}
                   <TableHead>Actions</TableHead>
@@ -1450,9 +1466,9 @@ export default function DriversList() {
                         )}
                       </div>
                     </TableCell>
-                    {/* <TableCell>
+                    <TableCell>
                       {getStatusBadge(driver.status)}
-                    </TableCell> */}
+                    </TableCell>
                     {/* <TableCell>
                       <div>
                         <div className="font-medium text-gray-900">{formatCurrency(driver.totalEarnings)}</div>
@@ -1517,10 +1533,10 @@ export default function DriversList() {
                             <option value="incomplete">Incomplete</option>
                           </select>
                         </PermissionGuard>
-                        {/* <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
+                        <PermissionGuard permission={PERMISSIONS.DRIVERS_EDIT}>
                           <select
                             value={driver.status || 'inactive'}
-                            onChange={(e)=>handleChangeDriverStatus(driver.id, e.target.value)}
+                            onChange={(e)=>handleChangeDriverStatus(driver._id || driver.id, e.target.value)}
                             className="border border-gray-300 rounded-md text-sm h-8 py-1 px-2 pr-8 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
                             style={{ minWidth: '110px' }}
                           >
@@ -1529,7 +1545,7 @@ export default function DriversList() {
                             <option value="inactive">Inactive</option>
                             <option value="suspended">Suspended</option>
                           </select>
-                        </PermissionGuard> */}
+                        </PermissionGuard>
 
                         <PermissionGuard permission={PERMISSIONS.DRIVERS_DELETE}>
                           <button

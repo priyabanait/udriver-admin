@@ -843,6 +843,53 @@ const paginatedFiltered = useMemo(() => {
     fetchPayments(1);
   };
 
+  const handlePaymentStatusChange = async (selectionId, newStatus) => {
+    try {
+      const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const token = localStorage.getItem('token');
+      
+      const res = await fetch(`${API_BASE}/api/driver-plan-selections/${selectionId}`, {
+        method: 'PATCH',
+        headers: {
+          'Content-Type': 'application/json',
+          ...(token ? { 'Authorization': `Bearer ${token}` } : {})
+        },
+        body: JSON.stringify({ paymentStatus: newStatus })
+      });
+      
+      if (!res.ok) {
+        const errorData = await res.json();
+        throw new Error(errorData.message || 'Failed to update payment status');
+      }
+      
+      const result = await res.json();
+      
+      // Update local state with refreshed data
+      setSelections(prev => prev.map(group =>
+        group.map(s =>
+          s._id === selectionId
+            ? {
+                ...s,
+                paymentStatus: result.selection.paymentStatus || newStatus,
+                paymentDate: result.selection.paymentDate || s.paymentDate
+              }
+            : s
+        )
+      ));
+      
+      const statusLabels = {
+        'pending': 'Pending',
+        'completed': 'Completed',
+        'failed': 'Failed'
+      };
+      
+      toast.success(`Payment status changed to ${statusLabels[newStatus] || newStatus}`);
+    } catch (err) {
+      console.error('Payment status change error:', err);
+      toast.error(err.message || 'Failed to update payment status');
+    }
+  };
+
   const handleStatusChange = async (selectionId, newStatus) => {
     try {
       const API_BASE = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
@@ -1456,12 +1503,39 @@ const paginatedFiltered = useMemo(() => {
                                       <div className="space-y-1">
                                         <div>{getModeBadge(s.paymentMode)}</div>
                                         <p className="text-xs text-gray-500">Method: {s.paymentMethod || 'N/A'}</p>
-                                        <p className="text-xs text-gray-500">Date: {s.paymentDate ? formatDate(s.paymentDate) : 'Not paid yet'}</p>
+                                        {(() => {
+                                          // Check if any payment has been made (driver, admin, or online)
+                                          const driverPaid = s.paidAmount || 0;
+                                          const adminPaid = s.adminPaidAmount || 0;
+                                          const totalPaid = driverPaid + adminPaid;
+                                          
+                                          if (totalPaid > 0) {
+                                            // Payment has been made
+                                            return (
+                                              <p className="text-xs text-green-600 font-semibold">
+                                                Paid: ₹{totalPaid.toLocaleString('en-IN')}
+                                              </p>
+                                            );
+                                          } else {
+                                            // No payment made yet
+                                            return (
+                                              <p className="text-xs text-gray-500">Date: {s.paymentDate ? formatDate(s.paymentDate) : 'Not paid yet'}</p>
+                                            );
+                                          }
+                                        })()}
                                        
                                       </div>
                                     </TableCell>
                                     <TableCell>
-                                      {getStatusBadge(s.paymentStatus)}
+                                      <select
+                                        value={s.paymentStatus || 'pending'}
+                                        onChange={(e) => handlePaymentStatusChange(s._id, e.target.value)}
+                                        className="border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-blue-500 bg-white"
+                                      >
+                                        <option value="pending">Pending</option>
+                                        <option value="completed">Completed</option>
+                                        <option value="failed">Failed</option>
+                                      </select>
                                     </TableCell>
                                     
                                     <TableCell>

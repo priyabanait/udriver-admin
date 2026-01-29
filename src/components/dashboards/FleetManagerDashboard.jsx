@@ -147,8 +147,8 @@ export default function SuperAdminDashboard() {
         setInvestmentFDs(investmentFDData);
 
         // Calculate stats
-        const activeDriversCount = driversData.filter(d => d.status === 'active').length;
-        const activeVehiclesCount = vehiclesData.filter(v => v.status === 'active').length;
+        const activeDriversCount = driversData.filter(d => String(d.status || '').toLowerCase() === 'active').length;
+        const activeVehiclesCount = vehiclesData.filter(v => String(v.status || '').toLowerCase() === 'active').length;
         const pendingKycCount = driversData.filter(d => d.kycStatus === 'pending').length;
         
         const totalRevenue = transactionsData
