@@ -307,7 +307,7 @@ export default function DriverAgreement() {
             </p>
 
             {/* Sections */}
-            <div className="space-y-5 mb-6">
+            <div className="space-y-8 mb-6">
               <div>
                 <p className="font-bold underline mb-2">Vehicle - Purpose:</p>
                 <p>
@@ -462,7 +462,7 @@ be the responsibility of the company.</li>
               </div>
 
               <div>
-                <p className="font-bold underline mb-2">Penalty:</p>
+                <p className="font-bold underline mt-2 mb-2">Penalty:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
                   <li>If the<b> Driver has not done any trips</b> on <b>UBER app</b> on that particular day and <b>driven the vehicle empty then the dead KMs penalty will be imposed (₹5/KM)</b>.</li>
                   <li>If the <b> driver removes the required sticker, a flat ₹1000 fine</b> will be applied.</li>
