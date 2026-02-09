@@ -318,7 +318,10 @@ export default function DriverAgreement() {
               <div>
                 <p className="font-bold underline mb-2">Security Deposit:</p>
                 <p>
-                  The Driver shall deposit with the company on or before the commencement date, an amount specified in the receipt (as the amount of security deposit to be provided by driver) by away of non-interest bearing adjustable security deposit to secure the due performance of the driver services and of the terms of this agreement.
+                  The Driver shall deposit with the company on or before the commencement date, an amount specified in the receipt (as the amount of security deposit to be provided by driver) by away of non-interest bearing adjustable security deposit to secure the due performance of the driver services and of the terms of this agreement. The Company shall be entitled to adjust against and recover from 
+security deposit, any amounts owed by the driver to the company under terms of this agreement 
+time to time 
+
                 </p>
               </div>
 
@@ -360,7 +363,7 @@ be the responsibility of the company.</li>
                 <p className="font-bold underline mb-2">Accident Responsibility:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
                   <li>The Driver is responsible for any damage caused to third parties and any legal issues resulting from accidents.</li>
-                   <li className="font-bold">Any vehicle damages caused by driver, the repair charges should bear by the driver.</li>
+                   <li className="font-bold">Any vehicle damages caused by driver, the repair charges should bear by the driver (50%). </li>
                 </ul>
               </div>
 
@@ -462,7 +465,7 @@ be the responsibility of the company.</li>
                 <p className="font-bold underline mb-2">Penalty:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
                   <li>If the<b> Driver has not done any trips</b> on <b>UBER app</b> on that particular day and <b>driven the vehicle empty then the dead KMs penalty will be imposed (₹5/KM)</b>.</li>
-                  <li>If the <b> driver removes the required sticker, a flat ₹500 fine</b> will be applied.</li>
+                  <li>If the <b> driver removes the required sticker, a flat ₹1000 fine</b> will be applied.</li>
                   <li>If the <b> vehicle is driven intercity for more than 100 KM the dead KM charge of ₹5/KM</b> will be <b>applied for both up and down</b>.</li>
                   <li className="font-bold">If the vehicle is recovered under any scenario security deposit would not be refunded.</li>
                 </ul>

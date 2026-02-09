@@ -308,7 +308,7 @@ rideshare services - hereinafter referred to as the <b>"Driver"</b>.
             </p>
 
             {/* Sections */}
-            <div className="space-y-5 mb-6">
+            <div className="space-y-5 ">
               <div>
                 <p className="font-bold underline mb-2">Vehicle - Purpose:</p>
                 <p>
@@ -372,26 +372,20 @@ be the responsibility of the company.</li>
                 </ul>
               </div>
 
-              {/* <div>
-                <p className="font-bold underline mb-2">Driver Pay-out:</p>
-                <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li>Pay-outs will be processed weekly.</li>
-                  <li>Pay-out statements will be shared with all Drivers on Monday.</li>
-                  <li>Positive pay-outs will be processed on Tuesday.</li>
-                  <li className="font-bold">If a pay-out is missed due to receiver account issue on Tuesday, it will be reprocessed and payment will occur on Friday after reconfirming the account details with Drivers.</li>
-                </ul>
-              </div> */}
+            
 
               <div>
                 <p className="font-bold underline mb-2">Driver Termination:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
                   <li>Driving under the <b>influence of alcohol</b>.</li>
+                  <li><b>Handovering vehicle to different driver or friend</b>.</li>
+                    <li><b>Driving double driver is not allowed </b>.</li>
                   <li>Driver <b>not responding</b> for more than 48 hours.</li>
-                  <li><b>Tampering with the vehicle</b> or its parts.</li>
+                  <li><b>Tampering with the vehicle</b> or its parts, tyres, Spare tyres or Tools.</li>
                   <li><b>Behavioral issues</b> with customers or Driver managers.</li>
-                  <li>Performance issues, which will be assessed over a 2-week period.</li>
+                  {/* <li>Performance issues, which will be assessed over a 2-week period.</li> */}
                   <li className="font-bold">Vehicle untidy and uncleanliness.</li>
-                <li className="font-bold">Payment pending or personal use of vehicle.</li>
+                <li className="font-bold">Payment pending.</li>
                  <li className="font-bold">Fraud activity </li>
                <li className="font-bold"> Tampering with panic button and GPS.</li>
                 </ul>
@@ -401,7 +395,7 @@ be the responsibility of the company.</li>
                 <p className="font-bold underline mb-2">Vehicle Damage:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
                   <li>The <b>Driver is responsible</b> for any <b>physical damage to the vehicle</b> and will bear the <b>associated penalties</b>.</li>
-                  <li>Any damages costing more than <b>₹1,000</b> due to accident: <b>25% must be borne by the Driver; remaining will be claimed through insurance</b>. Drivers must inform their DM or U Drive immediately.</li>
+                  <li>Any damages costing more than <b>₹1,000</b> due to accident: <b>50% must be borne by the Driver; remaining will be claimed through insurance</b>. Drivers must inform their DM or U Drive immediately.</li>
                 </ul>
               </div>
 
@@ -415,7 +409,7 @@ be the responsibility of the company.</li>
               <div>
                 <p className="font-bold underline mb-2">Key Loss:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li>In the <b>event of key loss</b>, the Driver must pay a fine of<b> 1500 rupees</b>.</li>
+                  <li>In the <b>event of key loss</b>, the Driver must pay a fine of<b> 2500 rupees</b>.</li>
                 </ul>
               </div>
 
@@ -438,21 +432,8 @@ the location charges will be increased </li>
                   
                 </ul>
               </div>
- <div>
-                <p className="font-bold underline  mb-2">FNF (Full and Final) Pay-out:</p>
-                <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li className="font-bold">All Full and Final (FNF) pay-outs will be processed on Fridays.</li>
-              <li className="font-bold">Information regarding FNF pay-outs must be provided to respective DMs by Wednesday, 4 pm.</li>
-                  
-                </ul>
-              </div>
-              <div>
-                <p className="font-bold underline mb-2">Dress Code and Safety: </p>
-                <ul className="list-disc list-inside pl-4 space-y-1">
-                 <li className="font-bold">Drivers must wear a white shirt and seatbelt at all times while driving the vehicle.</li>
-                 <li>All traffic rules must be followed and in case of any miss outs driver will be responsible for the fines imposed.</li>
-                </ul>
-              </div>
+ 
+                
 
               <div>
                 <p className="font-bold underline mb-2">FNF (Full and Final) Pay-out:</p>
@@ -471,13 +452,16 @@ the location charges will be increased </li>
               </div>
 
               <div>
-                <p className="font-bold underline mb-2">Penalty:</p>
+                <p className="font-bold underline mt-10 mb-2">Penalty:</p>
                 <ul className="list-disc list-inside pl-4 space-y-1">
-                  <li className="font-bold">Weekly limit of 1575 To 1750 Km would be provided per week considered for penalty at 
-extra Rs 5/KM. </li>
-                  <li>If the<b>driver wanted sticker is removed flat 1000 RS fine would be applied </b>.</li>
-                  <li>If the <b>vehicle is performed intercity for more than 100 KM the dead KM of RS 5/KM</b>would 
-be <b> applied for both up and down </b></li>
+                  <li className="font-bold">Weekly limit of 1800 Km would be provided per week, above which penalty will be 
+charged at extra Rs 5/KM.  </li>
+                  <li>If the<b> driver wanted sticker is removed flat 1000 RS fine would be applied </b>.</li>
+                  <li>If the <b>vehicle is performed intercity for more than 100 KM, the dead KM would be applied 
+for both up and down in the following rates: <br></br>
+100 km – 150 km = Rs 5/km <br></br>
+150 km – 200 km = Rs 10/km <br></br>
+Above 200 km = Rs 15/km  </b></li>
                  
                   <li className="font-bold">If the vehicle is recovered due to non-payment or non-compliance situation Security 
 deposit will not be refunded </li>
@@ -485,6 +469,8 @@ deposit will not be refunded </li>
               </div>
 
             </div>
+            <div>
+      </div>
 
             <p className="mt-6 font-bold">
               By signing below, both parties acknowledge and accept the terms and conditions outlined in this agreement.
