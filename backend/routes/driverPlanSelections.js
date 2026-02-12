@@ -292,6 +292,11 @@ router.patch("/:id", async (req, res) => {
         selection.paymentDate = new Date();
       }
 
+      // Set paymentMode to 'cash' for admin recorded payments
+      if (!selection.paymentMode || selection.paymentMode === '') {
+        selection.paymentMode = 'cash';
+      }
+
       console.log("Admin payment recorded:", {
         selectionId: selection._id,
         paymentAmount,
@@ -305,6 +310,7 @@ router.patch("/:id", async (req, res) => {
         totalRentPaid: selection.rentPaid,
         totalExtraAmountPaid: selection.extraAmountPaid,
         totalAccidentalCoverPaid: selection.accidentalCoverPaid,
+        paymentMode: selection.paymentMode,
       });
     }
 
@@ -1241,10 +1247,8 @@ router.post("/:id/confirm-payment", async (req, res) => {
 
     console.log("Current payment status:", selection.paymentStatus);
 
-    if (selection.paymentStatus === "completed") {
-      return res.status(400).json({ message: "Payment already completed" });
-    }
-
+    // IMPORTANT: Always process and accumulate payments, regardless of current paymentStatus
+    // Multiple payments should be recorded, not rejected
     selection.paymentMode = paymentMode;
     selection.paymentStatus = "completed";
     selection.paymentDate = new Date();
@@ -1255,6 +1259,28 @@ router.post("/:id/confirm-payment", async (req, res) => {
       const newPayment = Number(paidAmount);
       selection.paidAmount = previousAmount + newPayment;
       selection.paymentType = paymentType || "rent";
+      
+      // Initialize driverPayments array if it doesn't exist
+      if (!selection.driverPayments) {
+        selection.driverPayments = [];
+      }
+
+      // Add payment record to array for tracking multiple payments
+      selection.driverPayments.push({
+        date: new Date(),
+        amount: newPayment,
+        mode: paymentMode,
+        type: paymentType || "rent",
+        status: "completed"
+      });
+      
+      // Track in depositPaid/rentPaid for proper calculation
+      if (paymentType === "security") {
+        selection.depositPaid = (selection.depositPaid || 0) + newPayment;
+      } else if (paymentType === "rent") {
+        selection.rentPaid = (selection.rentPaid || 0) + newPayment;
+      }
+      
       console.log(
         "Adding payment:",
         newPayment,
@@ -1263,7 +1289,9 @@ router.post("/:id/confirm-payment", async (req, res) => {
         "New Total:",
         selection.paidAmount,
         "Type:",
-        selection.paymentType
+        selection.paymentType,
+        "Tracked payments:",
+        selection.driverPayments.length
       );
     }
 

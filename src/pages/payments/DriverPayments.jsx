@@ -1265,13 +1265,19 @@ const paginatedFiltered = useMemo(() => {
                                     <TableCell>
                                       <div className="space-y-1">
                                         {(() => {
-                                          // Calculate total paid amount (driver + admin) for this driver across all transactions
+                                          // Calculate total paid amount from all sources (driver online + driver cash + admin)
                                           const totalPaidByDriver = group.reduce((sum, transaction) => {
-                                            return sum + (transaction.paidAmount || 0);
+                                            // Sum from online payments array first
+                                            const onlineTotal = (transaction.driverPayments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                                            // Use array total if available, otherwise use legacy paidAmount
+                                            return sum + (onlineTotal || transaction.paidAmount || 0);
                                           }, 0);
                                           
                                           const totalPaidByAdmin = group.reduce((sum, transaction) => {
-                                            return sum + (transaction.adminPaidAmount || 0);
+                                            // Sum from admin payments array first
+                                            const adminArrayTotal = (transaction.adminPayments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                                            // Use array total if available, otherwise use legacy adminPaidAmount
+                                            return sum + (adminArrayTotal || transaction.adminPaidAmount || 0);
                                           }, 0);
                                           
                                           const totalPaid = totalPaidByDriver + totalPaidByAdmin;
@@ -1634,7 +1640,17 @@ const paginatedFiltered = useMemo(() => {
                 <div className="bg-green-50 rounded-lg p-4">
                   <p className="text-xs text-gray-600">Total Paid</p>
                   <p className="text-2xl font-bold text-green-600">
-                    ₹{selectedDetail.reduce((sum, t) => sum + (t.paidAmount || 0), 0).toLocaleString('en-IN')}
+                    ₹{selectedDetail.reduce((sum, t) => {
+                      // Sum all payments from arrays, with fallback to legacy fields
+                      const driverOnlineTotal = (t.driverPayments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                      const adminTotal = (t.adminPayments || []).reduce((s, p) => s + (p.amount || 0), 0);
+                      
+                      // Use array values if they exist, otherwise fall back to legacy fields
+                      const driverPaid = driverOnlineTotal || (t.paidAmount || 0);
+                      const adminPaid = adminTotal || (t.adminPaidAmount || 0);
+                      
+                      return sum + driverPaid + adminPaid;
+                    }, 0).toLocaleString('en-IN')}
                   </p>
                 </div>
                 <div className="bg-orange-50 rounded-lg p-4">
@@ -1833,12 +1849,59 @@ const paginatedFiltered = useMemo(() => {
                       <div className="mt-3 pt-3 border-t border-gray-300">
                         <p className="text-sm font-semibold text-gray-800 mb-2">Payment Records:</p>
                         <div className="space-y-2">
-                          {/* Driver Payment Record */}
-                          {transaction.paidAmount > 0 && transaction.paymentDate && (
+                          {/* Display Individual Online Driver Payments from driverPayments array */}
+                          {transaction.driverPayments && transaction.driverPayments.length > 0 && (
+                            <>
+                              <div className="text-xs font-semibold text-blue-800 mb-2">Online Payments (via {transaction.paymentMethod || 'ZWITCH'}):</div>
+                              {transaction.driverPayments.map((driverPayment, idx) => (
+                                <div key={idx} className="p-3 bg-blue-50 border border-blue-200 rounded-md">
+                                  <div className="flex justify-between items-start mb-2">
+                                    <div>
+                                      <span className="text-xs font-semibold text-blue-800">Online Payment #{idx + 1}</span>
+                                      <div className="text-[10px] text-blue-600 mt-0.5">
+                                        {driverPayment.date ? new Date(driverPayment.date).toLocaleString('en-IN', {
+                                          dateStyle: 'medium',
+                                          timeStyle: 'short'
+                                        }) : 'N/A'}
+                                      </div>
+                                    </div>
+                                    <span className="text-lg font-bold text-blue-700">₹{(driverPayment.amount || 0).toLocaleString('en-IN')}</span>
+                                  </div>
+                                  <div className="grid grid-cols-2 gap-2 text-xs">
+                                    <div>
+                                      <span className="text-blue-600">Type:</span>
+                                      <span className="ml-1 font-medium capitalize">{driverPayment.type || 'rent'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-blue-600">Mode:</span>
+                                      <span className="ml-1 font-medium">{getModeBadge(driverPayment.mode || 'online')}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-blue-600">Gateway:</span>
+                                      <span className="ml-1 font-medium">{driverPayment.gateway || 'ZWITCH'}</span>
+                                    </div>
+                                    <div>
+                                      <span className="text-blue-600">Status:</span>
+                                      <span className="ml-1 font-medium capitalize">{driverPayment.status || 'captured'}</span>
+                                    </div>
+                                    {driverPayment.transactionId && (
+                                      <div className="col-span-2">
+                                        <span className="text-blue-600 text-[10px]">Transaction ID:</span>
+                                        <span className="ml-1 font-mono text-[9px] text-blue-500 break-all">{driverPayment.transactionId.substring(0, 20)}...</span>
+                                      </div>
+                                    )}
+                                  </div>
+                                </div>
+                              ))}
+                            </>
+                          )}
+
+                          {/* Driver Cash Payment Record - Show if paidAmount exists and no driverPayments array */}
+                          {transaction.paidAmount > 0 && transaction.paymentDate && (!transaction.driverPayments || transaction.driverPayments.length === 0) && (
                             <div className="p-3 bg-blue-50 border border-blue-200 rounded-md">
                               <div className="flex justify-between items-start mb-2">
                                 <div>
-                                  <span className="text-xs font-semibold text-blue-800">Driver Payment</span>
+                                  <span className="text-xs font-semibold text-blue-800">Driver Cash Payment</span>
                                   <div className="text-[10px] text-blue-600 mt-0.5">
                                     {transaction.paymentDate ? new Date(transaction.paymentDate).toLocaleString('en-IN', {
                                       dateStyle: 'medium',
@@ -1855,7 +1918,7 @@ const paginatedFiltered = useMemo(() => {
                                 </div>
                                 <div>
                                   <span className="text-blue-600">Mode:</span>
-                                  <span className="ml-1">{getModeBadge(transaction.paymentMode)}</span>
+                                  <span className="ml-1">{getModeBadge(transaction.paymentMode || 'cash')}</span>
                                 </div>
                                 <div className="col-span-2">
                                   <span className="text-blue-600">Method:</span>
@@ -1899,7 +1962,7 @@ const paginatedFiltered = useMemo(() => {
                                     </div>
                                     <div className="col-span-2">
                                       <span className="text-purple-600">Mode:</span>
-                                      <span className="ml-1 font-medium">Cash/Manual Entry</span>
+                                      <span className="ml-1">{getModeBadge('cash')}</span>
                                     </div>
                                     <div className="col-span-2">
                                       <span className="text-purple-600">Paid By:</span>
@@ -1954,7 +2017,7 @@ const paginatedFiltered = useMemo(() => {
                               <div className="grid grid-cols-2 gap-2 text-xs">
                                 <div className="col-span-2">
                                   <span className="text-purple-600">Mode:</span>
-                                  <span className="ml-1 font-medium">Cash/Manual Entry</span>
+                                  <span className="ml-1">{getModeBadge('cash')}</span>
                                 </div>
                                 <div className="col-span-2">
                                   <span className="text-purple-600">Paid By:</span>
@@ -1990,7 +2053,17 @@ const paginatedFiltered = useMemo(() => {
                         <div>
                           <span className="text-gray-600 font-medium">Total Paid:</span>
                           <span className="ml-2 text-lg font-bold text-green-600">
-                            ₹{((transaction.paidAmount || 0) + (transaction.adminPaidAmount || 0)).toLocaleString('en-IN')}
+                            ₹{(() => {
+                              // Sum payments from all sources
+                              const driverOnlineTotal = (transaction.driverPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                              const adminTotal = (transaction.adminPayments || []).reduce((sum, p) => sum + (p.amount || 0), 0);
+                              
+                              // Use array values if available, fallback to legacy fields
+                              const driverPaid = driverOnlineTotal || (transaction.paidAmount || 0);
+                              const adminPaid = adminTotal || (transaction.adminPaidAmount || 0);
+                              
+                              return (driverPaid + adminPaid).toLocaleString('en-IN');
+                            })()}
                           </span>
                         </div>
                         <div>

@@ -747,9 +747,8 @@ router.post("/:id/confirm-payment", async (req, res) => {
 
     console.log("Current investment payment status:", investment.paymentStatus);
 
-    if (investment.paymentStatus === "paid") {
-      return res.status(400).json({ error: "Payment already completed" });
-    }
+    // IMPORTANT: Always process and accumulate payments, regardless of current paymentStatus
+    // Multiple payments should be recorded, not rejected
 
     // Map incoming short values (online/cash) to schema enum values
     const mapping = { online: "Online", cash: "Cash" };
@@ -768,6 +767,18 @@ router.post("/:id/confirm-payment", async (req, res) => {
     investment.paymentStatus = "paid";
     investment.paymentDate = new Date();
 
+    // Initialize investorPayments array if it doesn't exist (for tracking multiple payments)
+    if (!investment.investorPayments) {
+      investment.investorPayments = [];
+    }
+
+    // Add payment record to array for tracking multiple payments
+    investment.investorPayments.push({
+      date: new Date(),
+      mode: mapping[normalized],
+      status: "paid"
+    });
+
     // Support optional tdsPercent in confirm-payment (server calculates tdsAmount)
     if (req.body.tdsPercent !== undefined) {
       const tdsPercent = Number(req.body.tdsPercent) || 0;
@@ -784,7 +795,44 @@ router.post("/:id/confirm-payment", async (req, res) => {
       id: updatedInvestment._id,
       paymentMode: updatedInvestment.paymentMode,
       paymentStatus: updatedInvestment.paymentStatus,
+      investorId: updatedInvestment.investorId,
     });
+
+    // Emit notification for investor payment
+    try {
+      const { createAndEmitNotification } = await import("../lib/notify.js");
+      const Investor = (await import("../models/investor.js")).default;
+      
+      // Look up actual Investor._id to ensure notification goes to the correct investor only
+      let actualInvestorId = String(updatedInvestment.investorId || "");
+      if (!actualInvestorId && updatedInvestment.phone) {
+        const investor = await Investor.findOne({ phone: updatedInvestment.phone }).lean();
+        if (investor && investor._id) {
+          actualInvestorId = String(investor._id);
+          console.log(`[FD-CONFIRM] Resolved investor ID from phone: ${actualInvestorId}`);
+        }
+      }
+      
+      if (actualInvestorId) {
+        await createAndEmitNotification({
+          type: "investment_payment_confirmed",
+          title: `Payment confirmed: ₹${updatedInvestment.investmentAmount}`,
+          message: `Your payment of ₹${updatedInvestment.investmentAmount} for FD has been confirmed via ${mapping[normalized]}.`,
+          data: {
+            id: updatedInvestment._id,
+            investmentId: String(updatedInvestment._id),
+            investorId: actualInvestorId,
+            paymentMode: mapping[normalized]
+          },
+          recipientType: "investor",
+          recipientId: actualInvestorId
+        });
+      } else {
+        console.warn("⚠️ Could not resolve investor ID for notification");
+      }
+    } catch (err) {
+      console.warn("Notification (confirm-payment) failed:", err.message);
+    }
 
     res.json({
       message: "Payment confirmed successfully",

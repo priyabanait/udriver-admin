@@ -750,31 +750,51 @@ router.post('/zwitch/callback', async (req, res) => {
             });
 
             await planSelection.save();
+            
+            // Calculate total from array for verification
+            const totalFromArray = planSelection.driverPayments.reduce((sum, p) => sum + (p.amount || 0), 0);
+            
             console.log('✅ Driver plan selection updated with online payment:', {
               planSelectionId,
-              amount: newPayment,
-              totalPaid: planSelection.paidAmount,
+              newPayment: newPayment,
+              cumulativePaidAmount: planSelection.paidAmount,
+              totalFromDriverPaymentsArray: totalFromArray,
+              driverPaymentsCount: planSelection.driverPayments.length,
               paymentType: paymentType
             });
 
             // Emit notification for driver payment
             try {
               const { createAndEmitNotification } = await import('../lib/notify.js');
-              await createAndEmitNotification({
-                type: 'driver_payment',
-                title: `Driver payment received: ₹${newPayment.toLocaleString('en-IN')}`,
-                message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from driver ${planSelection.driverUsername || planSelection.driverMobile || 'N/A'} via ZWITCH`,
-                data: { 
-                  selectionId: planSelection._id, 
-                  driverId: planSelection.driverId,
-                  amount: newPayment,
-                  paymentType: paymentType || 'rent',
-                  paymentMode: 'online',
-                  transactionId: payment_id
-                },
-                recipientType: 'driver',
-                recipientId: planSelection.driverId
-              });
+              // Look up actual Driver._id to ensure notification goes to the correct driver only
+              let actualDriverId = String(planSelection.driverId || '');
+              if (planSelection.driverMobile) {
+                const driverDoc = await Driver.findOne({ mobile: planSelection.driverMobile }).lean();
+                if (driverDoc && driverDoc._id) {
+                  actualDriverId = String(driverDoc._id);
+                  console.log(`[PAYMENTS] Resolved driver ID from mobile: ${actualDriverId}`);
+                }
+              }
+              
+              if (actualDriverId) {
+                await createAndEmitNotification({
+                  type: 'driver_payment',
+                  title: `Driver payment received: ₹${newPayment.toLocaleString('en-IN')}`,
+                  message: `Payment of ₹${newPayment.toLocaleString('en-IN')} received from driver ${planSelection.driverUsername || planSelection.driverMobile || 'N/A'} via ZWITCH`,
+                  data: { 
+                    selectionId: planSelection._id, 
+                    driverId: actualDriverId,
+                    amount: newPayment,
+                    paymentType: paymentType || 'rent',
+                    paymentMode: 'online',
+                    transactionId: payment_id
+                  },
+                  recipientType: 'driver',
+                  recipientId: actualDriverId
+                });
+              } else {
+                console.warn('⚠️ Could not resolve driver ID for notification');
+              }
             } catch (err) {
               console.warn('Notify failed:', err.message);
             }
