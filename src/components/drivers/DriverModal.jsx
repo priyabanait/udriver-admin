@@ -193,6 +193,10 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         previousEmployment: '',
         planType: '',
         vehiclePreference: '',
+        udbId: '',
+        driverNo: '',
+        alternateNo: '',
+        deposit: '',
         bankName: '',
         accountNumber: '',
         ifscCode: '',
@@ -397,13 +401,15 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
     if (!digits || digits.length < 6) return; // not enough info to search
 
     try {
-      const res = await fetch(`/api/drivers/form/search/${encodeURIComponent(digits)}`);
+      const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      const res = await fetch(`${apiBase}/api/drivers/form/search/${digits}`);
       if (!res.ok) {
         // Not found is fine; do not disturb the form
         return;
       }
       const data = await res.json();
-      const d = data.driver;
+      // Backend returns an array of drivers, get the first match
+      const d = Array.isArray(data) ? data[0] : (data.driver || null);
       if (!d) return;
 
       // Map server driver to form fields safely (only fill missing fields)
@@ -617,6 +623,34 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
 
     setLoading(true);
     try {
+      const apiBase = import.meta.env.VITE_API_BASE || 'http://localhost:4000';
+      
+      // Check if driver with this phone already exists (only for new drivers)
+      if (!driver && formData.phone) {
+        try {
+          const searchRes = await fetch(`${apiBase}/api/drivers/form/search/${formData.phone}`);
+          if (searchRes.ok) {
+            const existingDrivers = await searchRes.json();
+            if (existingDrivers && existingDrivers.length > 0) {
+              const existingDriver = existingDrivers[0];
+              const confirmUpdate = window.confirm(
+                `A driver with phone number ${formData.phone} already exists (${existingDriver.name || 'No name'}). Do you want to update this driver instead?`
+              );
+              if (confirmUpdate) {
+                // Switch to update mode
+                setFormData(existingDriver);
+                // Will trigger another submit in update mode
+                setLoading(false);
+                return;
+              }
+            }
+          }
+        } catch (searchError) {
+          console.warn('Could not check for existing driver:', searchError);
+          // Continue with creation anyway
+        }
+      }
+      
       const driverData = {
         ...formData,
         mobile: formData.phone, // Map phone to mobile for backend
@@ -652,11 +686,48 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
         }
       });
 
-      await onSave(driverData);
+      console.log('Submitting driver data:', driverData);
+      
+      // Call backend API - use _id if in edit mode, otherwise use id
+      let endpoint = `${apiBase}/api/drivers`;
+      let method = 'POST';
+      
+      if (driver) {
+        const driverId = driver._id || driver.id;
+        endpoint = `${apiBase}/api/drivers/${driverId}`;
+        method = 'PUT';
+      }
+      
+      console.log(`${method} ${endpoint}`);
+      
+      const response = await fetch(endpoint, {
+        method: method,
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(driverData)
+      });
+
+      const responseData = await response.json();
+      
+      if (!response.ok) {
+        console.error('Backend error response:', responseData);
+        const errorMessage = responseData.message || responseData.error || `HTTP ${response.status}`;
+        throw new Error(errorMessage);
+      }
+
+      console.log('Driver saved successfully:', responseData);
+      toast.success(driver ? 'Driver updated successfully' : 'Driver created successfully');
+      
+      // Call onSave callback if provided
+      if (onSave) {
+        await onSave(responseData);
+      }
+      
       onClose();
     } catch (error) {
       console.error('Submit error:', error);
-      toast.error('Failed to save driver');
+      toast.error(error.message || 'Failed to save driver');
     } finally {
       setLoading(false);
     }
@@ -746,7 +817,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Full Name *
+                  Full Name 
                 </label>
                 <input
                   type="text"
@@ -761,7 +832,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
    
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Email Address *
+                  Email Address 
                 </label>
                 <input
                   type="email"
@@ -775,7 +846,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
 
              <div>
   <label className="block text-sm font-medium text-gray-700 mb-2">
-    Phone Number *
+    Phone Number 
   </label>
 
   <input
@@ -806,7 +877,7 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
 
 <div>
   <label className="block text-sm font-medium text-gray-700 mb-2">
-    Date of Birth *
+    Date of Birth 
   </label>
   <input
     type="date"
@@ -832,7 +903,181 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
   {errors.joinDate && (
     <p className="mt-1 text-sm text-red-600">{errors.joinDate}</p>
   )}
-</div>   </div>
+</div>
+
+             
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Address
+                </label>
+                <textarea
+                  value={formData.address || ''}
+                  onChange={(e) => handleInputChange('address', e.target.value)}
+                  className="input"
+                  rows={3}
+                  placeholder="Enter complete address"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  City
+                </label>
+                <input
+                  type="text"
+                  value={formData.city || ''}
+                  onChange={(e) => handleInputChange('city', e.target.value)}
+                  className="input"
+                  placeholder="Enter city"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  State
+                </label>
+                <input
+                  type="text"
+                  value={formData.state || ''}
+                  onChange={(e) => handleInputChange('state', e.target.value)}
+                  className="input"
+                  placeholder="Enter state"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Pincode
+                </label>
+                <input
+                  type="text"
+                  value={formData.pincode || ''}
+                  onChange={(e) => handleInputChange('pincode', e.target.value)}
+                  className="input"
+                  placeholder="Enter pincode"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Latitude
+                </label>
+                <input
+                  type="text"
+                  value={formData.latitude || ''}
+                  onChange={(e) => handleInputChange('latitude', e.target.value)}
+                  className="input"
+                  placeholder="Enter latitude"
+                  
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Longitude
+                </label>
+                <input
+                  type="text"
+                  value={formData.longitude || ''}
+                  onChange={(e) => handleInputChange('longitude', e.target.value)}
+                  className="input"
+                  placeholder="Enter longitude"
+                
+                />
+              </div>
+
+              {/* <div className="md:col-span-2">
+                <button
+                  type="button"
+                  onClick={getCurrentLocation}
+                  disabled={locationLoading}
+                  className="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:opacity-50"
+                >
+                  {locationLoading ? 'Getting Location...' : 'Capture Current Location'}
+                </button>
+              </div> */}
+
+              <h4 className="text-md font-medium text-gray-900 md:col-span-2">Emergency Contacts</h4>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Emergency Contact Name 
+                </label>
+                <input
+                  type="text"
+                  value={formData.emergencyContact || ''}
+                  onChange={(e) => handleInputChange('emergencyContact', e.target.value)}
+                  className="input"
+                  placeholder="Enter emergency contact name"
+                />
+              </div>
+               <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Secondary Emergency Contact Name
+                </label>
+                <input
+                  type="text"
+                  value={formData.emergencyContactSecondary || ''}
+                  onChange={(e) => handleInputChange('emergencyContactSecondary', e.target.value)}
+                  className="input"
+                  placeholder="Enter secondary contact name"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                  Relation Reference 1 
+                </label>
+                <input
+                  type="text"
+                  value={formData.emergencyRelation || ''}
+                  onChange={(e) => handleInputChange('emergencyRelation', e.target.value)}
+                  className="input"
+                  placeholder="e.g., Wife, Brother, Sister"
+                />
+              </div>
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Relation Reference 2 
+                </label>
+                <input
+                  type="text"
+                  value={formData.emergencyRelationSecondary || ''}
+                  onChange={(e) => handleInputChange('emergencyRelationSecondary', e.target.value)}
+                  className="input"
+                  placeholder="e.g., Wife, Brother, Sister"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+             Reference 1 Contact No.
+                </label>
+                <input
+                  type="tel"
+                  value={formData.emergencyPhone || ''}
+                  onChange={(e) => handleInputChange('emergencyPhone', e.target.value)}
+                  className="input"
+                  placeholder="+91 98765 43210"
+                />
+              </div>
+
+             
+
+
+              <div>
+                <label className="block text-sm font-medium text-gray-700 mb-2">
+                Reference 2 Contact No.
+                </label>
+                <input
+                  type="tel"
+                  value={formData.emergencyPhoneSecondary || ''}
+                  onChange={(e) => handleInputChange('emergencyPhoneSecondary', e.target.value)}
+                  className="input"
+                  placeholder="+91 98765 43210"
+                />
+              </div>   </div>
 
           </div>
         );
@@ -1047,6 +1292,8 @@ export default function DriverModal({ isOpen, onClose, driver = null, onSave }) 
                   placeholder="Previous job details, experience with ride-sharing platforms, etc."
                 />
               </div>
+
+              
             </div>
           </div>
         );

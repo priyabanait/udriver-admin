@@ -20,6 +20,12 @@ export async function createAndEmitNotification({
     // Normalize recipientType for consistent comparisons (lowercase)
     const normalizedRecipientType = recipientType ? String(recipientType).toLowerCase() : null;
 
+    // SECURITY CHECK: Warn if recipientType is provided but recipientId is empty/null
+    // This prevents accidental broadcasting to all users of a type
+    if (normalizedRecipientType && !normalizedRecipientId) {
+      console.warn(`⚠️ [NOTIFY] SECURITY WARNING: recipientType '${normalizedRecipientType}' provided but recipientId is empty/null! This will broadcast to ALL ${normalizedRecipientType} users. Notification type: '${type}'. Stack trace:`, new Error().stack);
+    }
+
     console.log("[NOTIFY] ===== CREATE NOTIFICATION =====");
     console.log(
       "[NOTIFY] Input recipientId:",
